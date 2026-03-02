@@ -89,7 +89,7 @@ def enrich_post(post: dict, user_id: Optional[str] = None):
 
 # ==================== POST CRUD ====================
 
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 def create_post(payload: PostCreate, user_id: str = Depends(require_auth)):
     """Create a new post"""
     ensure_user_exists(user_id)
