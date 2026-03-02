@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { backendApi } from "@/lib/backend-api";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
-import { Post, CommentsResponse } from '@/types/api';
+import { Post, Comment} from "@/types/api";
 import {
   Heart,
   MessageCircle,
@@ -36,6 +36,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+
+
+interface Author {
+  id: number;
+  first_name: string;
+  last_name: string;
+  avatar_url?: string;
+}
+
 
 interface PostCardNewProps {
   post: Post;
@@ -107,17 +116,27 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   });
 
   // Fetch comments
-  const { data: commentsData } = useQuery<CommentsResponse>({
-    queryKey: ['comments', post.id],
-    queryFn: () => backendApi.posts.getComments(post.id, 10, 0),
-    enabled: showComments,
-  });
+  // const { data: commentsData } = useQuery<Comment[]>({
+  //   queryKey: ['comments', post.id],
+  //   queryFn: () => backendApi.posts.getComments(post.id, 10, 0),
+  //   enabled: showComments,
+  // });
+const { data: commentsData } = useQuery<{ comments: Comment[] }>({
+  queryKey: ['comments', post.id],
+  queryFn: async () => {
+    const res = await backendApi.posts.getComments(post.id, 10, 0);
+    return {
+      comments: res.comments as Comment[], // cast to match your type
+    };
+  },
+  enabled: showComments,
+});
 
-  const comments = commentsData?.comments || [];
+const comments = commentsData?.comments ?? [];
 
   // Handle actions
   const handleLike = () => likeMutation.mutate();
-  
+
   const handleComment = () => {
     if (commentText.trim()) {
       commentMutation.mutate(commentText);
@@ -315,6 +334,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
       {/* Comments Section */}
       {showComments && (
         <div className="mt-4 pt-4 border-t space-y-3">
+
           {/* Comment Input */}
           <div className="flex gap-2">
             <Textarea
@@ -324,6 +344,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
               rows={2}
               className="resize-none"
             />
+
             <Button
               onClick={handleComment}
               disabled={!commentText.trim() || commentMutation.isPending}
@@ -333,21 +354,54 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
             </Button>
           </div>
 
+
+          {/* Loading state */}
+          {commentMutation.isPending && (
+            <p className="text-xs text-muted-foreground">
+              Posting comment...
+            </p>
+          )}
+
+
+          {/* Empty state */}
+          {!commentMutation.isPending && comments?.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              No comments yet
+            </p>
+          )}
+
+
           {/* Comments List */}
-          {comments.map((comment: any) => (
-            <div key={comment.id} className="flex gap-2 text-sm">
+          {comments?.map((comment) => (
+            <div
+              key={comment.id}
+              className="flex gap-2 text-sm"
+            >
               <UserAvatar
-                src={comment.author?.avatar_url}
-                name={comment.author?.first_name}
+                src={comment.author?.avatar_url || ""}
+                name={comment.author?.first_name || "User"}
                 size="sm"
               />
+
               <div className="flex-1">
-                <p className="font-semibold">{comment.author?.first_name} {comment.author?.last_name}</p>
-                <p className="text-muted-foreground">{comment.content}</p>
-                <span className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</span>
+
+                <p className="font-semibold">
+                  {comment.author?.first_name || "Unknown"}{" "}
+                  {comment.author?.last_name || ""}
+                </p>
+
+                <p className="text-muted-foreground break-words">
+                  {comment.content}
+                </p>
+
+                <span className="text-xs text-muted-foreground">
+                  {formatDate(comment.created_at)}
+                </span>
+
               </div>
             </div>
           ))}
+
         </div>
       )}
 

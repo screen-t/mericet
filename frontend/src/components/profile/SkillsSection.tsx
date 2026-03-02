@@ -40,32 +40,37 @@ export const SkillsSection = ({ userId, isOwnProfile }: SkillsSectionProps) => {
   });
 
   // Add skill
-  const addMutation = useMutation({
-    mutationFn: (skillName: string) => backendApi.profile.addSkill(skillName),
-    onSuccess: () => {
-      toast({ title: "Skill added!" });
-      queryClient.invalidateQueries({ queryKey: ['skills', userId] });
-      queryClient.invalidateQueries({ queryKey: ['profile', userId] });
-      setNewSkill("");
-      setIsAddModalOpen(false);
-    },
-    onError: () => {
-      toast({ title: "Failed to add skill", variant: "destructive" });
-    },
-  });
+const addMutation = useMutation({
+  mutationFn: (skillName: string) => {
+    const skillData = { name: skillName };  // Create the skillData object
+    const userId = "123"; // Or get the userId dynamically (e.g., from context, props, etc.)
+    return backendApi.profile.addSkill(userId, skillData); // Pass both `userId` and `skillData`
+  },
+  onSuccess: () => {
+    toast({ title: "Skill added!" });
+    queryClient.invalidateQueries({ queryKey: ['skills', userId] });
+    queryClient.invalidateQueries({ queryKey: ['profile', userId] });
+    setNewSkill("");  // Clear the input field
+    setIsAddModalOpen(false);  // Close the modal
+  },
+  onError: () => {
+    toast({ title: "Failed to add skill", variant: "destructive" });
+  },
+});
 
   // Delete skill
-  const deleteMutation = useMutation({
-    mutationFn: (skillId: string) => backendApi.profile.deleteSkill(skillId),
-    onSuccess: () => {
-      toast({ title: "Skill removed" });
-      queryClient.invalidateQueries({ queryKey: ['skills', userId] });
-      queryClient.invalidateQueries({ queryKey: ['profile', userId] });
-    },
-    onError: () => {
-      toast({ title: "Failed to remove skill", variant: "destructive" });
-    },
-  });
+
+const deleteMutation = useMutation({
+  mutationFn: (skillId: string) => backendApi.profile.deleteSkill(userId, skillId),  // Pass both userId and skillId
+  onSuccess: () => {
+    toast({ title: "Skill removed" });
+    queryClient.invalidateQueries({ queryKey: ['skills', userId] });
+    queryClient.invalidateQueries({ queryKey: ['profile', userId] });
+  },
+  onError: () => {
+    toast({ title: "Failed to remove skill", variant: "destructive" });
+  },
+});
 
   const handleAddSkill = (e: React.FormEvent) => {
     e.preventDefault();

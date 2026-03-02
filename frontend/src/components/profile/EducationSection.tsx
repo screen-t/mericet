@@ -5,14 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Profile, Education } from '@/types/api';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Profile, Education ,EducationFormData } from '@/types/api';
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, } from "@/components/ui/dialog";
 import { backendApi } from "@/lib/backend-api";
 import { GraduationCap, Plus, Pencil, Trash2, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -23,12 +18,13 @@ interface EducationSectionProps {
   isOwnProfile: boolean;
 }
 
+
 export const EducationSection = ({ userId, isOwnProfile }: EducationSectionProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Education | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<EducationFormData>({
     institution: "",
     degree: "",
     field_of_study: "",
@@ -37,37 +33,44 @@ export const EducationSection = ({ userId, isOwnProfile }: EducationSectionProps
     is_current: false,
     grade: "",
     description: "",
-  });
-
+  })
   // Fetch education
-  const { data: educations = [], isLoading } = useQuery({
+  // const { data: educations = [], isLoading } = useQuery({
+  //   queryKey: ['education', userId],
+  //   queryFn: async () => {
+  //     const profile = isOwnProfile
+  //       ? await backendApi.profile.getMyProfile()
+  //       : await backendApi.profile.getProfile(userId);
+  //     return (profile as any).education || [];
+  //   },
+  // });
+
+  const { data: educations = [], isLoading } = useQuery<Education[]>({
     queryKey: ['education', userId],
     queryFn: async () => {
-      const profile = isOwnProfile
+      const profile: Profile = isOwnProfile
         ? await backendApi.profile.getMyProfile()
-        : await backendApi.profile.getProfile(userId);
-      return (profile as any).education || [];
+        : await backendApi.profile.getProfile(userId)
+
+      return profile.education ?? []
     },
-  });
+  })
 
   // Add/Update education
   const saveMutation = useMutation({
-    mutationFn: (data: any) => {
+    mutationFn: (data: EducationFormData) => {
       if (editingItem) {
-        return backendApi.profile.updateEducation(editingItem.id, data);
+        return backendApi.profile.updateEducation(editingItem.id, data)
       }
-      return backendApi.profile.addEducation(data);
+      return backendApi.profile.addEducation(data)
     },
     onSuccess: () => {
-      toast({ title: editingItem ? "Education updated!" : "Education added!" });
-      queryClient.invalidateQueries({ queryKey: ['education', userId] });
-      queryClient.invalidateQueries({ queryKey: ['profile', userId] });
-      closeModal();
+      toast({ title: editingItem ? "Education updated!" : "Education added!" })
+      queryClient.invalidateQueries({ queryKey: ['education', userId] })
+      queryClient.invalidateQueries({ queryKey: ['profile', userId] })
+      closeModal()
     },
-    onError: () => {
-      toast({ title: "Failed to save", variant: "destructive" });
-    },
-  });
+  })
 
   // Delete education
   const deleteMutation = useMutation({

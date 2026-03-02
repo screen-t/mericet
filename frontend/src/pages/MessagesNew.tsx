@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 
 const MessagesNew = () => {
   const { userId } = useParams<{ userId?: string }>();
-  const navigate = useNavigate();
+  const navigate = useNavigate();   
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();

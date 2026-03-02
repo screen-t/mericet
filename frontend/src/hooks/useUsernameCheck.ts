@@ -13,34 +13,33 @@ export const useUsernameCheck = (username: string, debounceMs: number = 500): Us
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Reset states when username changes
     setError(null)
     setIsAvailable(null)
 
-    // Don't check if username is too short
     if (!username || username.length < 3) {
       setIsChecking(false)
       return
     }
 
-    // Start checking indicator
     setIsChecking(true)
 
-    // Debounce the API call
     const timeoutId = setTimeout(async () => {
       try {
         const result = await authApi.checkUsername(username)
         setIsAvailable(result.available)
         setError(null)
-      } catch (err: any) {
-        setError(err.message || "Failed to check username")
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message)
+        } else {
+          setError("Failed to check username")
+        }
         setIsAvailable(null)
       } finally {
         setIsChecking(false)
       }
     }, debounceMs)
 
-    // Cleanup timeout on cleanup or when username changes
     return () => {
       clearTimeout(timeoutId)
       setIsChecking(false)
