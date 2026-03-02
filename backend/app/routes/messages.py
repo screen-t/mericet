@@ -44,10 +44,13 @@ def enrich_conversation(conv: dict, user_id: str):
         participant_ids = [p["user_id"] for p in participants_data.data if p["user_id"] != user_id]
         
         if participant_ids:
-            users = supabase.table("users").select("id, username, first_name, last_name, avatar_url").in_("id", participant_ids).execute()
+            users = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").in_("id", participant_ids).execute()
             conv["participants"] = users.data
+            # Set `user` to the first other participant (for direct message display)
+            conv["user"] = users.data[0] if users.data else None
         else:
             conv["participants"] = []
+            conv["user"] = None
         
         # Get last message
         last_msg = supabase.table("messages").select("*").eq("conversation_id", conv["id"]).order("created_at", desc=True).limit(1).execute()

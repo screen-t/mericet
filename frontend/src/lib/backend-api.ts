@@ -267,17 +267,17 @@ const messages = {
   getConversations: async (_limit?: number, _offset?: number) => {
     const list = await fetchWithAuth(`${API_BASE_URL}/messages/conversations`, {
       headers: getAuthHeaders(),
-    }).then(handleResponse<unknown[]>);
-    return { conversations: Array.isArray(list) ? list : [] };
+    }).then(handleResponse<any[]>);
+    return { conversations: Array.isArray(list) ? list : [] } as import('@/types/api').ConversationsResponse;
   },
   getMessages: async (otherUserId: string, limit: number, offset: number) => {
     const conv = await getConversationWithUser(otherUserId);
-    if (!conv) return { messages: [] };
+    if (!conv) return { messages: [] } as import('@/types/api').MessagesResponse;
     const list = await fetchWithAuth(
       `${API_BASE_URL}/messages/conversations/${conv.id}/messages?limit=${limit}&offset=${offset}`,
       { headers: getAuthHeaders() }
-    ).then(handleResponse<unknown[]>);
-    return { messages: Array.isArray(list) ? list : [] };
+    ).then(handleResponse<any[]>);
+    return { messages: Array.isArray(list) ? list : [] } as import('@/types/api').MessagesResponse;
   },
   sendMessage: (recipientId: string, content: string) =>
     fetchWithAuth(`${API_BASE_URL}/messages`, {
@@ -290,6 +290,14 @@ const messages = {
       method: "PUT",
       headers: getAuthHeaders(),
     }).then(handleResponse),
+  markConversationAsRead: async (otherUserId: string) => {
+    const conv = await getConversationWithUser(otherUserId);
+    if (!conv) return;
+    return fetchWithAuth(`${API_BASE_URL}/messages/conversations/${conv.id}/read`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+    }).then(handleResponse);
+  },
   getUnreadCount: () =>
     fetchWithAuth(`${API_BASE_URL}/messages/unread-count`, {
       headers: getAuthHeaders(),

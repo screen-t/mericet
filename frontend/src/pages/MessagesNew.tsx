@@ -11,7 +11,7 @@ import { backendApi } from "@/lib/backend-api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { formatDistanceToNow } from "date-fns";
-import { ConversationsResponse, MessagesResponse } from '@/types/api';
+import { ConversationsResponse, MessagesResponse, User } from '@/types/api';
 import {
   Search,
   Send,
@@ -42,7 +42,7 @@ const MessagesNew = () => {
   // Fetch messages for selected conversation
   const { data: messagesData, isLoading: loadingMessages } = useQuery<MessagesResponse>({
     queryKey: ['messages', userId],
-    queryFn: () => backendApi.messages.getMessages(userId!, 200, 0),
+    queryFn: () => backendApi.messages.getMessages(userId!, 100, 0),
     enabled: !!userId,
     refetchInterval: 5000, // Poll for new messages every 5 seconds
   });
@@ -55,7 +55,8 @@ const MessagesNew = () => {
   });
 
   const conversations = conversationsData?.conversations || [];
-  const messages = messagesData?.messages || [];
+  // Backend returns messages newest-first; reverse so oldest is at top
+  const messages = [...(messagesData?.messages || [])].reverse();
 
   // Send message mutation
   const sendMessageMutation = useMutation({
@@ -72,7 +73,7 @@ const MessagesNew = () => {
     },
   });
 
-  // Mark as read mutation
+  // Mark as read mutation — use per-message endpoint
   const markAsReadMutation = useMutation({
     mutationFn: (messageId: string) => backendApi.messages.markAsRead(messageId),
     onSuccess: () => {
@@ -81,6 +82,13 @@ const MessagesNew = () => {
     },
   });
 
+  // Also mark the whole conversation as read when opening it
+  useEffect(() => {
+    if (userId && messagesData?.messages?.length) {
+      backendApi.messages.markConversationAsRead(userId);
+    }
+  }, [userId, messagesData?.messages?.length]);
+
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -88,17 +96,7 @@ const MessagesNew = () => {
 
   useEffect(() => {
     scrollToBottom();
-    
-    // Mark unread messages as read when viewing conversation
-    if (messages.length > 0 && userId) {
-      const unreadMessages = messages.filter(
-        (msg: any) => !msg.is_read && msg.receiver_id === user?.id
-      );
-      unreadMessages.forEach((msg: any) => {
-        markAsReadMutation.mutate(msg.id);
-      });
-    }
-  }, [messages, userId]);
+  }, [messages]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,7 +129,16 @@ const MessagesNew = () => {
 
   // Get current conversation user details
   const currentConversation = conversations.find((conv: any) => conv.user?.id === userId);
-  const otherUser = currentConversation?.user;
+  const otherUserFromConversations = currentConversation?.user;
+
+  // If userId is set but not in conversations yet (new conversation), fetch their profile
+  const { data: newConvProfile } = useQuery<User>({
+    queryKey: ['profile', userId],
+    queryFn: () => backendApi.profile.getProfile(userId!) as Promise<User>,
+    enabled: !!userId && !otherUserFromConversations,
+  });
+
+  const otherUser = otherUserFromConversations || newConvProfile;
 
   return (
     <AppLayout>
@@ -190,11 +197,13 @@ const MessagesNew = () => {
                             {conversation.user?.last_name}
                           </h4>
                           <span className="text-xs text-muted-foreground">
-                            {formatTimestamp(conversation.last_message_at)}
+                            {conversation.last_message?.created_at
+                              ? formatTimestamp(conversation.last_message.created_at)
+                              : ""}
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground truncate">
-                          {conversation.last_message}
+                          {conversation.last_message?.content || "No messages yet"}
                         </p>
                         {conversation.unread_count > 0 && (
                           <div className="mt-1">

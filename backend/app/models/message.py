@@ -23,5 +23,6 @@ class ConversationResponse(BaseModel):
     id: str
     created_at: datetime
     participants: List[dict] = []
+    user: Optional[dict] = None  # The other participant
     last_message: Optional[dict] = None
     unread_count: int = 0

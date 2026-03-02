@@ -136,8 +136,11 @@ export interface Message {
 }
 
 export interface Conversation {
-  user: User;
-  last_message?: Message;
+  id: string;
+  created_at: string;
+  user?: User;
+  participants?: Partial<User>[];
+  last_message?: Message | null;
   unread_count: number;
 }
 
