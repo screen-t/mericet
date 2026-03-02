@@ -19,6 +19,7 @@ import {
   MoreVertical,
   Loader2,
   MessageSquare,
+  ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -148,8 +149,12 @@ const MessagesNew = () => {
   return (
     <AppLayout>
       <div className="h-[calc(100vh-4rem)] flex">
-        {/* Conversations List */}
-        <div className="w-80 border-r bg-card flex flex-col">
+        {/* Conversations List — full screen on mobile when no chat open, fixed sidebar on desktop */}
+        <div className={cn(
+          "border-r bg-card flex flex-col",
+          "w-full md:w-80",
+          userId ? "hidden md:flex" : "flex"
+        )}>
           {/* Header */}
           <div className="p-4 border-b">
             <h2 className="text-xl font-bold mb-3">Messages</h2>
@@ -226,13 +231,26 @@ const MessagesNew = () => {
           </ScrollArea>
         </div>
 
-        {/* Messages Thread */}
-        <div className="flex-1 flex flex-col">
+        {/* Messages Thread — full screen on mobile when chat open, flex-1 on desktop */}
+        <div className={cn(
+          "flex flex-col",
+          "flex-1",
+          userId ? "flex" : "hidden md:flex"
+        )}>
           {userId && otherUser ? (
             <>
               {/* Chat Header */}
               <div className="p-4 border-b bg-card flex items-center justify-between">
                 <div className="flex items-center gap-3">
+                  {/* Back button — mobile only */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden -ml-2"
+                    onClick={() => navigate("/messages")}
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </Button>
                   <UserAvatar
                     src={otherUser.avatar_url}
                     name={`${otherUser.first_name} ${otherUser.last_name}`}
