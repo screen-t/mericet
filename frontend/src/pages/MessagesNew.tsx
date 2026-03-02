@@ -114,7 +114,12 @@ const MessagesNew = () => {
 
   const formatTimestamp = (timestamp: string) => {
     try {
-      return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+      // Append Z so JS treats it as UTC, not local time
+      const ts =
+        timestamp.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(timestamp)
+          ? timestamp
+          : timestamp + "Z";
+      return formatDistanceToNow(new Date(ts), { addSuffix: true });
     } catch {
       return "recently";
     }
@@ -299,7 +304,7 @@ const MessagesNew = () => {
                             className={cn(
                               "max-w-md p-3 rounded-lg",
                               isMyMessage
-                                ? "bg-primary text-primary-foreground"
+                                ? "bg-gradient-primary text-white"
                                 : "bg-muted"
                             )}
                           >
@@ -308,7 +313,7 @@ const MessagesNew = () => {
                               className={cn(
                                 "text-xs mt-1",
                                 isMyMessage
-                                  ? "text-primary-foreground/70"
+                                  ? "text-white/70"
                                   : "text-muted-foreground"
                               )}
                             >
