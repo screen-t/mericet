@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface Conversation {
+interface Conversation { 
   id: string;
   user: {
     name: string;
