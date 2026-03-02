@@ -52,52 +52,35 @@ export const CreatePostModalNew = ({
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [pollDuration, setPollDuration] = useState(24);
 
-  type CreatePostPayload = Parameters<typeof backendApi.posts.createPost>[0];
   // Create post mutation
-  // const createPostMutation = useMutation({
-  //   mutationFn: (data: {
-  //     content: string;
-  //     post_type?: string;
-  //     visibility?: string;
-  //     media?: Array<{ url: string; media_type: string; thumbnail_url?: string | null }>;
-  //     poll?: {
-  //       question: string;
-  //       options: Array<{ option_text: string; display_order: number }>;
-  //       ends_at?: string;z
-  //     };
-  //     scheduled_at?: string;
-  //     is_draft?: boolean;
-  //   }) => backendApi.posts.createPost(data),
-  //   onSuccess: () => {
-  //     toast({ title: "Post created successfully!" });
-  //     resetForm();
-  //     onClose();
-  //     onPostCreated?.();
-  //   },
-  //   onError: (error: Error) => {
-  //     toast({
-  //       title: "Failed to create post",
-  //       description: error.message,
-  //       variant: "destructive",
-  //     });
-  //   },
-  // });
   const createPostMutation = useMutation({
-  mutationFn: (data: CreatePostPayload) => backendApi.posts.createPost(data),
-  onSuccess: () => {
-    toast({ title: "Post created successfully!" });
-    resetForm();
-    onClose();
-    onPostCreated?.();
-  },
-  onError: (error: Error) => {
-    toast({
-      title: "Failed to create post",
-      description: error.message,
-      variant: "destructive",
-    });
-  },
-});
+    mutationFn: (data: {
+      content: string;
+      post_type?: string;
+      visibility?: string;
+      media?: Array<{ url: string; media_type: string; thumbnail_url?: string | null }>;
+      poll?: {
+        question: string;
+        options: Array<{ option_text: string; display_order: number }>;
+        ends_at?: string;
+      };
+      scheduled_at?: string;
+      is_draft?: boolean;
+    }) => backendApi.posts.createPost(data),
+    onSuccess: () => {
+      toast({ title: "Post created successfully!" });
+      resetForm();
+      onClose();
+      onPostCreated?.();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to create post",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const resetForm = () => {
     setContent("");
@@ -113,17 +96,8 @@ export const CreatePostModalNew = ({
       toast({ title: "Please add some content", variant: "destructive" });
       return;
     }
-    // MAKE CHANGES HERE
-    // const postData: any = {
-    //   content: content.trim(),
-    //   post_type: "text",
-    //   visibility: "public",
-    //   is_draft: false,
-    // };
 
-    type CreatePostPayload = Parameters<typeof backendApi.posts.createPost>[0];
-
-    const postData: CreatePostPayload = {
+    const postData: any = {
       content: content.trim(),
       post_type: "text",
       visibility: "public",
@@ -147,7 +121,7 @@ export const CreatePostModalNew = ({
       const validOptions = pollOptions.filter(opt => opt.trim());
       const endsAt = new Date();
       endsAt.setHours(endsAt.getHours() + pollDuration);
-
+      
       postData.poll = {
         question: content.trim(),
         options: validOptions.map((opt, idx) => ({
@@ -336,7 +310,7 @@ export const CreatePostModalNew = ({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => { }}
+                onClick={() => {}}
                 title="Add image/video"
               >
                 <Image className="w-5 h-5" />

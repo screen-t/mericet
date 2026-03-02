@@ -36,25 +36,10 @@ import {
   Plus,
 } from "lucide-react";
 
-// interface EditProfileModalProps {
-//   isOpen: boolean;
-//   onClose: () => void;
-//   profileData?: any;
-// }
-
-interface Profile {
-  id: string
-  name: string
-  username: string
-  avatar: string
-  bio: string
-  website: string
-}
-
 interface EditProfileModalProps {
-  isOpen: boolean
-  onClose: () => void
-  profileData?: Profile
+  isOpen: boolean;
+  onClose: () => void;
+  profileData?: any;
 }
 
 export const EditProfileModal = ({

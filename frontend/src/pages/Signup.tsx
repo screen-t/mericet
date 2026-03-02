@@ -279,7 +279,6 @@ const Signup = () => {
                   isAvailable={usernameAvailable}
                   isLoading={usernameLoading}
                   error={usernameError}
-                  isChecking={usernameLoading}
                 />
               )}
             </div>
