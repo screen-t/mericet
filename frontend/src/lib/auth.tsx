@@ -35,24 +35,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Attempt to restore session
+    // Attempt to restore session using stored tokens — no Supabase client needed
     (async () => {
       const tokens = getStoredTokens()
-      if (tokens.access_token && tokens.refresh_token) {
+      if (tokens.access_token) {
         try {
-          // Use setSession so the Supabase client has full session context
-          // (required for refreshSession to work later)
-          const { supabase } = await import('./supabase')
-          const { data, error } = await supabase.auth.setSession({
-            access_token: tokens.access_token,
-            refresh_token: tokens.refresh_token,
-          })
-          if (error || !data.session) throw error
-          // Persist the (possibly refreshed) tokens
-          setStoredTokens(data.session)
-          const me = await authApi.me(data.session.access_token)
-          setUser(me)
-        } catch (e) {
+          let me: User | null = null
+          try {
+            // Try with stored access token
+            me = await authApi.me(tokens.access_token)
+          } catch {
+            // Token may be expired — try refreshing via backend
+            if (tokens.refresh_token) {
+              const refreshed = await authApi.refresh({ refresh_token: tokens.refresh_token })
+              if (refreshed.session) {
+                setStoredTokens(refreshed.session)
+                me = await authApi.me(refreshed.session.access_token)
+              }
+            }
+          }
+          if (me) setUser(me)
+          else setStoredTokens(undefined)
+        } catch {
           setStoredTokens(undefined)
           setUser(null)
         }

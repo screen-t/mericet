@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -74,31 +73,16 @@ const Login = () => {
   };
 
   const handleGoogleLogin = async (): Promise<void> => {
-  await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: "http://localhost:8080",
-    },
-  });
-};
+    await authApi.googleOAuth();
+  };
 
-const handleGithubLogin = async (): Promise<void> => {
-  await supabase.auth.signInWithOAuth({
-    provider: "github",
-    options: {
-      redirectTo: "http://localhost:8080",
-    },
-  });
-};
+  const handleGithubLogin = async (): Promise<void> => {
+    await authApi.githubOAuth();
+  };
 
-const handleLinkedinLogin = async (): Promise<void> => {
-  await supabase.auth.signInWithOAuth({
-    provider: "linkedin_oidc",
-    options: {
-      redirectTo: "http://localhost:8080",
-    },
-  });
-};
+  const handleLinkedinLogin = async (): Promise<void> => {
+    await authApi.linkedinOAuth();
+  };
 
 
   return (

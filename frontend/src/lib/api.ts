@@ -1,172 +1,126 @@
-import { supabase } from './supabase'
+/**
+ * Auth API — all calls routed through the FastAPI backend.
+ * No direct Supabase client calls, so users in regions where supabase.co is
+ * blocked (e.g. India) can still use email/password auth and session management.
+ *
+ * NOTE: OAuth (Google / GitHub / LinkedIn) still redirects through Supabase's
+ * OAuth URL and will not work where supabase.co is blocked. Email/password is
+ * the recommended login path for affected regions.
+ */
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
+async function backendPost<T>(path: string, body: unknown, token?: string): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail));
+  }
+  return res.json();
+}
+
+async function backendGet<T>(path: string, token?: string): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const t = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') || undefined : undefined);
+  if (t) headers['Authorization'] = `Bearer ${t}`;
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail));
+  }
+  return res.json();
+}
+
 export const authApi = {
+  /** Fetch the current user's full profile from the backend. */
   me: async (accessToken?: string) => {
-    const { data: { user }, error } = await supabase.auth.getUser(accessToken)
-    if (error) {
-      throw new Error(error.message)
-    }
-    if (!user) {
-      throw new Error('User not found')
-    }
-    
-    // Fetch full user profile from backend
-    try {
-      const response = await fetch(`${API_BASE_URL}/profile/me`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken || localStorage.getItem('access_token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const profile = await response.json();
-        return profile;
-      }
-    } catch (e) {
-      console.error('Failed to fetch profile:', e);
-    }
-    
-    // Fallback to auth user data if profile fetch fails
-    return {
-      id: user.id,
-      email: user.email || '',
-      username: user.user_metadata?.username || user.email?.split('@')[0] || '',
-      first_name: user.user_metadata?.first_name || '',
-      last_name: user.user_metadata?.last_name || '',
-      avatar_url: user.user_metadata?.avatar_url || undefined,
-      email_visible: false,
-      account_type: 'personal' as const,
-      created_at: user.created_at || '',
-      updated_at: user.updated_at || ''
-    }
+    return backendGet<any>('/profile/me', accessToken);
   },
+
+  /** Refresh the session via the backend (no direct Supabase call). */
   refresh: async (data: { refresh_token: string }) => {
-    const { data: authData, error } = await supabase.auth.refreshSession({
-      refresh_token: data.refresh_token
-    })
-    if (error) {
-      throw new Error(error.message)
-    }
-    return {
-      session: authData.session,
-      user: authData.user
-    }
+    return backendPost<{ success: boolean; session: any }>('/auth/refresh', {
+      refresh_token: data.refresh_token,
+    });
   },
+
+  /** Email + password login via backend. */
   login: async (data: { email: string; password: string }) => {
-    const { data: authData, error } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password: data.password
-    })
-    
-    if (error) {
-      throw new Error(error.message)
-    }
-    
-    return {
-      user: authData.user,
-      session: authData.session
-    }
+    return backendPost<{ success: boolean; user: any; session: any }>('/auth/login', data);
   },
+
+  /** Register a new user via backend. */
   signup: async (data: any) => {
-    // Call the backend signup endpoint which creates both the auth user
-    // AND the users table row (prevents FK constraint errors on post creation)
-    const response = await fetch(`${API_BASE_URL}/auth/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: data.email,
-        password: data.password,
-        username: data.username || data.email.split('@')[0],
-        first_name: data.first_name || '',
-        last_name: data.last_name || '',
-      })
-    })
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ detail: 'Signup failed' }))
-      throw new Error(err.detail || 'Signup failed')
-    }
-
-    const result = await response.json()
-    return {
-      user: result.user,
-      session: result.session
-    }
+    return backendPost<{ success: boolean; user: any; session: any }>('/auth/signup', {
+      email: data.email,
+      password: data.password,
+      username: data.username || data.email.split('@')[0],
+      first_name: data.first_name || '',
+      last_name: data.last_name || '',
+    });
   },
+
+  /** Sign out — notifies backend to clear session. */
   logout: async (data?: { refresh_token?: string }) => {
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      throw new Error(error.message)
-    }
-    return { success: true }
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') || undefined : undefined;
+    await backendPost('/auth/logout', { refresh_token: data?.refresh_token || null }, token).catch(() => {});
+    return { success: true };
   },
+
+  /**
+   * OAuth flows — these still redirect through Supabase's OAuth URL.
+   * Not available in regions where supabase.co is blocked.
+   */
   googleOAuth: async () => {
+    const { supabase } = await import('./supabase');
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`
-      }
-    })
-    if (error) throw new Error(error.message)
-    return data
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) throw new Error(error.message);
+    return data;
   },
+
   githubOAuth: async () => {
+    const { supabase } = await import('./supabase');
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'github',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`
-      }
-    })
-    if (error) throw new Error(error.message)
-    return data
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) throw new Error(error.message);
+    return data;
   },
+
   linkedinOAuth: async () => {
+    const { supabase } = await import('./supabase');
     const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'linkedin',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`
-      }
-    })
-    if (error) throw new Error(error.message)
-    return data
+      provider: 'linkedin_oidc',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) throw new Error(error.message);
+    return data;
   },
+
+  /** Check username availability via backend. */
   checkUsername: async (username: string) => {
-    // Query the users table to check if username exists
-    const { data, error } = await supabase
-      .from('users')
-      .select('username')
-      .eq('username', username)
-      .single()
-    
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" which means available
-      throw new Error('Failed to check username availability')
-    }
-    
-    // If data exists, username is taken. If no data (PGRST116), username is available
-    return { 
-      available: !data,
-      username: username
-    }
+    return backendGet<{ available: boolean }>(
+      `/auth/check-username?username=${encodeURIComponent(username)}`
+    );
   },
+
+  /** Send a password reset email via backend. */
   forgotPassword: async (data: { email: string }) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-      redirectTo: `${window.location.origin}/reset-password`
-    })
-    if (error) {
-      throw new Error(error.message)
-    }
-    return { success: true, message: 'Password reset email sent' }
+    return backendPost<{ success: boolean; message: string }>('/auth/forgot-password', data);
   },
+
+  /** Reset password via backend. */
   resetPassword: async (data: { access_token: string; new_password: string }) => {
-    const { error } = await supabase.auth.updateUser({
-      password: data.new_password
-    })
-    if (error) {
-      throw new Error(error.message)
-    }
-    return { success: true, message: 'Password updated successfully' }
+    return backendPost<{ success: boolean; message: string }>('/auth/reset-password', data);
   },
 }

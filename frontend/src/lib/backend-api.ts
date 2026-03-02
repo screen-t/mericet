@@ -23,9 +23,15 @@ async function tryRefreshToken(): Promise<string | null> {
   const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
   if (!refreshToken) return null;
   try {
-    const { supabase } = await import("./supabase");
-    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-    if (error || !data.session) return null;
+    // Route through backend — no direct Supabase call needed
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.session) return null;
     localStorage.setItem(ACCESS_TOKEN_KEY, data.session.access_token);
     if (data.session.refresh_token) {
       localStorage.setItem(REFRESH_TOKEN_KEY, data.session.refresh_token);
