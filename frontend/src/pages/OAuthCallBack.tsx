@@ -1,21 +1,42 @@
 import { useEffect } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { supabase } from "@/lib/supabase"
 
 export default function OAuthCallback() {
-  const [params] = useSearchParams()
-  const navigate = useNavigate()
-
   useEffect(() => {
-    const access = params.get("access_token")
-    const refresh = params.get("refresh_token")
+    const handleOAuthCallback = async () => {
+      try {
+        // Get the session that Supabase automatically set up after OAuth redirect
+        const { data, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error("Failed to get session:", error)
+          window.location.href = "/login?error=oauth_failed"
+          return
+        }
 
-    if (access && refresh) {
-      localStorage.setItem("access_token", access)
-      localStorage.setItem("refresh_token", refresh)
-      navigate("/feed")
-    } else {
-      navigate("/login?error=oauth_failed")
+        const session = data.session
+        if (!session?.access_token) {
+          console.error("No access token in session")
+          window.location.href = "/login?error=oauth_failed"
+          return
+        }
+
+        // Store tokens in localStorage for our custom auth system
+        localStorage.setItem("access_token", session.access_token)
+        if (session.refresh_token) {
+          localStorage.setItem("refresh_token", session.refresh_token)
+        }
+
+        // Reload page to trigger AuthProvider's useEffect with tokens now in localStorage
+        // This ensures the user session is properly restored before navigating to /feed
+        window.location.href = "/feed"
+      } catch (error) {
+        console.error("OAuth callback error:", error)
+        window.location.href = "/login?error=oauth_failed"
+      }
     }
+
+    handleOAuthCallback()
   }, [])
 
   return <p>Completing authentication…</p>
