@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
+import { backendApi } from "@/lib/backend-api";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,10 @@ import {
   Camera,
   X,
   Plus,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  AtSign,
 } from "lucide-react";
 
 interface EditProfileModalProps {
@@ -49,6 +54,34 @@ export const EditProfileModal = ({
 }: EditProfileModalProps) => {
   const [activeTab, setActiveTab] = useState("basic");
   const [accountType, setAccountType] = useState("professional");
+
+  // Username with availability check
+  const [username, setUsername] = useState<string>(profileData?.username ?? "");
+  const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const trimmed = username.trim();
+    // Skip check if unchanged from current or too short
+    if (!trimmed || trimmed === (profileData?.username ?? "")) {
+      setUsernameStatus("idle");
+      return;
+    }
+    setUsernameStatus("checking");
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const { available } = await backendApi.auth.checkUsername(trimmed);
+        setUsernameStatus(available ? "available" : "taken");
+      } catch {
+        setUsernameStatus("idle");
+      }
+    }, 500);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [username, profileData?.username]);
+
   const [workHistory, setWorkHistory] = useState([
     { id: 1, company: "", role: "", startDate: "", endDate: "", current: false },
   ]);
@@ -99,15 +132,48 @@ export const EditProfileModal = ({
               </div>
             </div>
 
+            {/* Username */}
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <div className="relative">
+                <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="username"
+                  className="pl-9 pr-9"
+                  placeholder="yourhandle"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ""))}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {usernameStatus === "checking" && (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                  {usernameStatus === "available" && (
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  )}
+                  {usernameStatus === "taken" && (
+                    <XCircle className="h-4 w-4 text-destructive" />
+                  )}
+                </div>
+              </div>
+              {usernameStatus === "available" && (
+                <p className="text-xs text-green-600">Username is available!</p>
+              )}
+              {usernameStatus === "taken" && (
+                <p className="text-xs text-destructive">Username is already taken.</p>
+              )}
+              <p className="text-xs text-muted-foreground">Lowercase letters, numbers, underscores, dots and hyphens only.</p>
+            </div>
+
             {/* Full Name */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="firstName">First Name</Label>
-                <Input id="firstName" placeholder="John" />
+                <Input id="firstName" placeholder="John" defaultValue={profileData?.full_name?.split(" ")[0] ?? ""} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="lastName">Last Name</Label>
-                <Input id="lastName" placeholder="Doe" />
+                <Input id="lastName" placeholder="Doe" defaultValue={profileData?.full_name?.split(" ").slice(1).join(" ") ?? ""} />
               </div>
             </div>
 

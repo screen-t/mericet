@@ -84,6 +84,13 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return text ? JSON.parse(text) : ({} as T);
 }
 
+// --- Auth ---
+const auth = {
+  checkUsername: (username: string): Promise<{ available: boolean }> =>
+    fetch(`${API_BASE_URL}/auth/check-username?username=${encodeURIComponent(username)}`)
+      .then(handleResponse<{ available: boolean }>),
+};
+
 // --- Profile ---
 const profile = {
   getMyProfile: () =>
@@ -372,6 +379,7 @@ const search = {
 };
 
 export const backendApi = {
+  auth,
   profile,
   posts,
   connections,

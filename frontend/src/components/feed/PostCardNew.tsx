@@ -184,7 +184,12 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
 
   const formatDate = (dateString: string) => {
     try {
-      return formatDistanceToNow(new Date(dateString), { addSuffix: true });
+      // Supabase timestamps may omit a timezone suffix, causing JS to parse them
+      // as local time instead of UTC, making posts appear N hours old.
+      // Ensure the string is treated as UTC by appending "Z" if no offset is present.
+      const hasOffset = dateString.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(dateString);
+      const normalized = hasOffset ? dateString : dateString + "Z";
+      return formatDistanceToNow(new Date(normalized), { addSuffix: true });
     } catch {
       return "recently";
     }
