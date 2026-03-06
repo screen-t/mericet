@@ -57,20 +57,55 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
 
   const VisibilityIcon = visibilityIcons[post.visibility as keyof typeof visibilityIcons] || Globe;
 
-  // Like mutation
+  // Like mutation — currentlyLiked is passed explicitly at click time to avoid stale closure bugs
   const likeMutation = useMutation({
-    mutationFn: () =>
-      post.is_liked
+    mutationFn: (currentlyLiked: boolean) =>
+      currentlyLiked
         ? backendApi.posts.unlikePost(post.id)
         : backendApi.posts.likePost(post.id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
-      queryClient.invalidateQueries({ queryKey: ['post', post.id] });
+    onMutate: async (currentlyLiked: boolean) => {
+      // Cancel any in-flight feed refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ['feed'] });
+
+      // Snapshot all current feed cache entries for rollback
+      const previousQueries = queryClient.getQueriesData<Post[]>({ queryKey: ['feed'] });
+
+      // Directly patch every feed cache entry that contains this post
+      queryClient.setQueriesData<Post[]>({ queryKey: ['feed'] }, (old) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((p) =>
+          p.id === post.id
+            ? {
+                ...p,
+                is_liked: !currentlyLiked,
+                like_count: currentlyLiked
+                  ? Math.max((p.like_count ?? 0) - 1, 0)
+                  : (p.like_count ?? 0) + 1,
+              }
+            : p
+        );
+      });
+
+      // Return snapshot so onError can roll back
+      return { previousQueries };
     },
-    onError: () => {
+    onError: (_err, _vars, context) => {
+      // Roll back cache to snapshot
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
       toast({ title: "Failed to update like", variant: "destructive" });
     },
+    onSettled: () => {
+      // Silently sync with server after optimistic update is already shown
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+    },
   });
+
+  const displayLiked = post.is_liked ?? false;
+  const displayLikeCount = post.like_count ?? post.likes_count ?? 0;
 
   // Comment mutation
   const commentMutation = useMutation({
@@ -116,7 +151,10 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   const comments = commentsData?.comments || [];
 
   // Handle actions
-  const handleLike = () => likeMutation.mutate();
+  const handleLike = () => {
+    if (likeMutation.isPending) return; // prevent double-click
+    likeMutation.mutate(displayLiked);  // pass like state at click time — avoids stale closure
+  };
   
   const handleComment = () => {
     if (commentText.trim()) {
@@ -338,12 +376,12 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           size="sm"
           onClick={handleLike}
           className={cn(
-            "gap-2",
-            post.is_liked && "text-red-500 hover:text-red-600"
+            "gap-2 transition-colors",
+            displayLiked && "text-red-500 hover:text-red-600"
           )}
         >
-          <Heart className={cn("h-4 w-4", post.is_liked && "fill-current")} />
-          <span>{post.like_count ?? post.likes_count ?? 0}</span>
+          <Heart className={cn("h-4 w-4 transition-all", displayLiked && "fill-current scale-110")} />
+          <span>{displayLikeCount}</span>
         </Button>
 
         <Button
