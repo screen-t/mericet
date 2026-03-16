@@ -156,12 +156,16 @@ const posts = {
     fetchWithAuth(
       `${API_BASE_URL}/posts?feed_type=${feedType}&limit=${limit}&offset=${offset}`,
       { headers: getAuthHeaders() }
-    ).then(handleResponse<unknown[]>),
-  getUserPosts: async (username: string, limit: number, offset: number) => {
+    ).then(handleResponse<import('@/types/api').Post[]>),
+  getPost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<import('@/types/api').Post>),
+  getUserPosts: async (username: string, limit: number, offset: number): Promise<import('@/types/api').PostsResponse> => {
     const list = await fetchWithAuth(
       `${API_BASE_URL}/posts/user/${encodeURIComponent(username)}?limit=${limit}&offset=${offset}`,
       { headers: getAuthHeaders() }
-    ).then(handleResponse<unknown[]>);
+    ).then(handleResponse<import('@/types/api').Post[]>);
     return { posts: Array.isArray(list) ? list : [] };
   },
   createPost: (data: {
@@ -181,6 +185,25 @@ const posts = {
       method: "POST",
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
+    }).then(handleResponse),
+  updatePost: (
+    postId: string,
+    data: {
+      content?: string;
+      visibility?: "public" | "connections";
+      scheduled_at?: string | null;
+      media?: Array<{ url: string; media_type: "image" | "video" | "link"; thumbnail_url?: string | null }>;
+    }
+  ) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse),
+  deletePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
     }).then(handleResponse),
   likePost: (postId: string) =>
     fetchWithAuth(`${API_BASE_URL}/posts/${postId}/like`, {
@@ -206,6 +229,16 @@ const posts = {
     }).then(handleResponse),
   unrepost: (postId: string) =>
     fetchWithAuth(`${API_BASE_URL}/posts/${postId}/repost`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  savePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${postId}/save`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  unsavePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${postId}/save`, {
       method: "DELETE",
       headers: getAuthHeaders(),
     }).then(handleResponse),

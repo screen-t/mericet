@@ -318,14 +318,39 @@ def update_post(post_id: str, payload: PostUpdate, user_id: str = Depends(requir
         if not check.data or check.data["author_id"] != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
         
-        update_data = {k: v for k, v in payload.dict().items() if v is not None}
-        if not update_data:
+        # Allow media updates independently from post fields.
+        fields_set = payload.model_fields_set if hasattr(payload, "model_fields_set") else getattr(payload, "__fields_set__", set())
+        update_data = {k: v for k, v in payload.dict().items() if v is not None and k != "media"}
+        media_provided = "media" in fields_set
+
+        if not update_data and not media_provided:
             raise HTTPException(status_code=400, detail="No fields to update")
+
+        if "visibility" in update_data and hasattr(update_data["visibility"], "value"):
+            update_data["visibility"] = update_data["visibility"].value
         
-        update_data["edited_at"] = "now()"
-        
-        response = supabase.table("posts").update(update_data).eq("id", post_id).execute()
-        enriched = enrich_post(response.data[0], user_id)
+        post_row = None
+        if update_data:
+            update_data["edited_at"] = "now()"
+            response = supabase.table("posts").update(update_data).eq("id", post_id).execute()
+            post_row = response.data[0]
+        else:
+            existing = supabase.table("posts").select("*").eq("id", post_id).single().execute()
+            post_row = existing.data
+
+        if media_provided:
+            media_payload = payload.media or []
+            supabase.table("post_media").delete().eq("post_id", post_id).execute()
+            if media_payload:
+                media_data = [{
+                    "post_id": post_id,
+                    "url": m.url,
+                    "media_type": m.media_type.value,
+                    "thumbnail_url": m.thumbnail_url,
+                } for m in media_payload]
+                supabase.table("post_media").insert(media_data).execute()
+
+        enriched = enrich_post(post_row, user_id)
         return {"message": "Post updated", "data": enriched}
     except HTTPException:
         raise

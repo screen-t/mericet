@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { backendApi } from "@/lib/backend-api";
-import { PostCard } from "@/components/feed/PostCard";
+import { PostCardNew } from "@/components/feed/PostCardNew";
 import { Loader2 } from "lucide-react";
-import { PostsResponse } from '@/types/api';
+import { Post, PostsResponse } from '@/types/api';
 
 interface ProfilePostsProps {
   userId: string;
@@ -42,8 +42,8 @@ export const ProfilePosts = ({ userId }: ProfilePostsProps) => {
 
   return (
     <div className="space-y-4">
-      {posts.map((post: any) => (
-        <PostCard key={post.id} post={post} />
+      {posts.map((post: Post) => (
+        <PostCardNew key={post.id} post={post} />
       ))}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -6,6 +6,8 @@ import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { backendApi } from "@/lib/backend-api";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { Post, CommentsResponse } from '@/types/api';
@@ -21,12 +23,15 @@ import {
   Repeat2,
   Send,
   X,
+  Image,
+  Loader2,
   BarChart3,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -49,13 +54,24 @@ const visibilityIcons = {
 
 export const PostCardNew = ({ post }: PostCardNewProps) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [showRepostDialog, setShowRepostDialog] = useState(false);
   const [repostComment, setRepostComment] = useState("");
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editContent, setEditContent] = useState(post.content || "");
+  const [editMediaUrls, setEditMediaUrls] = useState<string[]>(() => {
+    const fromMedia = ((post as { media?: Array<{ url: string }> }).media || []).map((m) => m.url);
+    return fromMedia.length > 0 ? fromMedia : (post.media_urls || []);
+  });
+  const [isUploadingEditMedia, setIsUploadingEditMedia] = useState(false);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   const VisibilityIcon = visibilityIcons[post.visibility as keyof typeof visibilityIcons] || Globe;
+  const postOwnerId = post.author_id || post.user_id || post.author?.id;
+  const isOwner = Boolean(user?.id && postOwnerId && user.id === postOwnerId);
 
   // Like mutation — currentlyLiked is passed explicitly at click time to avoid stale closure bugs
   const likeMutation = useMutation({
@@ -150,6 +166,41 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
 
   const comments = commentsData?.comments || [];
 
+  const getPostMediaUrls = (currentPost: Post): string[] => {
+    const fromMedia = ((currentPost as { media?: Array<{ url: string }> }).media || []).map((m) => m.url);
+    if (fromMedia.length > 0) return fromMedia;
+    return currentPost.media_urls || [];
+  };
+
+  const updatePostMutation = useMutation({
+    mutationFn: (data: {
+      content?: string;
+      media?: Array<{ url: string; media_type: "image" | "video" | "link"; thumbnail_url?: string | null }>;
+    }) => backendApi.posts.updatePost(post.id, data),
+    onSuccess: () => {
+      toast({ title: "Post updated" });
+      setShowEditDialog(false);
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      queryClient.invalidateQueries({ queryKey: ['userPosts'] });
+      queryClient.invalidateQueries({ queryKey: ['post', post.id] });
+    },
+    onError: () => {
+      toast({ title: "Failed to update post", variant: "destructive" });
+    },
+  });
+
+  const deletePostMutation = useMutation({
+    mutationFn: () => backendApi.posts.deletePost(post.id),
+    onSuccess: () => {
+      toast({ title: "Post deleted" });
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      queryClient.invalidateQueries({ queryKey: ['userPosts'] });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete post", variant: "destructive" });
+    },
+  });
+
   // Handle actions
   const handleLike = () => {
     if (likeMutation.isPending) return; // prevent double-click
@@ -180,6 +231,95 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
       .catch(() => {
         toast({ title: "Failed to vote", variant: "destructive" });
       });
+  };
+
+  const handleCopyLink = async () => {
+    const postUrl = `${window.location.origin}/posts/${post.id}`;
+    try {
+      await navigator.clipboard.writeText(postUrl);
+      toast({ title: "Post link copied" });
+    } catch {
+      toast({ title: "Could not copy link", variant: "destructive" });
+    }
+  };
+
+  const handleDeletePost = () => {
+    const ok = window.confirm("Delete this post? This action cannot be undone.");
+    if (!ok) return;
+    deletePostMutation.mutate();
+  };
+
+  const handleSaveEdit = () => {
+    const next = editContent.trim();
+    if (!next && editMediaUrls.length === 0) {
+      toast({ title: "Post must include text or media", variant: "destructive" });
+      return;
+    }
+
+    const originalText = (post.content || "").trim();
+    const originalMediaUrls = getPostMediaUrls(post);
+    const mediaChanged =
+      originalMediaUrls.length !== editMediaUrls.length
+      || originalMediaUrls.some((url, idx) => url !== editMediaUrls[idx]);
+
+    const payload: {
+      content?: string;
+      media?: Array<{ url: string; media_type: "image" | "video" | "link"; thumbnail_url?: string | null }>;
+    } = {};
+
+    if (next !== originalText) {
+      payload.content = next;
+    }
+
+    if (mediaChanged) {
+      payload.media = editMediaUrls.map((url) => ({
+        url,
+        media_type: url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ? "image" : "video",
+        thumbnail_url: null,
+      }));
+    }
+
+    if (!payload.content && !payload.media) {
+      toast({ title: "No changes to save" });
+      return;
+    }
+
+    updatePostMutation.mutate(payload);
+  };
+
+  const handleEditFileSelect = async (e: any) => {
+    const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files || []) as File[];
+    if (!files.length) return;
+
+    setIsUploadingEditMedia(true);
+    try {
+      const uploaded: string[] = [];
+      for (const file of files) {
+        const ext = file.name.split(".").pop();
+        const path = `posts/${user?.id ?? "anon"}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error } = await supabase.storage
+          .from("post-media")
+          .upload(path, file, { upsert: false });
+        if (error) throw error;
+        const { data: urlData } = supabase.storage
+          .from("post-media")
+          .getPublicUrl(path);
+        uploaded.push(urlData.publicUrl);
+      }
+
+      setEditMediaUrls((prev) => [...prev, ...uploaded]);
+      toast({ title: `${uploaded.length} file(s) uploaded` });
+    } catch (err: any) {
+      toast({
+        title: "Upload failed",
+        description: err.message ?? "Could not upload file",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingEditMedia(false);
+      if (editFileInputRef.current) editFileInputRef.current.value = "";
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -243,9 +383,30 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>Copy link</DropdownMenuItem>
-            <DropdownMenuItem>Report</DropdownMenuItem>
-            <DropdownMenuItem>Hide</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleCopyLink}>Copy link</DropdownMenuItem>
+            {isOwner ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => {
+                  setEditContent(post.content || "");
+                  setEditMediaUrls(getPostMediaUrls(post));
+                  setShowEditDialog(true);
+                }}>
+                  Edit post
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleDeletePost}
+                  className="text-destructive focus:text-destructive"
+                >
+                  Delete post
+                </DropdownMenuItem>
+              </>
+            ) : (
+              <>
+                <DropdownMenuItem>Report</DropdownMenuItem>
+                <DropdownMenuItem>Hide</DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -475,6 +636,81 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
               </Button>
               <Button onClick={handleRepost} disabled={repostMutation.isPending}>
                 {repostMutation.isPending ? "Reposting..." : "Repost"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Post Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit post</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              rows={5}
+              placeholder="Update your post"
+            />
+
+            <input
+              ref={editFileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={handleEditFileSelect}
+            />
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => editFileInputRef.current?.click()}
+                disabled={isUploadingEditMedia}
+              >
+                {isUploadingEditMedia ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Image className="w-4 h-4 mr-2" /> Add media
+                  </>
+                )}
+              </Button>
+              <span className="text-xs text-muted-foreground">{editMediaUrls.length} media item(s)</span>
+            </div>
+
+            {editMediaUrls.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {editMediaUrls.map((url, idx) => (
+                  <div key={`${url}-${idx}`} className="relative rounded-md overflow-hidden border">
+                    <img src={url} alt="Post media" className="w-full h-20 object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setEditMediaUrls((prev) => prev.filter((_, i) => i !== idx))}
+                      className="absolute top-1 right-1 bg-black/70 text-white rounded-full p-1"
+                      aria-label="Remove media"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveEdit}
+                disabled={updatePostMutation.isPending || isUploadingEditMedia}
+              >
+                {updatePostMutation.isPending ? "Saving..." : "Save"}
               </Button>
             </div>
           </div>

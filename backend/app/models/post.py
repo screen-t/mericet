@@ -57,6 +57,7 @@ class PostUpdate(BaseModel):
     content: Optional[str] = Field(None, min_length=1, max_length=3000)
     visibility: Optional[VisibilityType] = None
     scheduled_at: Optional[datetime] = None
+    media: Optional[List[PostMedia]] = None
 
 class PostResponse(BaseModel):
     id: str
