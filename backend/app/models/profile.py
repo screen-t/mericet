@@ -1,9 +1,11 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, EmailStr
 from typing import Optional
 from datetime import date, datetime
+import re
 
 # User Profile Models
 class ProfileUpdateRequest(BaseModel):
+    email: Optional[EmailStr] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     additional_name: Optional[str] = None
@@ -19,6 +21,16 @@ class ProfileUpdateRequest(BaseModel):
     current_company: Optional[str] = None
     industry: Optional[str] = None
     account_type: Optional[str] = None
+    username: Optional[str] = Field(None, min_length=3, max_length=30)
+
+    @validator('username')
+    def validate_username(cls, v):
+        if v is None:
+            return v
+        username = v.strip().lower()
+        if not re.match(r'^[a-z0-9_-]+$', username):
+            raise ValueError('Username can only contain lowercase letters, numbers, underscores, and hyphens')
+        return username
     
     @validator('account_type')
     def validate_account_type(cls, v):

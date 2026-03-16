@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.lib.supabase import supabase
+from app.lib.auth_helpers import check_username_availability
 from app.middleware.auth import require_auth
 from app.models.profile import (
     ProfileUpdateRequest, ProfileResponse, PrivacySettingsUpdate,
@@ -52,6 +53,26 @@ def update_my_profile(payload: ProfileUpdateRequest, user_id: str = Depends(requ
         
         if not update_data:
             raise HTTPException(status_code=400, detail="No fields to update")
+
+        current_user = supabase.table("users").select("username,email").eq("id", user_id).single().execute()
+        current_username = (current_user.data or {}).get("username")
+        current_email = (current_user.data or {}).get("email")
+
+        # Handle username updates explicitly to provide clear conflict errors.
+        if "username" in update_data:
+            new_username = update_data["username"]
+
+            if current_username != new_username and not check_username_availability(new_username):
+                raise HTTPException(status_code=409, detail="Username already taken")
+
+        if "email" in update_data:
+            new_email = str(update_data["email"]).strip().lower()
+            update_data["email"] = new_email
+
+            if current_email != new_email:
+                existing = supabase.table("users").select("id").eq("email", new_email).limit(1).execute()
+                if getattr(existing, "data", None):
+                    raise HTTPException(status_code=409, detail="Email already in use")
         
         # Add updated_at timestamp
         update_data["updated_at"] = "now()"
@@ -62,7 +83,14 @@ def update_my_profile(payload: ProfileUpdateRequest, user_id: str = Depends(requ
             raise HTTPException(status_code=404, detail="Profile not found")
         
         return {"message": "Profile updated successfully", "data": response.data[0]}
+    except HTTPException:
+        raise
     except Exception as e:
+        # Fall back to conflict status for DB-level unique violations.
+        if "duplicate" in str(e).lower() or "unique" in str(e).lower():
+            if "email" in str(e).lower():
+                raise HTTPException(status_code=409, detail="Email already in use")
+            raise HTTPException(status_code=409, detail="Username already taken")
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.put("/privacy")

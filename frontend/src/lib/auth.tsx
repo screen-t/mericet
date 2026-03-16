@@ -114,8 +114,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (res.session) setStoredTokens(res.session)
   }
 
+  const refreshUser = async () => {
+    const tokens = getStoredTokens()
+    if (!tokens.access_token) {
+      setUser(null)
+      return
+    }
+    const profile = await authApi.me(tokens.access_token)
+    setUser(profile)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshSession }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshSession, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

@@ -139,7 +139,8 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="px-2 py-1.5">
                     <p className="font-semibold">{user?.first_name} {user?.last_name}</p>
-                    <p className="text-sm text-muted-foreground">@{user?.username}</p>
+                    <p className="text-sm text-muted-foreground">{user?.email}</p>
+                    <p className="text-xs text-muted-foreground">@{user?.username}</p>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
@@ -209,6 +210,7 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                     />
                     <div>
                       <p className="font-semibold text-sm">{user?.first_name} {user?.last_name}</p>
+                      <p className="text-xs text-muted-foreground">{user?.email}</p>
                       <p className="text-xs text-muted-foreground">@{user?.username}</p>
                     </div>
                   </div>

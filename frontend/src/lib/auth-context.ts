@@ -8,6 +8,7 @@ export type AuthContextValue = {
   signup: (payload: any) => Promise<void>
   logout: () => Promise<void>
   refreshSession: () => Promise<void>
+  refreshUser: () => Promise<void>
 }
 
 // Kept in its own file so HMR updates to auth.tsx never recreate this object.

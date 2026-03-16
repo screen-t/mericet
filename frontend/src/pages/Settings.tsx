@@ -20,12 +20,14 @@ import {
   Camera,
   Save,
   Loader2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const Settings = () => {
   const { toast } = useToast();
-  const { logout, user } = useAuth();
+  const { logout, refreshUser } = useAuth();
   const queryClient = useQueryClient();
 
   // Fetch profile data
@@ -41,6 +43,8 @@ const Settings = () => {
     username: "",
     headline: "",
   });
+  const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
+  const [usernameError, setUsernameError] = useState("");
 
   // Update local state when profile data loads
   useEffect(() => {
@@ -54,6 +58,31 @@ const Settings = () => {
       });
     }
   }, [profileData]);
+
+  const currentUsername = (profileData?.username || "").toLowerCase();
+  const normalizedUsername = profile.username.trim().toLowerCase();
+  const usernameChanged = normalizedUsername !== currentUsername;
+
+  useEffect(() => {
+    setUsernameError("");
+
+    if (!normalizedUsername || normalizedUsername.length < 3 || !usernameChanged) {
+      setUsernameStatus("idle");
+      return;
+    }
+
+    setUsernameStatus("checking");
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const { available } = await backendApi.auth.checkUsername(normalizedUsername);
+        setUsernameStatus(available ? "available" : "taken");
+      } catch {
+        setUsernameStatus("idle");
+      }
+    }, 500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [normalizedUsername, usernameChanged]);
 
   const [notifications, setNotifications] = useState({
     emailDigest: true,
@@ -74,27 +103,70 @@ const Settings = () => {
   // Mutation to update profile
   const updateProfileMutation = useMutation({
     mutationFn: (data: any) => backendApi.profile.updateProfile(data),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+      await refreshUser();
       toast({
         title: "Profile updated",
         description: "Your profile has been saved successfully.",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      const message = error?.message || "Failed to update profile.";
+      if (message.toLowerCase().includes("username") && message.toLowerCase().includes("taken")) {
+        setUsernameError("Username is already being used");
+        setUsernameStatus("taken");
+      }
+      if (message.toLowerCase().includes("email") && message.toLowerCase().includes("use")) {
+        toast({
+          title: "Email unavailable",
+          description: "That email is already in use by another account.",
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: "Error",
-        description: "Failed to update profile.",
+        description: message,
         variant: "destructive",
       });
     },
   });
 
   const handleSaveProfile = () => {
+    const usernamePattern = /^[a-z0-9_-]+$/;
+
+    if (!normalizedUsername || normalizedUsername.length < 3) {
+      setUsernameError("Username must be at least 3 characters");
+      return;
+    }
+
+    if (!usernamePattern.test(normalizedUsername)) {
+      setUsernameError("Username can only use lowercase letters, numbers, underscores, and hyphens");
+      return;
+    }
+
+    if (usernameChanged && usernameStatus === "checking") {
+      setUsernameError("Please wait, checking username availability");
+      return;
+    }
+
+    if (usernameChanged && usernameStatus === "taken") {
+      setUsernameError("Username is already being used");
+      return;
+    }
+
+    if (usernameChanged && usernameStatus !== "available") {
+      setUsernameError("Please verify username availability before saving");
+      return;
+    }
+
+    setUsernameError("");
     updateProfileMutation.mutate({
+      email: profile.email.trim().toLowerCase(),
       first_name: profile.firstName,
       last_name: profile.lastName,
-      username: profile.username,
+      username: normalizedUsername,
       headline: profile.headline,
     });
   };
@@ -215,12 +287,33 @@ const Settings = () => {
                     <Input
                       id="username"
                       value={profile.username}
-                      onChange={(e) =>
-                        setProfile({ ...profile, username: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const cleaned = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+                        setProfile({ ...profile, username: cleaned });
+                      }}
                       className="pl-8"
                     />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {usernameChanged && usernameStatus === "checking" && (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+                      {usernameChanged && usernameStatus === "available" && (
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      )}
+                      {usernameChanged && usernameStatus === "taken" && (
+                        <XCircle className="h-4 w-4 text-destructive" />
+                      )}
+                    </div>
                   </div>
+                  {usernameChanged && usernameStatus === "available" && (
+                    <p className="text-xs text-green-600 mt-1">Username is available</p>
+                  )}
+                  {usernameChanged && usernameStatus === "taken" && (
+                    <p className="text-xs text-destructive mt-1">Username is already being used</p>
+                  )}
+                  {usernameError && (
+                    <p className="text-xs text-destructive mt-1">{usernameError}</p>
+                  )}
                 </div>
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="headline">Headline</Label>
@@ -238,7 +331,7 @@ const Settings = () => {
                 <Button 
                   onClick={handleSaveProfile} 
                   className="gap-2"
-                  disabled={updateProfileMutation.isPending}
+                  disabled={updateProfileMutation.isPending || (usernameChanged && usernameStatus === "checking")}
                 >
                   {updateProfileMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
