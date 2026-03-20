@@ -141,6 +141,9 @@ export const RequireAuth: React.FC<{ children: JSX.Element }> = ({ children }) =
   const { user, loading } = useAuth()
   const location = useLocation()
 
+  // While the AuthProvider is resolving the stored token, render nothing.
+  // Never redirect during loading — this is what causes the "sometimes lands
+  // on login page" bug after an OAuth redirect (the backend call races the render).
   if (loading) return null
 
   // Not authenticated -> redirect to /login and preserve return path
