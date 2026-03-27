@@ -78,6 +78,10 @@ def enrich_post(post: dict, user_id: Optional[str] = None):
                     poll_data["user_vote"] = vote_resp.data[0]["option_id"] if vote_resp.data else None
                 post["poll"] = poll_data
 
+        # Keep like_count in sync with source of truth.
+        likes_resp = supabase.table("post_likes").select("id").eq("post_id", post_id).execute()
+        post["like_count"] = len(likes_resp.data or [])
+
         # 4) Engagement: fire all three checks in parallel-ish (sequential but tiny payloads)
         if user_id:
             like_resp   = supabase.table("post_likes")  .select("id").eq("post_id", post_id).eq("user_id", user_id).execute()
@@ -155,6 +159,14 @@ def bulk_enrich_posts(posts: list, user_id: Optional[str] = None) -> list:
             for poll in polls_by_id.values():
                 poll["user_vote"] = votes_map.get(poll["id"])
 
+    # Exact like counts from source-of-truth likes table.
+    likes_count_map: dict = {pid: 0 for pid in post_ids}
+    likes_rows_resp = supabase.table("post_likes").select("post_id").in_("post_id", post_ids).execute()
+    for row in (likes_rows_resp.data or []):
+        pid = row.get("post_id")
+        if pid in likes_count_map:
+            likes_count_map[pid] += 1
+
     # 5-7) Engagement (3 small queries, keyed by post_id)
     liked_set:    set = set()
     reposted_set: set = set()
@@ -173,6 +185,7 @@ def bulk_enrich_posts(posts: list, user_id: Optional[str] = None) -> list:
         post["author"]      = authors_map.get(post["author_id"])
         post["media"]       = media_map.get(pid, [])
         post["poll"]        = polls_map.get(pid)
+        post["like_count"]  = likes_count_map.get(pid, post.get("like_count", 0))
         post["is_liked"]    = pid in liked_set
         post["is_reposted"] = pid in reposted_set
         post["is_saved"]    = pid in saved_set

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -61,6 +61,8 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   const [showRepostDialog, setShowRepostDialog] = useState(false);
   const [repostComment, setRepostComment] = useState("");
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [optimisticLiked, setOptimisticLiked] = useState(post.is_liked ?? false);
+  const [optimisticLikeCount, setOptimisticLikeCount] = useState(post.like_count ?? post.likes_count ?? 0);
   const [editContent, setEditContent] = useState(post.content || "");
   const [editMediaUrls, setEditMediaUrls] = useState<string[]>(() => {
     const fromMedia = ((post as { media?: Array<{ url: string }> }).media || []).map((m) => m.url);
@@ -73,6 +75,13 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   const postOwnerId = post.author_id || post.user_id || post.author?.id;
   const isOwner = Boolean(user?.id && postOwnerId && user.id === postOwnerId);
 
+  useEffect(() => {
+    // Reinitialize optimistic state only when this card points to a different post.
+    // This avoids stale prop refreshes overwriting the local toggle state mid-interaction.
+    setOptimisticLiked(post.is_liked ?? false);
+    setOptimisticLikeCount(post.like_count ?? post.likes_count ?? 0);
+  }, [post.id]);
+
   // Like mutation — currentlyLiked is passed explicitly at click time to avoid stale closure bugs
   const likeMutation = useMutation({
     mutationFn: (currentlyLiked: boolean) =>
@@ -83,6 +92,12 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
       // Cancel any in-flight feed refetches so they don't overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: ['feed'] });
 
+      const nextLikeCount = currentlyLiked
+        ? Math.max(optimisticLikeCount - 1, 0)
+        : optimisticLikeCount + 1;
+      setOptimisticLiked(!currentlyLiked);
+      setOptimisticLikeCount(nextLikeCount);
+
       // Snapshot all current feed cache entries for rollback
       const previousQueries = queryClient.getQueriesData<Post[]>({ queryKey: ['feed'] });
 
@@ -91,19 +106,28 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
         if (!Array.isArray(old)) return old;
         return old.map((p) =>
           p.id === post.id
-            ? {
-                ...p,
-                is_liked: !currentlyLiked,
-                like_count: currentlyLiked
-                  ? Math.max((p.like_count ?? 0) - 1, 0)
-                  : (p.like_count ?? 0) + 1,
-              }
+            ? (() => {
+                const currentCount = p.like_count ?? p.likes_count ?? 0;
+                const updatedCount = currentlyLiked
+                  ? Math.max(currentCount - 1, 0)
+                  : currentCount + 1;
+                return {
+                  ...p,
+                  is_liked: !currentlyLiked,
+                  like_count: updatedCount,
+                  likes_count: updatedCount,
+                };
+              })()
             : p
         );
       });
 
       // Return snapshot so onError can roll back
-      return { previousQueries };
+      return {
+        previousQueries,
+        previousLiked: currentlyLiked,
+        previousLikeCount: optimisticLikeCount,
+      };
     },
     onError: (_err, _vars, context) => {
       // Roll back cache to snapshot
@@ -112,27 +136,34 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           queryClient.setQueryData(queryKey, data);
         });
       }
+      if (typeof context?.previousLiked === 'boolean') {
+        setOptimisticLiked(context.previousLiked);
+      }
+      if (typeof context?.previousLikeCount === 'number') {
+        setOptimisticLikeCount(context.previousLikeCount);
+      }
       toast({ title: "Failed to update like", variant: "destructive" });
     },
     onSettled: (_data) => {
-      // If the server returned a confirmed like_count, patch the cache directly.
-      // This avoids the window where a refetch returns a stale DB value.
+      // If the server returned a confirmed like_count, sync local state and cache directly.
+      // We do NOT call invalidateQueries here because that triggers an immediate background
+      // refetch which races against the local optimistic state and can revert the count.
+      // The feed's own refetchInterval (5 min) handles background sync.
       const serverCount: number | null | undefined = (_data as { like_count?: number })?.like_count;
       if (typeof serverCount === 'number') {
+        setOptimisticLikeCount(serverCount);
         queryClient.setQueriesData<Post[]>({ queryKey: ['feed'] }, (old) => {
           if (!Array.isArray(old)) return old;
           return old.map((p) =>
-            p.id === post.id ? { ...p, like_count: serverCount } : p
+            p.id === post.id ? { ...p, like_count: serverCount, likes_count: serverCount } : p
           );
         });
       }
-      // Always follow up with a background sync so the feed stays fresh
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
   });
 
-  const displayLiked = post.is_liked ?? false;
-  const displayLikeCount = post.like_count ?? post.likes_count ?? 0;
+  const displayLiked = optimisticLiked;
+  const displayLikeCount = optimisticLikeCount;
 
   // Comment mutation
   const commentMutation = useMutation({

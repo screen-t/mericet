@@ -27,7 +27,7 @@ import {
   Home,
   Users,
   Building2,
-  Bookmark
+  Bookmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
