@@ -144,6 +144,7 @@ export interface Message {
   is_read: boolean;
   created_at: string;
   edited_at?: string | null;
+  edit_count?: number;
   updated_at?: string;
   sender?: User;
   recipient?: User;

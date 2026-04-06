@@ -26,6 +26,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const EDIT_WINDOW_MINUTES = 15;
+const MAX_MESSAGE_EDITS = 3;
+
 const MessagesNew = () => {
   const { userId } = useParams<{ userId?: string }>();
   const navigate = useNavigate();
@@ -88,8 +91,8 @@ const MessagesNew = () => {
       queryClient.invalidateQueries({ queryKey: ['messages', userId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
-    onError: (error: Error) => {
-      toast({ title: error?.message || "Failed to edit message", variant: "destructive" });
+    onError: () => {
+      toast({ title: "Failed to edit message", variant: "destructive" });
     },
   });
 
@@ -176,6 +179,33 @@ const MessagesNew = () => {
     if (!userId) return;
     if (!window.confirm("Delete this conversation?")) return;
     deleteConversationMutation.mutate(userId);
+  };
+
+  const parseTimestampToMs = (timestamp: string) => {
+    const ts = timestamp.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(timestamp)
+      ? timestamp
+      : `${timestamp}Z`;
+    return new Date(ts).getTime();
+  };
+
+  const canEditMessage = (message: { sender_id: string; created_at: string; edit_count?: number }, index: number) => {
+    if (message.sender_id !== user?.id) return false;
+
+    const createdAtMs = parseTimestampToMs(message.created_at);
+    if (Number.isNaN(createdAtMs)) return false;
+
+    const ageMs = Date.now() - createdAtMs;
+    if (ageMs > EDIT_WINDOW_MINUTES * 60 * 1000) return false;
+
+    const editCount = message.edit_count || 0;
+    if (editCount >= MAX_MESSAGE_EDITS) return false;
+
+    const recipientRepliedAfter = messages
+      .slice(index + 1)
+      .some((m) => m.sender_id !== user?.id);
+    if (recipientRepliedAfter) return false;
+
+    return true;
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -363,6 +393,7 @@ const MessagesNew = () => {
                   <div className="space-y-4">
                     {messages.map((message, index: number) => {
                       const isMyMessage = message.sender_id === user?.id;
+                      const canEdit = canEditMessage(message, index);
                       const showAvatar =
                         index === 0 ||
                         messages[index - 1].sender_id !== message.sender_id;
@@ -450,16 +481,18 @@ const MessagesNew = () => {
                             </p>
                             {isMyMessage && editingMessageId !== message.id && (
                               <div className="mt-1 flex justify-end gap-1">
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 text-white/80 hover:text-white"
-                                  onClick={() => startEditingMessage(message.id, message.content)}
-                                  title="Edit message"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
+                                {canEdit && (
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-white/80 hover:text-white"
+                                    onClick={() => startEditingMessage(message.id, message.content)}
+                                    title="Edit message"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
                                 <Button
                                   type="button"
                                   size="icon"
