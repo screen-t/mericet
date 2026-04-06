@@ -8,7 +8,8 @@ const PrivacyPolicy = () => {
       <header className="border-b border-border">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-foreground hover:opacity-80">
-            <img src="/logo.png" alt="Stonet" className="h-8" />
+            <img src="/logo.png" alt="Mericet" className="h-8" />
+            <span className="font-bold text-xl tracking-tight">Mericet</span>
           </Link>
           <nav className="flex items-center gap-6 text-sm">
             <Link to="/terms-of-service" className="text-muted-foreground hover:text-foreground transition-colors">
@@ -107,7 +108,7 @@ const PrivacyPolicy = () => {
           <section>
             <h2 className="text-xl font-semibold text-foreground">10. Contact</h2>
             <p className="mt-2">
-              Privacy questions or requests can be sent to <span className="font-medium">privacy@stonet.app</span>.
+              Privacy questions or requests can be sent to <span className="font-medium">privacy@mericet.app</span>.
             </p>
           </section>
         </div>

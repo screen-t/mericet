@@ -187,7 +187,8 @@ const Signup = () => {
         >
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 mb-8">
-            <img src="/logo.png" alt="Stonet" className="h-10" />
+            <img src="/logo.png" alt="Mericet" className="h-10" />
+            <span className="font-bold text-2xl tracking-tight">Mericet</span>
           </Link>
 
           <h1 className="text-3xl font-bold mb-2">Create your account</h1>

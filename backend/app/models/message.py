@@ -10,6 +10,9 @@ class MessageSend(BaseModel):
     conversation_id: str
     content: str = Field(..., min_length=1, max_length=2000)
 
+class MessageUpdate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+
 class MessageResponse(BaseModel):
     id: str
     conversation_id: str
@@ -17,6 +20,8 @@ class MessageResponse(BaseModel):
     content: str
     is_read: bool
     created_at: datetime
+    edited_at: Optional[datetime] = None
+    edit_count: int = 0
     sender: Optional[dict] = None
 
 class ConversationResponse(BaseModel):

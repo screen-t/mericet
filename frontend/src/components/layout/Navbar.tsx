@@ -78,8 +78,8 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo */}
           <Link to={isAuthenticated ? "/feed" : "/"} className="flex items-center gap-2">
-            <img src="/logo.png" alt="Stonet" className="h-8" />
-            <span className="font-bold text-base sm:text-lg leading-none tracking-tight">Stonet</span>
+            <img src="/logo.png" alt="Mericet" className="h-8" />
+            <span className="font-bold text-base sm:text-lg leading-none tracking-tight">Mericet</span>
           </Link>
 
           {/* Search Bar - Desktop */}

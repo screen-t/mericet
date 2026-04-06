@@ -131,13 +131,13 @@ stonet/
    cd backend
    
    # Create virtual environment (recommended)
-   python -m venv venv
+   python -m venv .venv
    
    # Activate virtual environment
    # On Windows:
-   venv\Scripts\activate
+   .venv\Scripts\activate
    # On macOS/Linux:
-   source venv/bin/activate
+   source .venv/bin/activate
    
    # Install Python dependencies
    pip install -r requirements.txt
@@ -177,7 +177,7 @@ stonet/
    ```bash
    cd backend
    # Make sure virtual environment is activated
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
    Backend API will be available at `http://localhost:8000`
    
@@ -195,7 +195,7 @@ stonet/
 **Backend (Python/FastAPI)**
 ```bash
 # Start development server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Run tests
 pytest

@@ -1,10 +1,28 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.lib.supabase import supabase
 from app.middleware.auth import require_auth
-from app.models.message import MessageCreate, MessageSend, MessageResponse, ConversationResponse
+from app.models.message import MessageCreate, MessageSend, MessageUpdate, MessageResponse, ConversationResponse
 from typing import List
+from datetime import datetime, timezone, timedelta
 
 router = APIRouter(prefix="/messages", tags=["Messages"])
+EDIT_WINDOW_MINUTES = 15
+MAX_MESSAGE_EDITS = 3
+
+def _to_utc_datetime(raw_ts):
+    """Parse DB timestamp into timezone-aware UTC datetime."""
+    if isinstance(raw_ts, datetime):
+        dt = raw_ts
+    else:
+        ts = str(raw_ts)
+        # Supabase may return 'Z' suffixed strings.
+        if ts.endswith("Z"):
+            ts = ts[:-1] + "+00:00"
+        dt = datetime.fromisoformat(ts)
+
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 def get_or_create_conversation(user1_id: str, user2_id: str):
     """Get existing conversation or create new one between two users"""
@@ -219,6 +237,93 @@ def mark_message_as_read(message_id: str, user_id: str = Depends(require_auth)):
         supabase.table("messages").update({"is_read": True}).eq("id", message_id).execute()
         
         return {"message": "Message marked as read"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.put("/messages/{message_id}")
+def edit_message(message_id: str, payload: MessageUpdate, user_id: str = Depends(require_auth)):
+    """Edit a message (sender only)"""
+    try:
+        message = supabase.table("messages").select("id, conversation_id, sender_id, created_at, edit_count").eq("id", message_id).single().execute()
+
+        if not message.data:
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        if message.data["sender_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Only the sender can edit this message")
+
+        current_edit_count = int(message.data.get("edit_count") or 0)
+        if current_edit_count >= MAX_MESSAGE_EDITS:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Message can only be edited up to {MAX_MESSAGE_EDITS} times",
+            )
+
+        # Restrict edits to a short time window from creation.
+        message_created_at = _to_utc_datetime(message.data["created_at"])
+        edit_deadline = message_created_at + timedelta(minutes=EDIT_WINDOW_MINUTES)
+        if datetime.now(timezone.utc) > edit_deadline:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Message can only be edited within {EDIT_WINDOW_MINUTES} minutes of sending",
+            )
+
+        # Lock edits once the other participant has replied after this message.
+        reply_after = (
+            supabase.table("messages")
+            .select("id")
+            .eq("conversation_id", message.data["conversation_id"])
+            .neq("sender_id", user_id)
+            .gt("created_at", message.data["created_at"])
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+        if reply_after.data:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot edit this message because the recipient has already replied",
+            )
+
+        updated = (
+            supabase.table("messages")
+            .update({
+                "content": payload.content,
+                "edited_at": datetime.now(timezone.utc).isoformat(),
+                "edit_count": current_edit_count + 1,
+            })
+            .eq("id", message_id)
+            .execute()
+        )
+
+        if not updated.data:
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        sender = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", user_id).single().execute()
+        updated.data[0]["sender"] = sender.data if sender.data else None
+
+        return {"message": "Message updated", "data": updated.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.delete("/messages/{message_id}")
+def delete_message(message_id: str, user_id: str = Depends(require_auth)):
+    """Delete a message (sender only)"""
+    try:
+        message = supabase.table("messages").select("id, sender_id").eq("id", message_id).single().execute()
+
+        if not message.data:
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        if message.data["sender_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Only the sender can delete this message")
+
+        supabase.table("messages").delete().eq("id", message_id).execute()
+        return {"message": "Message deleted"}
     except HTTPException:
         raise
     except Exception as e:

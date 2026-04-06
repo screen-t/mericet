@@ -139,11 +139,12 @@ export interface ConnectionStatus {
 export interface Message {
   id: string;
   sender_id: string;
-  recipient_id: string;
+  recipient_id?: string;
   content: string;
   is_read: boolean;
   created_at: string;
-  updated_at: string;
+  edited_at?: string | null;
+  updated_at?: string;
   sender?: User;
   recipient?: User;
 }

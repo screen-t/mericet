@@ -10,7 +10,7 @@ from app.routes.notifications import router as notifications_router
 from app.routes.search import router as search_router
 
 # FastAPI application
-app = FastAPI(title="Stonet Backend API")
+app = FastAPI(title="Mericet Backend API")
 
 # CORS settings - allow frontend development and production hosts
 import os
@@ -23,8 +23,8 @@ origins = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:8080",
     # Production (hardcoded known URLs)
-    "https://stonet.vercel.app",
-    "https://www.stonet.vercel.app",
+    "https://mericet.vercel.app",
+    "https://www.mericet.vercel.app",
 ]
 
 # Also support FRONTEND_URL env var (single URL)
@@ -52,7 +52,7 @@ app.add_middleware(
 # Root endpoint
 @app.get("/")
 def root():
-    return {"message": "Stonet Backend API", "status": "running"}
+    return {"message": "Mericet Backend API", "status": "running"}
 
 # Health check endpoint for monitoring
 @app.get("/health")

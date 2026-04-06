@@ -16,10 +16,13 @@ import {
   Search,
   Send,
   Paperclip,
-  MoreVertical,
   Loader2,
   MessageSquare,
   ArrowLeft,
+  Pencil,
+  Trash2,
+  Check,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +34,8 @@ const MessagesNew = () => {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [messageText, setMessageText] = useState("");
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch conversations list
@@ -74,6 +79,45 @@ const MessagesNew = () => {
     },
   });
 
+  const editMessageMutation = useMutation({
+    mutationFn: ({ messageId, content }: { messageId: string; content: string }) =>
+      backendApi.messages.editMessage(messageId, content),
+    onSuccess: () => {
+      setEditingMessageId(null);
+      setEditText("");
+      queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+    onError: (error: Error) => {
+      toast({ title: error?.message || "Failed to edit message", variant: "destructive" });
+    },
+  });
+
+  const deleteMessageMutation = useMutation({
+    mutationFn: (messageId: string) => backendApi.messages.deleteMessage(messageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete message", variant: "destructive" });
+    },
+  });
+
+  const deleteConversationMutation = useMutation({
+    mutationFn: (otherUserId: string) => backendApi.messages.deleteConversation(otherUserId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+      queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
+      navigate('/messages');
+    },
+    onError: () => {
+      toast({ title: "Failed to delete conversation", variant: "destructive" });
+    },
+  });
+
   // Mark as read mutation — use per-message endpoint
   const markAsReadMutation = useMutation({
     mutationFn: (messageId: string) => backendApi.messages.markAsRead(messageId),
@@ -111,6 +155,27 @@ const MessagesNew = () => {
 
   const handleSelectConversation = (convUserId: string) => {
     navigate(`/messages/${convUserId}`);
+  };
+
+  const startEditingMessage = (messageId: string, content: string) => {
+    setEditingMessageId(messageId);
+    setEditText(content);
+  };
+
+  const saveEditedMessage = () => {
+    if (!editingMessageId || !editText.trim()) return;
+    editMessageMutation.mutate({ messageId: editingMessageId, content: editText.trim() });
+  };
+
+  const handleDeleteMessage = (messageId: string) => {
+    if (!window.confirm("Delete this message?")) return;
+    deleteMessageMutation.mutate(messageId);
+  };
+
+  const handleDeleteConversation = () => {
+    if (!userId) return;
+    if (!window.confirm("Delete this conversation?")) return;
+    deleteConversationMutation.mutate(userId);
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -267,8 +332,14 @@ const MessagesNew = () => {
                     )}
                   </div>
                 </div>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="w-5 h-5" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleDeleteConversation}
+                  disabled={deleteConversationMutation.isPending}
+                  title="Delete conversation"
+                >
+                  <Trash2 className="w-5 h-5" />
                 </Button>
               </div>
 
@@ -326,7 +397,46 @@ const MessagesNew = () => {
                                 : "bg-muted"
                             )}
                           >
-                            <p className="text-sm">{message.content}</p>
+                            {editingMessageId === message.id ? (
+                              <div className="space-y-2">
+                                <Input
+                                  value={editText}
+                                  onChange={(e) => setEditText(e.target.value)}
+                                  className={cn(
+                                    "h-8 text-sm",
+                                    isMyMessage
+                                      ? "bg-white/20 border-white/30 text-white placeholder:text-white/70"
+                                      : "bg-background"
+                                  )}
+                                />
+                                <div className="flex justify-end gap-1">
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={saveEditedMessage}
+                                    disabled={!editText.trim() || editMessageMutation.isPending}
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={() => {
+                                      setEditingMessageId(null);
+                                      setEditText("");
+                                    }}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-sm">{message.content}</p>
+                            )}
                             <p
                               className={cn(
                                 "text-xs mt-1",
@@ -336,7 +446,33 @@ const MessagesNew = () => {
                               )}
                             >
                               {formatTimestamp(message.created_at)}
+                              {message.edited_at ? " • edited" : ""}
                             </p>
+                            {isMyMessage && editingMessageId !== message.id && (
+                              <div className="mt-1 flex justify-end gap-1">
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-white/80 hover:text-white"
+                                  onClick={() => startEditingMessage(message.id, message.content)}
+                                  title="Edit message"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-white/80 hover:text-white"
+                                  onClick={() => handleDeleteMessage(message.id)}
+                                  title="Delete message"
+                                  disabled={deleteMessageMutation.isPending}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         </motion.div>
                       );

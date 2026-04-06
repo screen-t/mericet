@@ -48,7 +48,7 @@ const testimonials = [
     role: "CEO at TechVentures",
     avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100",
     content:
-      "Stonet transformed how we connect with partners. We've closed 3 major deals in just 2 months!",
+      "Mericet transformed how we connect with partners. We've closed 3 major deals in just 2 months!",
   },
   {
     name: "Marcus Johnson",
@@ -115,7 +115,7 @@ const Landing = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto"
             >
-              Join stonet - the exclusive network for professionals, entrepreneurs, 
+              Join mericet - the exclusive network for professionals, entrepreneurs, 
               innovators, and leaders. Share insights, discover opportunities, 
               and build meaningful business relationships.
             </motion.p>
@@ -312,7 +312,7 @@ const Landing = () => {
               </h2>
               <p className="text-primary-foreground/80 text-lg mb-8 max-w-xl mx-auto">
                 Join thousands of professionals already building valuable
-                connections on Stonet.
+                connections on Mericet.
               </p>
               <Button
                 size="xl"
@@ -334,7 +334,7 @@ const Landing = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <img src="/logo.png" alt="Stonet" className="h-8" />
+              <img src="/logo.png" alt="Mericet" className="h-8" />
             </div>
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <Link to="#" className="hover:text-foreground transition-colors">
@@ -351,7 +351,7 @@ const Landing = () => {
               </Link>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2026 Stonet. All rights reserved.
+              © 2026 Mericet. All rights reserved.
             </p>
           </div>
         </div>

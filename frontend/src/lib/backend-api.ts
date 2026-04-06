@@ -1,5 +1,5 @@
 /**
- * Client for the Stonet FastAPI backend.
+ * Client for the Mericet FastAPI backend.
  * All requests use the stored access token (localStorage) for auth.
  */
 
@@ -361,6 +361,17 @@ const messages = {
       headers: getAuthHeaders(),
       body: JSON.stringify({ receiver_id: recipientId, content }),
     }).then(handleResponse),
+  editMessage: (messageId: string, content: string) =>
+    fetchWithAuth(`${API_BASE_URL}/messages/messages/${messageId}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ content }),
+    }).then(handleResponse),
+  deleteMessage: (messageId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/messages/messages/${messageId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
   markAsRead: (messageId: string) =>
     fetchWithAuth(`${API_BASE_URL}/messages/messages/${messageId}/read`, {
       method: "PUT",
@@ -371,6 +382,14 @@ const messages = {
     if (!conv) return;
     return fetchWithAuth(`${API_BASE_URL}/messages/conversations/${conv.id}/read`, {
       method: "PUT",
+      headers: getAuthHeaders(),
+    }).then(handleResponse);
+  },
+  deleteConversation: async (otherUserId: string) => {
+    const conv = await getConversationWithUser(otherUserId);
+    if (!conv) return;
+    return fetchWithAuth(`${API_BASE_URL}/messages/conversations/${conv.id}`, {
+      method: "DELETE",
       headers: getAuthHeaders(),
     }).then(handleResponse);
   },

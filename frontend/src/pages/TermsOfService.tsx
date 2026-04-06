@@ -8,7 +8,8 @@ const TermsOfService = () => {
       <header className="border-b border-border">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-foreground hover:opacity-80">
-            <img src="/logo.png" alt="Stonet" className="h-8" />
+            <img src="/logo.png" alt="Mericet" className="h-8" />
+            <span className="font-bold text-xl tracking-tight">Mericet</span>
           </Link>
           <nav className="flex items-center gap-6 text-sm">
             <Link to="/privacy-policy" className="text-muted-foreground hover:text-foreground transition-colors">
@@ -32,7 +33,7 @@ const TermsOfService = () => {
           <section>
             <h2 className="text-xl font-semibold text-foreground">1. Acceptance of Terms</h2>
             <p className="mt-2">
-              By accessing or using Stonet (the "Service"), you agree to these Terms of Service. If you do
+              By accessing or using Mericet (the "Service"), you agree to these Terms of Service. If you do
               not agree, do not use the Service.
             </p>
           </section>
@@ -58,7 +59,7 @@ const TermsOfService = () => {
           <section>
             <h2 className="text-xl font-semibold text-foreground">4. User Content</h2>
             <p className="mt-2">
-              You retain ownership of content you submit. By posting content, you grant Stonet a non-exclusive,
+              You retain ownership of content you submit. By posting content, you grant Mericet a non-exclusive,
               worldwide, royalty-free license to host, store, reproduce, and display that content solely to
               operate and improve the Service.
             </p>
@@ -68,14 +69,14 @@ const TermsOfService = () => {
             <h2 className="text-xl font-semibold text-foreground">5. Intellectual Property</h2>
             <p className="mt-2">
               The Service, including software, branding, and design elements, is owned by or licensed to
-              Stonet and protected by applicable intellectual property laws.
+              Mericet and protected by applicable intellectual property laws.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-foreground">6. Third-Party Services</h2>
             <p className="mt-2">
-              The Service may integrate third-party services, such as authentication providers. Stonet is not
+              The Service may integrate third-party services, such as authentication providers. Mericet is not
               responsible for third-party services and your use of them is subject to their terms.
             </p>
           </section>
@@ -83,7 +84,7 @@ const TermsOfService = () => {
           <section>
             <h2 className="text-xl font-semibold text-foreground">7. Account Suspension and Termination</h2>
             <p className="mt-2">
-              Stonet may suspend or terminate accounts that violate these Terms or pose risk to users, the
+              Mericet may suspend or terminate accounts that violate these Terms or pose risk to users, the
               platform, or legal compliance.
             </p>
           </section>
@@ -99,7 +100,7 @@ const TermsOfService = () => {
           <section>
             <h2 className="text-xl font-semibold text-foreground">9. Limitation of Liability</h2>
             <p className="mt-2">
-              To the fullest extent permitted by law, Stonet is not liable for indirect, incidental, special,
+              To the fullest extent permitted by law, Mericet is not liable for indirect, incidental, special,
               consequential, or punitive damages arising from your use of the Service.
             </p>
           </section>
@@ -115,7 +116,7 @@ const TermsOfService = () => {
           <section>
             <h2 className="text-xl font-semibold text-foreground">11. Contact</h2>
             <p className="mt-2">
-              Questions about these Terms can be sent to <span className="font-medium">support@stonet.app</span>.
+              Questions about these Terms can be sent to <span className="font-medium">support@mericet.app</span>.
             </p>
           </section>
         </div>

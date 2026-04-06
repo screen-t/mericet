@@ -96,7 +96,8 @@ const Login = () => {
         >
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 mb-8">
-            <img src="/logo.png" alt="Stonet" className="h-10" />
+            <img src="/logo.png" alt="Mericet" className="h-10" />
+            <span className="font-bold text-2xl tracking-tight">Mericet</span>
           </Link>
 
           <h1 className="text-3xl font-bold mb-2">Welcome back</h1>
@@ -317,7 +318,7 @@ const Login = () => {
             Secure & Professional
           </h2>
           <p className="text-primary-foreground/80 text-lg mb-6">
-            stonet provides enterprise-grade security for your professional connections.
+            mericet provides enterprise-grade security for your professional connections.
           </p>
           <div className="space-y-3 text-left">
             <div className="flex items-center gap-3 text-primary-foreground/90">
