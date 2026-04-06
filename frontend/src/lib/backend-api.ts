@@ -331,10 +331,12 @@ const connections = {
 async function getConversationWithUser(otherUserId: string): Promise<{ id: string } | null> {
   const list = await fetchWithAuth(`${API_BASE_URL}/messages/conversations`, {
     headers: getAuthHeaders(),
-  }).then(handleResponse<Array<{ id: string; participants?: Array<{ id: string }> }>>);
+  }).then(handleResponse<Array<{ id: string; user?: { id?: string }; participants?: Array<{ id?: string; user_id?: string }> }>>);
   const arr = Array.isArray(list) ? list : [];
   const conv = arr.find(
-    (c) => c.participants?.some((p: { id: string }) => p.id === otherUserId)
+    (c) =>
+      c.user?.id === otherUserId ||
+      c.participants?.some((p) => (p.id || p.user_id) === otherUserId)
   );
   return conv ? { id: conv.id } : null;
 }

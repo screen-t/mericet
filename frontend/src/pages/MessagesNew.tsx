@@ -48,6 +48,35 @@ const MessagesNew = () => {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const getConversationUserId = (conversation: {
+    user?: { id?: string };
+    participants?: Array<{ id?: string }>;
+  }): string | null => {
+    if (conversation.user?.id) return conversation.user.id;
+    const fromParticipants = conversation.participants?.find((p) => p.id && p.id !== user?.id)?.id;
+    return fromParticipants || null;
+  };
+
+  const getConversationDisplayUser = (conversation: {
+    user?: {
+      id?: string;
+      first_name?: string;
+      last_name?: string;
+      avatar_url?: string;
+      headline?: string;
+    };
+    participants?: Array<{
+      id?: string;
+      first_name?: string;
+      last_name?: string;
+      avatar_url?: string;
+      headline?: string;
+    }>;
+  }) => {
+    if (conversation.user?.id) return conversation.user;
+    return conversation.participants?.find((p) => p.id && p.id !== user?.id) || null;
+  };
+
   // Fetch conversations list
   const { data: conversationsData, isLoading: loadingConversations } = useQuery<ConversationsResponse>({
     queryKey: ['conversations'],
@@ -146,6 +175,14 @@ const MessagesNew = () => {
     }
   }, [userId, messagesData?.messages?.length]);
 
+  // Guard against malformed URLs like /messages/undefined
+  useEffect(() => {
+    if (userId === "undefined" || userId === "null") {
+      navigate("/messages", { replace: true });
+      toast({ title: "Conversation link was invalid", variant: "destructive" });
+    }
+  }, [userId, navigate, toast]);
+
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -165,7 +202,11 @@ const MessagesNew = () => {
     }
   };
 
-  const handleSelectConversation = (convUserId: string) => {
+  const handleSelectConversation = (convUserId?: string | null) => {
+    if (!convUserId) {
+      toast({ title: "Could not open this conversation", variant: "destructive" });
+      return;
+    }
     navigate(`/messages/${convUserId}`);
   };
 
@@ -252,15 +293,15 @@ const MessagesNew = () => {
   };
 
   // Filter conversations by search
-  const filteredConversations = conversations.filter((conv) =>
-    `${conv.user?.first_name} ${conv.user?.last_name}`
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase())
-  );
+  const filteredConversations = conversations.filter((conv) => {
+    const displayUser = getConversationDisplayUser(conv);
+    const name = `${displayUser?.first_name || ""} ${displayUser?.last_name || ""}`.trim();
+    return name.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   // Get current conversation user details
-  const currentConversation = conversations.find((conv) => conv.user?.id === userId);
-  const otherUserFromConversations = currentConversation?.user;
+  const currentConversation = conversations.find((conv) => getConversationUserId(conv) === userId);
+  const otherUserFromConversations = currentConversation ? getConversationDisplayUser(currentConversation) : null;
 
   // If userId is set but not in conversations yet (new conversation), fetch their profile
   const { data: newConvProfile } = useQuery<User>({
@@ -310,26 +351,32 @@ const MessagesNew = () => {
             ) : (
               <div>
                 {filteredConversations.map((conversation) => (
+                  (() => {
+                    const conversationUserId = getConversationUserId(conversation);
+                    const conversationUser = getConversationDisplayUser(conversation);
+                    return (
                   <motion.button
                     key={conversation.id}
-                    onClick={() => handleSelectConversation(conversation.user?.id)}
+                    onClick={() => handleSelectConversation(conversationUserId)}
+                    disabled={!conversationUserId}
                     className={cn(
                       "w-full p-4 border-b hover:bg-muted/50 transition-colors text-left",
-                      userId === conversation.user?.id && "bg-muted"
+                      userId === conversationUserId && "bg-muted",
+                      !conversationUserId && "opacity-60 cursor-not-allowed"
                     )}
                     whileHover={{ x: 4 }}
                   >
                     <div className="flex items-start gap-3">
                       <UserAvatar
-                        src={conversation.user?.avatar_url}
-                        name={`${conversation.user?.first_name} ${conversation.user?.last_name}`}
+                        src={conversationUser?.avatar_url}
+                        name={`${conversationUser?.first_name || ""} ${conversationUser?.last_name || ""}`}
                         size="md"
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
                           <h4 className="font-semibold truncate">
-                            {conversation.user?.first_name}{" "}
-                            {conversation.user?.last_name}
+                            {conversationUser?.first_name || "Unknown"}{" "}
+                            {conversationUser?.last_name || "User"}
                           </h4>
                           <span className="text-xs text-muted-foreground">
                             {conversation.last_message?.created_at
@@ -350,6 +397,8 @@ const MessagesNew = () => {
                       </div>
                     </div>
                   </motion.button>
+                    );
+                  })()
                 ))}
               </div>
             )}

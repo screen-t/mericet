@@ -54,34 +54,54 @@ def get_or_create_conversation(user1_id: str, user2_id: str):
         raise Exception(f"Error creating conversation: {str(e)}")
 
 def enrich_conversation(conv: dict, user_id: str):
-    """Enrich conversation with participants and last message"""
+    """Enrich conversation with participants and last message.
+
+    This function is intentionally resilient: a failure in one lookup should not
+    drop user identity data or break the whole conversation payload.
+    """
+    conv["participants"] = conv.get("participants") or []
+    conv["user"] = conv.get("user")
+    conv["last_message"] = conv.get("last_message")
+    conv["unread_count"] = conv.get("unread_count") or 0
+
+    participant_ids = []
     try:
-        # Get participants
         participants_data = supabase.table("conversation_participants").select("user_id").eq("conversation_id", conv["id"]).execute()
-        
-        participant_ids = [p["user_id"] for p in participants_data.data if p["user_id"] != user_id]
-        
-        if participant_ids:
+        participant_ids = [p["user_id"] for p in (participants_data.data or []) if p.get("user_id") != user_id]
+    except Exception as e:
+        print(f"Error loading participants for conversation {conv.get('id')}: {e}")
+
+    if participant_ids:
+        try:
             users = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").in_("id", participant_ids).execute()
-            conv["participants"] = users.data
-            # Set `user` to the first other participant (for direct message display)
-            conv["user"] = users.data[0] if users.data else None
-        else:
-            conv["participants"] = []
-            conv["user"] = None
-        
-        # Get last message
+            conv["participants"] = users.data or []
+            conv["user"] = conv["participants"][0] if conv["participants"] else None
+        except Exception as e:
+            print(f"Error loading participant profiles for conversation {conv.get('id')}: {e}")
+            if not conv.get("participants"):
+                conv["participants"] = [{"id": pid} for pid in participant_ids]
+            if not conv.get("user") and conv["participants"]:
+                conv["user"] = conv["participants"][0]
+
+    try:
         last_msg = supabase.table("messages").select("*").eq("conversation_id", conv["id"]).order("created_at", desc=True).limit(1).execute()
-        conv["last_message"] = last_msg.data[0] if last_msg.data else None
-        
-        # Count unread messages
+        conv["last_message"] = last_msg.data[0] if (last_msg.data or []) else None
+    except Exception as e:
+        print(f"Error loading last message for conversation {conv.get('id')}: {e}")
+
+    try:
         unread = supabase.table("messages").select("id", count="exact").eq("conversation_id", conv["id"]).eq("is_read", False).neq("sender_id", user_id).execute()
         conv["unread_count"] = unread.count if unread.count else 0
-        
-        return conv
     except Exception as e:
-        print(f"Error enriching conversation: {e}")
-        return conv
+        print(f"Error counting unread for conversation {conv.get('id')}: {e}")
+
+    return conv
+
+def _conversation_sort_key(conv: dict):
+    last_message = conv.get("last_message")
+    if isinstance(last_message, dict):
+        return last_message.get("created_at") or conv.get("created_at") or ""
+    return conv.get("created_at") or ""
 
 @router.post("")
 def send_message(payload: MessageCreate, user_id: str = Depends(require_auth)):
@@ -159,8 +179,8 @@ def get_conversations(user_id: str = Depends(require_auth)):
         # Enrich each conversation
         enriched = [enrich_conversation(conv, user_id) for conv in conversations.data]
         
-        # Sort by last message time
-        enriched.sort(key=lambda x: x.get("last_message", {}).get("created_at", x["created_at"]), reverse=True)
+        # Sort by last message time (null-safe)
+        enriched.sort(key=_conversation_sort_key, reverse=True)
         
         return enriched
     except Exception as e:
