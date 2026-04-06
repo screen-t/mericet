@@ -7,6 +7,7 @@ import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { backendApi } from "@/lib/backend-api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
@@ -29,6 +30,11 @@ import { cn } from "@/lib/utils";
 const EDIT_WINDOW_MINUTES = 15;
 const MAX_MESSAGE_EDITS = 3;
 
+type ConfirmAction =
+  | { type: "delete-message"; messageId: string }
+  | { type: "delete-conversation" }
+  | null;
+
 const MessagesNew = () => {
   const { userId } = useParams<{ userId?: string }>();
   const navigate = useNavigate();
@@ -39,6 +45,7 @@ const MessagesNew = () => {
   const [messageText, setMessageText] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch conversations list
@@ -99,6 +106,7 @@ const MessagesNew = () => {
   const deleteMessageMutation = useMutation({
     mutationFn: (messageId: string) => backendApi.messages.deleteMessage(messageId),
     onSuccess: () => {
+      setConfirmAction(null);
       queryClient.invalidateQueries({ queryKey: ['messages', userId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
@@ -111,6 +119,7 @@ const MessagesNew = () => {
   const deleteConversationMutation = useMutation({
     mutationFn: (otherUserId: string) => backendApi.messages.deleteConversation(otherUserId),
     onSuccess: () => {
+      setConfirmAction(null);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       queryClient.invalidateQueries({ queryKey: ['messages', userId] });
       queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
@@ -171,14 +180,23 @@ const MessagesNew = () => {
   };
 
   const handleDeleteMessage = (messageId: string) => {
-    if (!window.confirm("Delete this message?")) return;
-    deleteMessageMutation.mutate(messageId);
+    setConfirmAction({ type: "delete-message", messageId });
   };
 
   const handleDeleteConversation = () => {
     if (!userId) return;
-    if (!window.confirm("Delete this conversation?")) return;
-    deleteConversationMutation.mutate(userId);
+    setConfirmAction({ type: "delete-conversation" });
+  };
+
+  const handleConfirmAction = () => {
+    if (!confirmAction) return;
+    if (confirmAction.type === "delete-message") {
+      deleteMessageMutation.mutate(confirmAction.messageId);
+      return;
+    }
+    if (confirmAction.type === "delete-conversation" && userId) {
+      deleteConversationMutation.mutate(userId);
+    }
   };
 
   const parseTimestampToMs = (timestamp: string) => {
@@ -207,6 +225,18 @@ const MessagesNew = () => {
 
     return true;
   };
+
+  const isConfirmOpen = confirmAction !== null;
+  const confirmTitle =
+    confirmAction?.type === "delete-conversation"
+      ? "Delete this conversation?"
+      : "Delete this message?";
+  const confirmDescription =
+    confirmAction?.type === "delete-conversation"
+      ? "This will remove this conversation from your inbox."
+      : "This action cannot be undone.";
+  const confirmLoading =
+    deleteMessageMutation.isPending || deleteConversationMutation.isPending;
 
   const formatTimestamp = (timestamp: string) => {
     try {
@@ -549,6 +579,19 @@ const MessagesNew = () => {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={isConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+        title={confirmTitle}
+        description={confirmDescription}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        confirmVariant="destructive"
+        onConfirm={handleConfirmAction}
+        isLoading={confirmLoading}
+      />
     </AppLayout>
   );
 };
