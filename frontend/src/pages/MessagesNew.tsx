@@ -8,6 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { backendApi } from "@/lib/backend-api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
@@ -20,8 +26,7 @@ import {
   Loader2,
   MessageSquare,
   ArrowLeft,
-  Pencil,
-  Trash2,
+  MoreVertical,
   Check,
   X,
 } from "lucide-react";
@@ -551,15 +556,22 @@ const MessagesNew = () => {
                     )}
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleDeleteConversation}
-                  disabled={deleteConversationMutation.isPending}
-                  title="Delete conversation"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" title="Conversation actions">
+                      <MoreVertical className="w-5 h-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={handleDeleteConversation}
+                      disabled={deleteConversationMutation.isPending}
+                      className="text-destructive"
+                    >
+                      Delete conversation
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {/* Messages */}
@@ -670,30 +682,34 @@ const MessagesNew = () => {
                               {message.edited_at ? " • edited" : ""}
                             </p>
                             {isMyMessage && editingMessageId !== message.id && (
-                              <div className="mt-1 flex justify-end gap-1">
-                                {canEdit && !isOptimisticMessage && (
-                                  <Button
-                                    type="button"
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 text-white/80 hover:text-white"
-                                    onClick={() => startEditingMessage(message.id, message.content)}
-                                    title="Edit message"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </Button>
-                                )}
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 text-white/80 hover:text-white"
-                                  onClick={() => handleDeleteMessage(message.id)}
-                                  title="Delete message"
-                                  disabled={deleteMessageMutation.isPending}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
+                              <div className="mt-1 flex justify-end">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7 text-white/80 hover:text-white"
+                                      title="Message actions"
+                                    >
+                                      <MoreVertical className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    {canEdit && !isOptimisticMessage && (
+                                      <DropdownMenuItem onClick={() => startEditingMessage(message.id, message.content)}>
+                                        Edit message
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem
+                                      onClick={() => handleDeleteMessage(message.id)}
+                                      disabled={deleteMessageMutation.isPending}
+                                      className="text-destructive"
+                                    >
+                                      Delete message
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             )}
                           </div>
