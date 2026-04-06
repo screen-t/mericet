@@ -84,11 +84,16 @@ const MessagesNew = () => {
     refetchInterval: 10000, // Refetch every 10 seconds
   });
 
+  const conversations = conversationsData?.conversations || [];
+
   // Fetch messages for selected conversation
+  const selectedConversation = conversations.find((conv) => getConversationUserId(conv) === userId);
+  const selectedConversationId = selectedConversation?.id;
+
   const { data: messagesData, isLoading: loadingMessages } = useQuery<MessagesResponse>({
     queryKey: ['messages', userId],
-    queryFn: () => backendApi.messages.getMessages(userId!, 100, 0),
-    enabled: !!userId,
+    queryFn: () => backendApi.messages.getMessagesByConversationId(selectedConversationId!, 100, 0),
+    enabled: !!selectedConversationId,
     refetchInterval: 5000, // Poll for new messages every 5 seconds
   });
 
@@ -99,21 +104,67 @@ const MessagesNew = () => {
     refetchInterval: 15000,
   });
 
-  const conversations = conversationsData?.conversations || [];
   // Backend returns messages newest-first; reverse so oldest is at top
   const messages = [...(messagesData?.messages || [])].reverse();
 
+  const conversationUserIdFor = (conversation: { user?: { id?: string }; participants?: Array<{ id?: string }> }) =>
+    getConversationUserId(conversation);
+
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: ({ recipientId, content }: { recipientId: string; content: string }) =>
+    mutationFn: ({ recipientId, content }: { recipientId: string; content: string; tempId?: string }) =>
       backendApi.messages.sendMessage(recipientId, content),
+    onMutate: async ({ recipientId, content, tempId }) => {
+      await queryClient.cancelQueries({ queryKey: ['messages', recipientId] });
+      await queryClient.cancelQueries({ queryKey: ['conversations'] });
+
+      const optimisticId = tempId || `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const optimisticMessage = {
+        id: optimisticId,
+        sender_id: user?.id || '',
+        content,
+        is_read: false,
+        created_at: new Date().toISOString(),
+        edited_at: null,
+        edit_count: 0,
+        sender: user,
+      };
+
+      queryClient.setQueryData<MessagesResponse>(['messages', recipientId], (old) => ({
+        messages: [optimisticMessage, ...((old?.messages || []))],
+      }));
+
+      queryClient.setQueryData<ConversationsResponse>(['conversations'], (old) => {
+        if (!old?.conversations) return old;
+        const updated = old.conversations.map((conv) => {
+          if (conversationUserIdFor(conv) !== recipientId) return conv;
+          return {
+            ...conv,
+            last_message: {
+              ...(conv.last_message || {}),
+              content,
+              created_at: optimisticMessage.created_at,
+            },
+          };
+        });
+        return { conversations: updated };
+      });
+
+      return { recipientId, tempId: optimisticId };
+    },
     onSuccess: () => {
-      setMessageText("");
       queryClient.invalidateQueries({ queryKey: ['messages', userId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       scrollToBottom();
     },
-    onError: () => {
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.recipientId && ctx?.tempId) {
+        queryClient.setQueryData<MessagesResponse>(['messages', ctx.recipientId], (old) => {
+          if (!old?.messages) return old;
+          return { messages: old.messages.filter((m) => m.id !== ctx.tempId) };
+        });
+      }
       toast({ title: "Failed to send message", variant: "destructive" });
     },
   });
@@ -121,26 +172,64 @@ const MessagesNew = () => {
   const editMessageMutation = useMutation({
     mutationFn: ({ messageId, content }: { messageId: string; content: string }) =>
       backendApi.messages.editMessage(messageId, content),
+    onMutate: async ({ messageId, content }) => {
+      if (!userId) return {};
+      await queryClient.cancelQueries({ queryKey: ['messages', userId] });
+
+      const previousMessages = queryClient.getQueryData<MessagesResponse>(['messages', userId]);
+
+      queryClient.setQueryData<MessagesResponse>(['messages', userId], (old) => {
+        if (!old?.messages) return old;
+        return {
+          messages: old.messages.map((m) =>
+            m.id === messageId
+              ? { ...m, content, edited_at: new Date().toISOString(), edit_count: (m.edit_count || 0) + 1 }
+              : m,
+          ),
+        };
+      });
+
+      return { previousMessages };
+    },
     onSuccess: () => {
       setEditingMessageId(null);
       setEditText("");
       queryClient.invalidateQueries({ queryKey: ['messages', userId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
-    onError: () => {
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousMessages && userId) {
+        queryClient.setQueryData(['messages', userId], ctx.previousMessages);
+      }
       toast({ title: "Failed to edit message", variant: "destructive" });
     },
   });
 
   const deleteMessageMutation = useMutation({
     mutationFn: (messageId: string) => backendApi.messages.deleteMessage(messageId),
+    onMutate: async (messageId: string) => {
+      if (!userId) return {};
+      await queryClient.cancelQueries({ queryKey: ['messages', userId] });
+
+      const previousMessages = queryClient.getQueryData<MessagesResponse>(['messages', userId]);
+
+      queryClient.setQueryData<MessagesResponse>(['messages', userId], (old) => {
+        if (!old?.messages) return old;
+        return { messages: old.messages.filter((m) => m.id !== messageId) };
+      });
+
+      return { previousMessages };
+    },
     onSuccess: () => {
       setConfirmAction(null);
       queryClient.invalidateQueries({ queryKey: ['messages', userId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
     },
-    onError: () => {
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousMessages && userId) {
+        queryClient.setQueryData(['messages', userId], ctx.previousMessages);
+      }
       toast({ title: "Failed to delete message", variant: "destructive" });
     },
   });
@@ -171,7 +260,9 @@ const MessagesNew = () => {
   // Also mark the whole conversation as read when opening it
   useEffect(() => {
     if (userId && messagesData?.messages?.length) {
-      backendApi.messages.markConversationAsRead(userId);
+      backendApi.messages.markConversationAsRead(userId).catch(() => {
+        // Read-marking is best-effort and should not interrupt chat flow.
+      });
     }
   }, [userId, messagesData?.messages?.length]);
 
@@ -194,10 +285,14 @@ const MessagesNew = () => {
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (messageText.trim() && userId) {
+    const content = messageText.trim();
+    if (content && userId) {
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      setMessageText("");
       sendMessageMutation.mutate({
         recipientId: userId,
-        content: messageText.trim(),
+        content,
+        tempId,
       });
     }
   };
@@ -221,6 +316,16 @@ const MessagesNew = () => {
   };
 
   const handleDeleteMessage = (messageId: string) => {
+    // Optimistic messages use temporary ids and are not persisted yet.
+    // Remove them locally instead of calling backend delete.
+    if (messageId.startsWith("temp-")) {
+      if (!userId) return;
+      queryClient.setQueryData<MessagesResponse>(['messages', userId], (old) => {
+        if (!old?.messages) return old;
+        return { messages: old.messages.filter((m) => m.id !== messageId) };
+      });
+      return;
+    }
     setConfirmAction({ type: "delete-message", messageId });
   };
 
@@ -295,12 +400,13 @@ const MessagesNew = () => {
   // Filter conversations by search
   const filteredConversations = conversations.filter((conv) => {
     const displayUser = getConversationDisplayUser(conv);
-    const name = `${displayUser?.first_name || ""} ${displayUser?.last_name || ""}`.trim();
+    const fullName = `${displayUser?.first_name || ""} ${displayUser?.last_name || ""}`.trim();
+    const name = fullName || displayUser?.username || "";
     return name.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   // Get current conversation user details
-  const currentConversation = conversations.find((conv) => getConversationUserId(conv) === userId);
+  const currentConversation = selectedConversation;
   const otherUserFromConversations = currentConversation ? getConversationDisplayUser(currentConversation) : null;
 
   // If userId is set but not in conversations yet (new conversation), fetch their profile
@@ -354,6 +460,11 @@ const MessagesNew = () => {
                   (() => {
                     const conversationUserId = getConversationUserId(conversation);
                     const conversationUser = getConversationDisplayUser(conversation);
+                    const conversationUserName = (
+                      `${conversationUser?.first_name || ""} ${conversationUser?.last_name || ""}`.trim() ||
+                      conversationUser?.username ||
+                      (conversationUser?.id ? `User ${conversationUser.id.slice(0, 8)}` : "Unknown User")
+                    );
                     return (
                   <motion.button
                     key={conversation.id}
@@ -369,14 +480,13 @@ const MessagesNew = () => {
                     <div className="flex items-start gap-3">
                       <UserAvatar
                         src={conversationUser?.avatar_url}
-                        name={`${conversationUser?.first_name || ""} ${conversationUser?.last_name || ""}`}
+                        name={conversationUserName}
                         size="md"
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
                           <h4 className="font-semibold truncate">
-                            {conversationUser?.first_name || "Unknown"}{" "}
-                            {conversationUser?.last_name || "User"}
+                            {conversationUserName}
                           </h4>
                           <span className="text-xs text-muted-foreground">
                             {conversation.last_message?.created_at
@@ -454,7 +564,7 @@ const MessagesNew = () => {
 
               {/* Messages */}
               <ScrollArea className="flex-1 p-4">
-                {loadingMessages ? (
+                {loadingMessages || (userId && loadingConversations && !selectedConversationId) ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="w-8 h-8 animate-spin text-primary" />
                   </div>
@@ -472,6 +582,7 @@ const MessagesNew = () => {
                   <div className="space-y-4">
                     {messages.map((message, index: number) => {
                       const isMyMessage = message.sender_id === user?.id;
+                      const isOptimisticMessage = message.id.startsWith("temp-");
                       const canEdit = canEditMessage(message, index);
                       const showAvatar =
                         index === 0 ||
@@ -560,7 +671,7 @@ const MessagesNew = () => {
                             </p>
                             {isMyMessage && editingMessageId !== message.id && (
                               <div className="mt-1 flex justify-end gap-1">
-                                {canEdit && (
+                                {canEdit && !isOptimisticMessage && (
                                   <Button
                                     type="button"
                                     size="icon"
@@ -608,7 +719,7 @@ const MessagesNew = () => {
                   />
                   <Button
                     type="submit"
-                    disabled={!messageText.trim() || sendMessageMutation.isPending}
+                    disabled={!messageText.trim()}
                   >
                     <Send className="w-5 h-5" />
                   </Button>

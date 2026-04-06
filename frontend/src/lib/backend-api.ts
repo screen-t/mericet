@@ -357,6 +357,13 @@ const messages = {
     ).then(handleResponse<import('@/types/api').Message[]>);
     return { messages: Array.isArray(list) ? list : [] } as import('@/types/api').MessagesResponse;
   },
+  getMessagesByConversationId: async (conversationId: string, limit: number, offset: number) => {
+    const list = await fetchWithAuth(
+      `${API_BASE_URL}/messages/conversations/${conversationId}/messages?limit=${limit}&offset=${offset}`,
+      { headers: getAuthHeaders() }
+    ).then(handleResponse<import('@/types/api').Message[]>);
+    return { messages: Array.isArray(list) ? list : [] } as import('@/types/api').MessagesResponse;
+  },
   sendMessage: (recipientId: string, content: string) =>
     fetchWithAuth(`${API_BASE_URL}/messages`, {
       method: "POST",

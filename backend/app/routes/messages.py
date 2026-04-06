@@ -9,6 +9,33 @@ router = APIRouter(prefix="/messages", tags=["Messages"])
 EDIT_WINDOW_MINUTES = 15
 MAX_MESSAGE_EDITS = 3
 
+def ensure_user_exists(user_id: str):
+    """Ensure a users row exists for auth user id to avoid FK failures in messaging."""
+    try:
+        exists = supabase.table("users").select("id").eq("id", user_id).limit(1).execute()
+        if exists.data:
+            return
+
+        auth_user_resp = supabase.auth.admin.get_user_by_id(user_id)
+        auth_user = auth_user_resp.user if auth_user_resp else None
+
+        email = (auth_user.email if auth_user and auth_user.email else f"{user_id[:8]}@placeholder.local")
+        username = f"user_{user_id[:8]}"
+        metadata = auth_user.user_metadata if auth_user else {}
+        first_name = metadata.get("first_name") or "User"
+        last_name = metadata.get("last_name") or username
+
+        supabase.table("users").insert({
+            "id": user_id,
+            "email": email,
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+            "is_verified": False,
+        }).execute()
+    except Exception as e:
+        print(f"ensure_user_exists failed for {user_id}: {e}")
+
 def _to_utc_datetime(raw_ts):
     """Parse DB timestamp into timezone-aware UTC datetime."""
     if isinstance(raw_ts, datetime):
@@ -74,12 +101,41 @@ def enrich_conversation(conv: dict, user_id: str):
     if participant_ids:
         try:
             users = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").in_("id", participant_ids).execute()
-            conv["participants"] = users.data or []
+            participants = users.data or []
+
+            # If some participant profiles are missing, try to auto-bootstrap and refetch.
+            found_ids = {u.get("id") for u in participants}
+            missing_ids = [pid for pid in participant_ids if pid not in found_ids]
+            if missing_ids:
+                for pid in missing_ids:
+                    ensure_user_exists(pid)
+                retry_users = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").in_("id", participant_ids).execute()
+                participants = retry_users.data or participants
+
+            conv["participants"] = participants
             conv["user"] = conv["participants"][0] if conv["participants"] else None
         except Exception as e:
             print(f"Error loading participant profiles for conversation {conv.get('id')}: {e}")
+            # Attempt per-user fallback so one bad id does not drop all names.
+            recovered_participants = []
+            for pid in participant_ids:
+                try:
+                    profile = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").eq("id", pid).maybe_single().execute()
+                    if profile and profile.data:
+                        recovered_participants.append(profile.data)
+                        continue
+                    ensure_user_exists(pid)
+                    profile_retry = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").eq("id", pid).maybe_single().execute()
+                    if profile_retry and profile_retry.data:
+                        recovered_participants.append(profile_retry.data)
+                        continue
+                except Exception:
+                    pass
+
+                recovered_participants.append({"id": pid, "username": f"user_{str(pid)[:8]}"})
+
             if not conv.get("participants"):
-                conv["participants"] = [{"id": pid} for pid in participant_ids]
+                conv["participants"] = recovered_participants
             if not conv.get("user") and conv["participants"]:
                 conv["user"] = conv["participants"][0]
 
@@ -107,6 +163,9 @@ def _conversation_sort_key(conv: dict):
 def send_message(payload: MessageCreate, user_id: str = Depends(require_auth)):
     """Send a new message (creates conversation if needed)"""
     try:
+        ensure_user_exists(user_id)
+        ensure_user_exists(payload.receiver_id)
+
         # Get or create conversation
         conversation_id = get_or_create_conversation(user_id, payload.receiver_id)
         
@@ -119,10 +178,14 @@ def send_message(payload: MessageCreate, user_id: str = Depends(require_auth)):
         }
         
         message = supabase.table("messages").insert(message_data).execute()
-        
-        # Get sender info
-        sender = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", user_id).single().execute()
-        message.data[0]["sender"] = sender.data
+
+        # Best-effort sender enrichment; never fail send after successful insert.
+        try:
+            sender = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", user_id).single().execute()
+            message.data[0]["sender"] = sender.data if sender.data else {"id": user_id}
+        except Exception as e:
+            print(f"Warning: sender enrichment failed after send for {user_id}: {e}")
+            message.data[0]["sender"] = {"id": user_id}
         
         # TODO: Create notification for receiver
         # TODO: Emit real-time event for receiver
@@ -135,6 +198,8 @@ def send_message(payload: MessageCreate, user_id: str = Depends(require_auth)):
 def send_message_to_conversation(payload: MessageSend, user_id: str = Depends(require_auth)):
     """Send message to existing conversation"""
     try:
+        ensure_user_exists(user_id)
+
         # Verify user is participant
         participant = supabase.table("conversation_participants").select("*").eq("conversation_id", payload.conversation_id).eq("user_id", user_id).execute()
         
@@ -150,10 +215,14 @@ def send_message_to_conversation(payload: MessageSend, user_id: str = Depends(re
         }
         
         message = supabase.table("messages").insert(message_data).execute()
-        
-        # Get sender info
-        sender = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", user_id).single().execute()
-        message.data[0]["sender"] = sender.data
+
+        # Best-effort sender enrichment; never fail send after successful insert.
+        try:
+            sender = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", user_id).single().execute()
+            message.data[0]["sender"] = sender.data if sender.data else {"id": user_id}
+        except Exception as e:
+            print(f"Warning: sender enrichment failed after send for {user_id}: {e}")
+            message.data[0]["sender"] = {"id": user_id}
         
         return {"message": "Message sent", "data": message.data[0]}
     except HTTPException:
@@ -232,7 +301,9 @@ def mark_conversation_as_read(conversation_id: str, user_id: str = Depends(requi
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Non-critical path: do not break chat UX if read-marking fails intermittently.
+        print(f"Warning: mark_conversation_as_read failed for {conversation_id}, user {user_id}: {e}")
+        return {"message": "Messages marked as read"}
 
 @router.put("/messages/{message_id}/read")
 def mark_message_as_read(message_id: str, user_id: str = Depends(require_auth)):
