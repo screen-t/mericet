@@ -41,6 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { SaveToFolderModal } from "@/components/feed/SaveToFolderModal";
 
 interface PostCardNewProps {
   post: Post;
@@ -179,19 +180,19 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     },
   });
 
-  // Save mutation
-  const saveMutation = useMutation({
-    mutationFn: (currentlySaved: boolean) =>
-      currentlySaved
-        ? backendApi.posts.unsavePost(post.id)
-        : backendApi.posts.savePost(post.id),
-    onSuccess: (_data, currentlySaved) => {
-      toast({ title: currentlySaved ? "Post unsaved" : "Post saved!" });
+  const [showSaveModal, setShowSaveModal] = useState(false);
+
+  // Unsave mutation (save is handled by SaveToFolderModal)
+  const unsaveMutation = useMutation({
+    mutationFn: () => backendApi.saves.unsavePost(post.id),
+    onSuccess: () => {
+      toast({ title: "Post unsaved" });
       queryClient.invalidateQueries({ queryKey: ['feed'] });
       queryClient.invalidateQueries({ queryKey: ['savedPosts'] });
+      queryClient.invalidateQueries({ queryKey: ['allSaved'] });
     },
     onError: () => {
-      toast({ title: "Failed to save post", variant: "destructive" });
+      toast({ title: "Failed to unsave post", variant: "destructive" });
     },
   });
 
@@ -638,12 +639,28 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => !saveMutation.isPending && saveMutation.mutate(post.is_saved ?? false)}
+          onClick={() => {
+            if (post.is_saved) {
+              !unsaveMutation.isPending && unsaveMutation.mutate();
+            } else {
+              setShowSaveModal(true);
+            }
+          }}
           className={cn("gap-2 transition-colors", post.is_saved && "text-primary")}
         >
           <Bookmark className={cn("h-4 w-4 transition-all", post.is_saved && "fill-current")} />
         </Button>
       </div>
+
+      <SaveToFolderModal
+        postId={post.id}
+        open={showSaveModal}
+        onOpenChange={setShowSaveModal}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ['feed'] });
+          queryClient.invalidateQueries({ queryKey: ['savedPosts'] });
+        }}
+      />
 
       {/* Comments Section */}
       {showComments && (

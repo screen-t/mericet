@@ -25,7 +25,7 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import OAuthCallback from "./pages/OAuthCallBack";
 import Companies from "./pages/Companies";
-import Saved from "./pages/Saved";
+import Saved from "./pages/SavedNew";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 
@@ -71,6 +71,7 @@ const App = () => (
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             <Route path="/companies" element={<RequireAuth><Companies /></RequireAuth>} />
             <Route path="/saved" element={<RequireAuth><Saved /></RequireAuth>} />
+            <Route path="/saved/:folderId" element={<RequireAuth><Saved /></RequireAuth>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

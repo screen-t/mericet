@@ -466,6 +466,80 @@ const search = {
   },
 };
 
+// --- Saves (Folders + Bookmarks) ---
+const saves = {
+  getFolders: () =>
+    fetchWithAuth(`${API_BASE_URL}/saves/folders`, { headers: getAuthHeaders() })
+      .then(handleResponse<Array<{ id: string; folder_name: string; description?: string; color: string; post_count: number; created_at: string; updated_at: string }>>),
+
+  createFolder: (data: { folder_name: string; description?: string; color?: string }) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/folders`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse<{ message: string; data: { id: string; folder_name: string; color: string; post_count: number } }>),
+
+  updateFolder: (folderId: string, data: { folder_name?: string; description?: string; color?: string }) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/folders/${folderId}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse),
+
+  deleteFolder: (folderId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/folders/${folderId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+
+  saveToFolder: (postId: string, folderId?: string) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/posts/${postId}`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ folder_id: folderId ?? null }),
+    }).then(handleResponse),
+
+  unsavePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/posts/${postId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+
+  getAllSaved: async (limit: number, offset: number): Promise<import('@/types/api').Post[]> => {
+    const list = await fetchWithAuth(
+      `${API_BASE_URL}/saves/all?limit=${limit}&offset=${offset}`,
+      { headers: getAuthHeaders() }
+    ).then(handleResponse<import('@/types/api').Post[]>);
+    return Array.isArray(list) ? list : [];
+  },
+
+  getUnsorted: async (limit: number, offset: number): Promise<import('@/types/api').Post[]> => {
+    const list = await fetchWithAuth(
+      `${API_BASE_URL}/saves/unsorted?limit=${limit}&offset=${offset}`,
+      { headers: getAuthHeaders() }
+    ).then(handleResponse<import('@/types/api').Post[]>);
+    return Array.isArray(list) ? list : [];
+  },
+
+  getFolderPosts: async (folderId: string, limit: number, offset: number) => {
+    const data = await fetchWithAuth(
+      `${API_BASE_URL}/saves/folder/${folderId}/posts?limit=${limit}&offset=${offset}`,
+      { headers: getAuthHeaders() }
+    ).then(handleResponse<{ folder: { id: string; folder_name: string; color: string; description?: string }; posts: import('@/types/api').Post[] }>);
+    return data;
+  },
+
+  searchSaved: async (q: string, folderId?: string): Promise<import('@/types/api').Post[]> => {
+    const params = new URLSearchParams({ q });
+    if (folderId) params.append("folder_id", folderId);
+    const list = await fetchWithAuth(
+      `${API_BASE_URL}/saves/search?${params.toString()}`,
+      { headers: getAuthHeaders() }
+    ).then(handleResponse<import('@/types/api').Post[]>);
+    return Array.isArray(list) ? list : [];
+  },
+};
+
 export const backendApi = {
   auth,
   profile,
@@ -474,4 +548,5 @@ export const backendApi = {
   messages,
   notifications,
   search,
+  saves,
 };

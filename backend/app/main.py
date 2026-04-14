@@ -8,6 +8,7 @@ from app.routes.connections import router as connections_router
 from app.routes.messages import router as messages_router
 from app.routes.notifications import router as notifications_router
 from app.routes.search import router as search_router
+from app.routes.saves import router as saves_router
 
 # FastAPI application
 app = FastAPI(title="Mericet Backend API")
@@ -68,4 +69,5 @@ app.include_router(connections_router)
 app.include_router(messages_router)
 app.include_router(notifications_router)
 app.include_router(search_router)
+app.include_router(saves_router)
 
