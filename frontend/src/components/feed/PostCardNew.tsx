@@ -641,7 +641,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           size="sm"
           onClick={() => {
             if (post.is_saved) {
-              !unsaveMutation.isPending && unsaveMutation.mutate();
+              if (!unsaveMutation.isPending) unsaveMutation.mutate();
             } else {
               setShowSaveModal(true);
             }

@@ -85,7 +85,7 @@ export function SaveToFolderModal({ postId, open, onOpenChange, onSaved }: SaveT
   function handleCreateAndSave() {
     if (!newFolderName.trim()) return;
     createFolderMutation.mutate(newFolderName.trim(), {
-      onSuccess: (resp: any) => {
+      onSuccess: (resp: { data?: { id?: string } }) => {
         const createdId = resp?.data?.id;
         if (createdId) handleSaveToFolder(createdId);
       },
