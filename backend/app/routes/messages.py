@@ -247,29 +247,67 @@ def send_message_to_conversation(payload: MessageSend, user_id: str = Depends(re
 def get_conversations(user_id: str = Depends(require_auth)):
     """Get all conversations for the user"""
     try:
-        # Get conversation IDs where user is participant
+        # 1. Get conversation IDs where current user is a participant
         participant_data = supabase.table("conversation_participants").select("conversation_id").eq("user_id", user_id).execute()
-        
         if not participant_data.data:
             return []
-        
         conversation_ids = [p["conversation_id"] for p in participant_data.data]
-        
-        # Get conversations
+
+        # 2. Batch-fetch ALL other participants across every conversation (1 query)
+        others_data = supabase.table("conversation_participants").select("conversation_id, user_id").in_("conversation_id", conversation_ids).neq("user_id", user_id).execute()
+        other_rows = others_data.data or []
+
+        # 3. Batch-fetch ALL their profiles in a single users query (1 query)
+        other_ids = list({r["user_id"] for r in other_rows if r.get("user_id")})
+        user_by_id: dict = {}
+        if other_ids:
+            profiles = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").in_("id", other_ids).execute()
+            user_by_id = {u["id"]: u for u in (profiles.data or [])}
+
+        # 4. Build conv_id -> other user map (guaranteed to have at least an id placeholder)
+        conv_to_user: dict = {}
+        for row in other_rows:
+            cid = row.get("conversation_id")
+            uid = row.get("user_id")
+            if not cid or not uid or cid in conv_to_user:
+                continue
+            conv_to_user[cid] = user_by_id.get(uid) or {
+                "id": uid,
+                "username": f"user_{uid[:8]}",
+                "first_name": "User",
+                "last_name": uid[:8],
+            }
+
+        # 5. Fetch conversations and enrich with pre-built data
         conversations = supabase.table("conversations").select("*").in_("id", conversation_ids).order("created_at", desc=True).execute()
-        
-        # Enrich each conversation — per-item catch so one bad conv never 400s the whole list
         enriched = []
-        for conv in conversations.data:
+        for conv in (conversations.data or []):
             try:
-                enriched.append(enrich_conversation(conv, user_id))
+                cid = conv["id"]
+                other = conv_to_user.get(cid)
+                conv["user"] = other
+                conv["participants"] = [other] if other else []
+
+                # Last message
+                try:
+                    lm = supabase.table("messages").select("*").eq("conversation_id", cid).order("created_at", desc=True).limit(1).execute()
+                    conv["last_message"] = lm.data[0] if lm.data else None
+                except Exception:
+                    conv.setdefault("last_message", None)
+
+                # Unread count
+                try:
+                    unread = supabase.table("messages").select("id", count="exact").eq("conversation_id", cid).eq("is_read", False).neq("sender_id", user_id).execute()
+                    conv["unread_count"] = unread.count or 0
+                except Exception:
+                    conv.setdefault("unread_count", 0)
+
+                enriched.append(conv)
             except Exception as e:
-                print(f"Warning: enrich_conversation failed for {conv.get('id')}: {e}")
+                print(f"Warning: conversation enrich failed for {conv.get('id')}: {e}")
                 enriched.append(conv)
 
-        # Sort by last message time (null-safe)
         enriched.sort(key=_conversation_sort_key, reverse=True)
-        
         return enriched
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
