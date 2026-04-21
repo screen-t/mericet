@@ -368,8 +368,11 @@ def get_conversation_messages(
 
         # Enrich with sender info and reactions
         for msg in messages.data:
-            sender = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", msg["sender_id"]).single().execute()
-            msg["sender"] = sender.data if sender.data else None
+            try:
+                sender = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", msg["sender_id"]).limit(1).execute()
+                msg["sender"] = sender.data[0] if sender.data else None
+            except Exception:
+                msg["sender"] = None
             msg["reactions"] = reactions_by_msg.get(msg["id"], [])
 
         return messages.data

@@ -146,6 +146,7 @@ export interface MessageReaction {
 
 export interface Message {
   id: string;
+  conversation_id: string;
   sender_id: string;
   recipient_id?: string;
   content: string;

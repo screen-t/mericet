@@ -162,6 +162,7 @@ const MessagesNew = () => {
 
       const optimisticMessage = {
         id: optimisticId,
+        conversation_id: selectedConversationId || '',
         sender_id: user?.id || '',
         content,
         is_read: false,
@@ -269,6 +270,10 @@ const MessagesNew = () => {
       if (!userId) return {};
       await queryClient.cancelQueries({ queryKey: ['messages', userId] });
       const previousMessages = queryClient.getQueryData<MessagesResponse>(['messages', userId]);
+      const previousConversations = queryClient.getQueryData<ConversationsResponse>(['conversations']);
+      // Find the conversation_id from the current messages cache before patching
+      const targetMessage = previousMessages?.messages?.find((m) => m.id === messageId);
+      const conversationId = targetMessage?.conversation_id;
       queryClient.setQueryData<MessagesResponse>(['messages', userId], (old) => {
         if (!old?.messages) return old;
         return {
@@ -277,17 +282,36 @@ const MessagesNew = () => {
           ),
         };
       });
-      return { previousMessages };
+      // Patch conversations cache directly to avoid triggering a full refetch
+      if (conversationId) {
+        queryClient.setQueryData<ConversationsResponse>(['conversations'], (old) => {
+          if (!old?.conversations) return old;
+          return {
+            conversations: old.conversations.map((conv) => {
+              if (conv.id !== conversationId) return conv;
+              const updatedLastMsg = conv.last_message?.id === messageId
+                ? { ...conv.last_message, is_deleted: true, content: "" }
+                : conv.last_message;
+              return { ...conv, last_message: updatedLastMsg };
+            }),
+          };
+        });
+      }
+      return { previousMessages, previousConversations, conversationId };
     },
     onSuccess: () => {
       setConfirmAction(null);
       setDeleteTargetId(null);
       queryClient.invalidateQueries({ queryKey: ['messages', userId] });
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      // Do NOT invalidate ['conversations'] here — that refetch can return user:null
+      // and break the conversation list. The cache was already patched in onMutate.
     },
     onError: (err: unknown, _vars, ctx) => {
       if (ctx?.previousMessages && userId) {
         queryClient.setQueryData(['messages', userId], ctx.previousMessages);
+      }
+      if (ctx?.previousConversations) {
+        queryClient.setQueryData(['conversations'], ctx.previousConversations);
       }
       const detail = (err as { message?: string })?.message || "";
       if (detail.includes("15 minutes")) {
