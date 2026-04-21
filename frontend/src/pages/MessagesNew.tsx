@@ -30,6 +30,8 @@ import {
   Check,
   X,
   Smile,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -276,6 +278,28 @@ const MessagesNew = () => {
     },
     onError: () => {
       toast({ title: "Failed to delete conversation", variant: "destructive" });
+    },
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: (conversationId: string) => backendApi.messages.togglePin(conversationId),
+    onMutate: async (conversationId) => {
+      await queryClient.cancelQueries({ queryKey: ['conversations'] });
+      queryClient.setQueryData<ConversationsResponse>(['conversations'], (old) => {
+        if (!old?.conversations) return old;
+        return {
+          conversations: old.conversations
+            .map((c) => c.id === conversationId ? { ...c, is_pinned: !c.is_pinned } : c)
+            .sort((a, b) => {
+              if (a.is_pinned === b.is_pinned) return 0;
+              return a.is_pinned ? -1 : 1;
+            }),
+        };
+      });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      toast({ title: "Failed to update pin", variant: "destructive" });
     },
   });
 
@@ -531,8 +555,9 @@ const MessagesNew = () => {
                     onClick={() => handleSelectConversation(conversationUserId)}
                     disabled={!conversationUserId}
                     className={cn(
-                      "w-full p-4 border-b hover:bg-muted/50 transition-colors text-left",
+                      "w-full p-4 border-b hover:bg-muted/50 transition-colors text-left group/conv",
                       userId === conversationUserId && "bg-muted",
+                      conversation.is_pinned && "bg-primary/5 border-l-2 border-l-primary",
                       !conversationUserId && "opacity-60 cursor-not-allowed"
                     )}
                     whileHover={{ x: 4 }}
@@ -545,14 +570,33 @@ const MessagesNew = () => {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
-                          <h4 className="font-semibold truncate">
-                            {conversationUserName}
-                          </h4>
-                          <span className="text-xs text-muted-foreground">
-                            {conversation.last_message?.created_at
-                              ? formatTimestamp(conversation.last_message.created_at)
-                              : ""}
-                          </span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {conversation.is_pinned && (
+                              <Pin className="w-3 h-3 text-primary shrink-0" />
+                            )}
+                            <h4 className="font-semibold truncate">
+                              {conversationUserName}
+                            </h4>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                pinMutation.mutate(conversation.id);
+                              }}
+                              className="opacity-0 group-hover/conv:opacity-100 transition-opacity p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                              title={conversation.is_pinned ? "Unpin" : "Pin conversation"}
+                            >
+                              {conversation.is_pinned
+                                ? <PinOff className="w-3.5 h-3.5" />
+                                : <Pin className="w-3.5 h-3.5" />}
+                            </button>
+                            <span className="text-xs text-muted-foreground">
+                              {conversation.last_message?.created_at
+                                ? formatTimestamp(conversation.last_message.created_at)
+                                : ""}
+                            </span>
+                          </div>
                         </div>
                         <p className="text-sm text-muted-foreground truncate">
                           {conversation.last_message?.content || "No messages yet"}

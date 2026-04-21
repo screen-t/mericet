@@ -253,9 +253,12 @@ def get_conversations(user_id: str = Depends(require_auth)):
             return []
         conversation_ids = [p["conversation_id"] for p in participant_data.data]
 
-        # 2. Batch-fetch ALL other participants across every conversation (1 query)
+        # 2. Batch-fetch ALL other participants + current user's pin state (1 query each)
         others_data = supabase.table("conversation_participants").select("conversation_id, user_id").in_("conversation_id", conversation_ids).neq("user_id", user_id).execute()
         other_rows = others_data.data or []
+
+        pin_data = supabase.table("conversation_participants").select("conversation_id, is_pinned").in_("conversation_id", conversation_ids).eq("user_id", user_id).execute()
+        pinned_by_conv = {r["conversation_id"]: r.get("is_pinned", False) for r in (pin_data.data or [])}
 
         # 3. Batch-fetch ALL their profiles in a single users query (1 query)
         other_ids = list({r["user_id"] for r in other_rows if r.get("user_id")})
@@ -287,6 +290,7 @@ def get_conversations(user_id: str = Depends(require_auth)):
                 other = conv_to_user.get(cid)
                 conv["user"] = other
                 conv["participants"] = [other] if other else []
+                conv["is_pinned"] = pinned_by_conv.get(cid, False)
 
                 # Last message
                 try:
@@ -307,8 +311,26 @@ def get_conversations(user_id: str = Depends(require_auth)):
                 print(f"Warning: conversation enrich failed for {conv.get('id')}: {e}")
                 enriched.append(conv)
 
-        enriched.sort(key=_conversation_sort_key, reverse=True)
+        enriched.sort(key=lambda c: (c.get("is_pinned", False), _conversation_sort_key(c)), reverse=True)
         return enriched
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.patch("/conversations/{conversation_id}/pin")
+def toggle_pin(
+    conversation_id: str,
+    user_id: str = Depends(require_auth),
+):
+    """Toggle pinned state for the current user's conversation."""
+    try:
+        row = supabase.table("conversation_participants").select("is_pinned").eq("conversation_id", conversation_id).eq("user_id", user_id).single().execute()
+        if not row.data:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        new_state = not row.data.get("is_pinned", False)
+        supabase.table("conversation_participants").update({"is_pinned": new_state}).eq("conversation_id", conversation_id).eq("user_id", user_id).execute()
+        return {"is_pinned": new_state}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

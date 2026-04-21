@@ -166,6 +166,7 @@ export interface Conversation {
   participants?: Partial<User>[];
   last_message?: Message | null;
   unread_count: number;
+  is_pinned?: boolean;
 }
 
 export interface Notification {

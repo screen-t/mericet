@@ -419,6 +419,12 @@ const messages = {
       method: "DELETE",
       headers: getAuthHeaders(),
     }).then(handleResponse),
+
+  togglePin: (conversationId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/messages/conversations/${conversationId}/pin`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ is_pinned: boolean }>),
 };
 
 // --- Notifications ---

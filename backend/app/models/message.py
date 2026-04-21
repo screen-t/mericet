@@ -35,3 +35,4 @@ class ConversationResponse(BaseModel):
     user: Optional[dict] = None  # The other participant
     last_message: Optional[dict] = None
     unread_count: int = 0
+    is_pinned: bool = False
