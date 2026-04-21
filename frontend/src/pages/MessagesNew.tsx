@@ -53,9 +53,18 @@ const MessagesNew = () => {
   const [editText, setEditText] = useState("");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
+  const [pickerCategory, setPickerCategory] = useState("Quick");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const QUICK_EMOJIS = ["👍", "❤️", "😂", "😢", "😮", "🔥"];
+
+  const EMOJI_CATEGORIES: { label: string; emojis: string[] }[] = [
+    { label: "Quick", emojis: ["👍", "❤️", "😂", "😢", "😮", "🔥", "🎉", "👏"] },
+    { label: "Smileys", emojis: ["😀", "😃", "😄", "😁", "😅", "😆", "🤣", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "😚", "🤭", "😋", "😛", "😜", "🤪", "🤔", "😐", "😑", "😶", "😏", "😒", "🙄", "😬", "🤥", "😌", "😔", "😪", "🤤", "😴", "😷", "🤒", "🤕", "🤢", "🤮", "🤧", "🥵", "🥶", "🥴", "😵", "🤯", "🤠", "🤸", "😎", "🤓", "🧐", "😕", "😟", "🙁", "☹️", "😮", "😯", "😲", "😳", "🥺", "😦", "😧", "😨", "😰", "😥", "😢", "😭", "😱", "😖", "😣", "😞", "😓", "😩", "😫", "😤", "😡", "😠", "🤬", "😈", "👿"] },
+    { label: "Gestures", emojis: ["👍", "👎", "👌", "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "☝️", "👆", "👇", "✋", "🖐️", "👋", "🤚", "👏", "🙌", "🫲", "🤲", "🙏", "💪", "🦵", "✍️"] },
+    { label: "Hearts", emojis: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❤️‍🔥", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟"] },
+    { label: "Fun", emojis: ["🔥", "💯", "✨", "🎉", "🎊", "🎁", "🎈", "💡", "💎", "👑", "🏆", "🥇", "🎯", "🚀", "💫", "⚡", "💥", "👀", "🤭", "💀", "👻", "👽", "🐲", "🦄", "🌈", "🪄", "🛡️", "💣", "🎸", "🎶", "📸", "⚽", "🎲", "🥊"] },
+  ];
 
   const groupReactions = (reactions: MessageReaction[]) => {
     const groups: Record<string, { count: number; hasReacted: boolean }> = {};
@@ -676,23 +685,33 @@ const MessagesNew = () => {
                               <Button
                                 type="button" size="icon" variant="ghost"
                                 className="h-7 w-7 text-muted-foreground"
-                                onClick={() => setReactionPickerMessageId(
-                                  reactionPickerMessageId === message.id ? null : message.id
-                                )}
+                                onClick={() => {
+                                  setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
+                                  setPickerCategory("Quick");
+                                }}
                               >
                                 <Smile className="w-4 h-4" />
                               </Button>
                               {reactionPickerMessageId === message.id && (
-                                <div className="absolute bottom-8 right-0 z-50 bg-card border rounded-full shadow-lg px-2 py-1 flex gap-1">
-                                  {QUICK_EMOJIS.map((emoji) => (
-                                    <button
-                                      key={emoji}
-                                      onClick={() => reactionMutation.mutate({ messageId: message.id, emoji })}
-                                      className="text-lg hover:scale-125 transition-transform p-0.5"
-                                    >
-                                      {emoji}
-                                    </button>
-                                  ))}
+                                <div className="absolute bottom-9 right-0 z-50 bg-card border shadow-xl rounded-xl w-64">
+                                  <div className="flex border-b text-xs">
+                                    {EMOJI_CATEGORIES.map((cat) => (
+                                      <button
+                                        key={cat.label}
+                                        onClick={() => setPickerCategory(cat.label)}
+                                        className={cn("flex-1 py-1.5 font-medium transition-colors", pickerCategory === cat.label ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground")}
+                                      >{cat.label}</button>
+                                    ))}
+                                  </div>
+                                  <div className="grid grid-cols-8 gap-0.5 p-2 max-h-36 overflow-y-auto">
+                                    {(EMOJI_CATEGORIES.find(c => c.label === pickerCategory)?.emojis || []).map((emoji) => (
+                                      <button
+                                        key={emoji}
+                                        onClick={() => reactionMutation.mutate({ messageId: message.id, emoji })}
+                                        className="text-xl hover:scale-125 transition-transform p-0.5 leading-none"
+                                      >{emoji}</button>
+                                    ))}
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -819,23 +838,33 @@ const MessagesNew = () => {
                               <Button
                                 type="button" size="icon" variant="ghost"
                                 className="h-7 w-7 text-muted-foreground"
-                                onClick={() => setReactionPickerMessageId(
-                                  reactionPickerMessageId === message.id ? null : message.id
-                                )}
+                                onClick={() => {
+                                  setReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id);
+                                  setPickerCategory("Quick");
+                                }}
                               >
                                 <Smile className="w-4 h-4" />
                               </Button>
                               {reactionPickerMessageId === message.id && (
-                                <div className="absolute bottom-8 left-0 z-50 bg-card border rounded-full shadow-lg px-2 py-1 flex gap-1">
-                                  {QUICK_EMOJIS.map((emoji) => (
-                                    <button
-                                      key={emoji}
-                                      onClick={() => reactionMutation.mutate({ messageId: message.id, emoji })}
-                                      className="text-lg hover:scale-125 transition-transform p-0.5"
-                                    >
-                                      {emoji}
-                                    </button>
-                                  ))}
+                                <div className="absolute bottom-9 left-0 z-50 bg-card border shadow-xl rounded-xl w-64">
+                                  <div className="flex border-b text-xs">
+                                    {EMOJI_CATEGORIES.map((cat) => (
+                                      <button
+                                        key={cat.label}
+                                        onClick={() => setPickerCategory(cat.label)}
+                                        className={cn("flex-1 py-1.5 font-medium transition-colors", pickerCategory === cat.label ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground")}
+                                      >{cat.label}</button>
+                                    ))}
+                                  </div>
+                                  <div className="grid grid-cols-8 gap-0.5 p-2 max-h-36 overflow-y-auto">
+                                    {(EMOJI_CATEGORIES.find(c => c.label === pickerCategory)?.emojis || []).map((emoji) => (
+                                      <button
+                                        key={emoji}
+                                        onClick={() => reactionMutation.mutate({ messageId: message.id, emoji })}
+                                        className="text-xl hover:scale-125 transition-transform p-0.5 leading-none"
+                                      >{emoji}</button>
+                                    ))}
+                                  </div>
                                 </div>
                               )}
                             </div>

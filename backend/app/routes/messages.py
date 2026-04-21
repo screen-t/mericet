@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.lib.supabase import supabase
 from app.middleware.auth import require_auth
-from app.models.message import MessageCreate, MessageSend, MessageUpdate, MessageResponse, ConversationResponse, ReactionCreate, ALLOWED_EMOJIS
+from app.models.message import MessageCreate, MessageSend, MessageUpdate, MessageResponse, ConversationResponse, ReactionCreate
 from typing import List
 from datetime import datetime, timezone, timedelta
 
@@ -436,8 +436,6 @@ def toggle_reaction(
     user_id: str = Depends(require_auth),
 ):
     """Add a reaction. If the same emoji already exists for this user, remove it (toggle)."""
-    if payload.emoji not in ALLOWED_EMOJIS:
-        raise HTTPException(status_code=400, detail=f"Emoji not allowed. Choose from: {', '.join(sorted(ALLOWED_EMOJIS))}")
     try:
         existing = supabase.table("message_reactions").select("id").eq("message_id", message_id).eq("user_id", user_id).eq("emoji", payload.emoji).execute()
         if existing.data:
