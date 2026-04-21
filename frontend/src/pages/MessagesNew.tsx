@@ -239,32 +239,46 @@ const MessagesNew = () => {
     },
   });
 
+  const DELETE_WINDOW_MINUTES = 15;
+
+  const canDeleteMessage = (message: { sender_id: string; created_at: string; is_deleted?: boolean }) => {
+    if (message.sender_id !== user?.id) return false;
+    if (message.is_deleted) return false;
+    const elapsed = (Date.now() - new Date(message.created_at).getTime()) / 1000;
+    return elapsed <= DELETE_WINDOW_MINUTES * 60;
+  };
+
   const deleteMessageMutation = useMutation({
     mutationFn: (messageId: string) => backendApi.messages.deleteMessage(messageId),
     onMutate: async (messageId: string) => {
       if (!userId) return {};
       await queryClient.cancelQueries({ queryKey: ['messages', userId] });
-
       const previousMessages = queryClient.getQueryData<MessagesResponse>(['messages', userId]);
-
       queryClient.setQueryData<MessagesResponse>(['messages', userId], (old) => {
         if (!old?.messages) return old;
-        return { messages: old.messages.filter((m) => m.id !== messageId) };
+        return {
+          messages: old.messages.map((m) =>
+            m.id === messageId ? { ...m, is_deleted: true, content: "" } : m
+          ),
+        };
       });
-
       return { previousMessages };
     },
     onSuccess: () => {
       setConfirmAction(null);
       queryClient.invalidateQueries({ queryKey: ['messages', userId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err: unknown, _vars, ctx) => {
       if (ctx?.previousMessages && userId) {
         queryClient.setQueryData(['messages', userId], ctx.previousMessages);
       }
-      toast({ title: "Failed to delete message", variant: "destructive" });
+      const detail = (err as { message?: string })?.message || "";
+      if (detail.includes("15 minutes")) {
+        toast({ title: "Cannot delete", description: "Messages can only be deleted within 15 minutes of sending.", variant: "destructive" });
+      } else {
+        toast({ title: "Failed to delete message", variant: "destructive" });
+      }
     },
   });
 
@@ -814,6 +828,10 @@ const MessagesNew = () => {
                                   </Button>
                                 </div>
                               </div>
+                            ) : message.is_deleted ? (
+                              <p className={cn("text-sm italic", isMyMessage ? "text-white/60" : "text-muted-foreground")}>
+                                🚫 This message was deleted
+                              </p>
                             ) : (
                               <p className="text-sm">{message.content}</p>
                             )}
@@ -826,7 +844,7 @@ const MessagesNew = () => {
                               )}
                             >
                               {formatTimestamp(message.created_at)}
-                              {message.edited_at ? " • edited" : ""}
+                              {message.edited_at && !message.is_deleted ? " • edited" : ""}
                             </p>
                             {isMyMessage && editingMessageId !== message.id && (
                               <div className="mt-1 flex justify-end">
@@ -843,18 +861,20 @@ const MessagesNew = () => {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    {canEdit && !isOptimisticMessage && (
+                                    {canEdit && !isOptimisticMessage && !message.is_deleted && (
                                       <DropdownMenuItem onClick={() => startEditingMessage(message.id, message.content)}>
                                         Edit message
                                       </DropdownMenuItem>
                                     )}
-                                    <DropdownMenuItem
-                                      onClick={() => handleDeleteMessage(message.id)}
-                                      disabled={deleteMessageMutation.isPending}
-                                      className="text-destructive"
-                                    >
-                                      Delete message
-                                    </DropdownMenuItem>
+                                    {canDeleteMessage(message) && !isOptimisticMessage && (
+                                      <DropdownMenuItem
+                                        onClick={() => handleDeleteMessage(message.id)}
+                                        disabled={deleteMessageMutation.isPending}
+                                        className="text-destructive"
+                                      >
+                                        Delete for everyone
+                                      </DropdownMenuItem>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </div>

@@ -527,11 +527,13 @@ def remove_reaction(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+DELETE_WINDOW_MINUTES = 15
+
 @router.delete("/messages/{message_id}")
 def delete_message(message_id: str, user_id: str = Depends(require_auth)):
-    """Delete a message (sender only)"""
+    """Soft-delete a message for everyone (sender only, within 15 minutes of sending)"""
     try:
-        message = supabase.table("messages").select("id, sender_id").eq("id", message_id).single().execute()
+        message = supabase.table("messages").select("id, sender_id, created_at, is_deleted").eq("id", message_id).single().execute()
 
         if not message.data:
             raise HTTPException(status_code=404, detail="Message not found")
@@ -539,8 +541,24 @@ def delete_message(message_id: str, user_id: str = Depends(require_auth)):
         if message.data["sender_id"] != user_id:
             raise HTTPException(status_code=403, detail="Only the sender can delete this message")
 
-        supabase.table("messages").delete().eq("id", message_id).execute()
-        return {"message": "Message deleted"}
+        if message.data.get("is_deleted"):
+            raise HTTPException(status_code=400, detail="Message already deleted")
+
+        created_at = _to_utc_datetime(message.data["created_at"])
+        elapsed = (datetime.now(timezone.utc) - created_at).total_seconds()
+        if elapsed > DELETE_WINDOW_MINUTES * 60:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Messages can only be deleted within {DELETE_WINDOW_MINUTES} minutes of sending"
+            )
+
+        supabase.table("messages").update({
+            "is_deleted": True,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
+            "content": "",
+        }).eq("id", message_id).execute()
+
+        return {"message": "Message deleted for everyone"}
     except HTTPException:
         raise
     except Exception as e:

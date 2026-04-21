@@ -27,6 +27,8 @@ class MessageResponse(BaseModel):
     edit_count: int = 0
     sender: Optional[dict] = None
     reactions: List[dict] = []
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
 
 class ConversationResponse(BaseModel):
     id: str

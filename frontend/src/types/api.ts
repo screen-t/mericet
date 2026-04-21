@@ -157,6 +157,8 @@ export interface Message {
   sender?: User;
   recipient?: User;
   reactions?: MessageReaction[];
+  is_deleted?: boolean;
+  deleted_at?: string | null;
 }
 
 export interface Conversation {
