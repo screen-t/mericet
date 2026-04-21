@@ -406,6 +406,19 @@ const messages = {
     fetchWithAuth(`${API_BASE_URL}/messages/unread-count`, {
       headers: getAuthHeaders(),
     }).then(handleResponse<{ count: number }>),
+
+  toggleReaction: (messageId: string, emoji: string) =>
+    fetchWithAuth(`${API_BASE_URL}/messages/messages/${messageId}/reactions`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ emoji }),
+    }).then(handleResponse<{ action: "added" | "removed"; emoji: string; data?: { id: string; user_id: string; emoji: string; created_at: string } }>),
+
+  removeReaction: (messageId: string, emoji: string) =>
+    fetchWithAuth(`${API_BASE_URL}/messages/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
 };
 
 // --- Notifications ---

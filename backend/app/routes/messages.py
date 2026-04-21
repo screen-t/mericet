@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.lib.supabase import supabase
 from app.middleware.auth import require_auth
-from app.models.message import MessageCreate, MessageSend, MessageUpdate, MessageResponse, ConversationResponse
+from app.models.message import MessageCreate, MessageSend, MessageUpdate, MessageResponse, ConversationResponse, ReactionCreate, ALLOWED_EMOJIS
 from typing import List
 from datetime import datetime, timezone, timedelta
 
@@ -139,6 +139,19 @@ def enrich_conversation(conv: dict, user_id: str):
             if not conv.get("user") and conv["participants"]:
                 conv["user"] = conv["participants"][0]
 
+    # Last resort: if profile lookup totally failed, guarantee at least an id so
+    # the frontend never shows "Unknown User".
+    if not conv.get("user") and participant_ids:
+        fallback = {
+            "id": participant_ids[0],
+            "username": f"user_{str(participant_ids[0])[:8]}",
+            "first_name": "User",
+            "last_name": str(participant_ids[0])[:8],
+        }
+        conv["user"] = fallback
+        if not conv.get("participants"):
+            conv["participants"] = [fallback]
+
     try:
         last_msg = supabase.table("messages").select("*").eq("conversation_id", conv["id"]).order("created_at", desc=True).limit(1).execute()
         conv["last_message"] = last_msg.data[0] if (last_msg.data or []) else None
@@ -149,7 +162,7 @@ def enrich_conversation(conv: dict, user_id: str):
         unread = supabase.table("messages").select("id", count="exact").eq("conversation_id", conv["id"]).eq("is_read", False).neq("sender_id", user_id).execute()
         conv["unread_count"] = unread.count if unread.count else 0
     except Exception as e:
-        print(f"Error counting unread for conversation {conv.get('id')}: {e}")
+        print(f"Warning: messages unread_count query failed for {conv.get('id')}: {e}")
 
     return conv
 
@@ -245,9 +258,15 @@ def get_conversations(user_id: str = Depends(require_auth)):
         # Get conversations
         conversations = supabase.table("conversations").select("*").in_("id", conversation_ids).order("created_at", desc=True).execute()
         
-        # Enrich each conversation
-        enriched = [enrich_conversation(conv, user_id) for conv in conversations.data]
-        
+        # Enrich each conversation — per-item catch so one bad conv never 400s the whole list
+        enriched = []
+        for conv in conversations.data:
+            try:
+                enriched.append(enrich_conversation(conv, user_id))
+            except Exception as e:
+                print(f"Warning: enrich_conversation failed for {conv.get('id')}: {e}")
+                enriched.append(conv)
+
         # Sort by last message time (null-safe)
         enriched.sort(key=_conversation_sort_key, reverse=True)
         
@@ -273,11 +292,20 @@ def get_conversation_messages(
         # Get messages
         messages = supabase.table("messages").select("*").eq("conversation_id", conversation_id).order("created_at", desc=True).range(offset, offset + limit - 1).execute()
         
-        # Enrich with sender info
+        message_ids = [m["id"] for m in messages.data]
+
+        # Bulk fetch reactions for all messages
+        reactions_data = supabase.table("message_reactions").select("*").in_("message_id", message_ids).execute()
+        reactions_by_msg: dict = {}
+        for r in (reactions_data.data or []):
+            reactions_by_msg.setdefault(r["message_id"], []).append(r)
+
+        # Enrich with sender info and reactions
         for msg in messages.data:
             sender = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", msg["sender_id"]).single().execute()
             msg["sender"] = sender.data if sender.data else None
-        
+            msg["reactions"] = reactions_by_msg.get(msg["id"], [])
+
         return messages.data
     except HTTPException:
         raise
@@ -400,6 +428,40 @@ def edit_message(message_id: str, payload: MessageUpdate, user_id: str = Depends
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/messages/{message_id}/reactions")
+def toggle_reaction(
+    message_id: str,
+    payload: ReactionCreate,
+    user_id: str = Depends(require_auth),
+):
+    """Add a reaction. If the same emoji already exists for this user, remove it (toggle)."""
+    if payload.emoji not in ALLOWED_EMOJIS:
+        raise HTTPException(status_code=400, detail=f"Emoji not allowed. Choose from: {', '.join(sorted(ALLOWED_EMOJIS))}")
+    try:
+        existing = supabase.table("message_reactions").select("id").eq("message_id", message_id).eq("user_id", user_id).eq("emoji", payload.emoji).execute()
+        if existing.data:
+            supabase.table("message_reactions").delete().eq("id", existing.data[0]["id"]).execute()
+            return {"action": "removed", "emoji": payload.emoji}
+        result = supabase.table("message_reactions").insert({"message_id": message_id, "user_id": user_id, "emoji": payload.emoji}).execute()
+        return {"action": "added", "emoji": payload.emoji, "data": result.data[0] if result.data else {}}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/messages/{message_id}/reactions/{emoji}")
+def remove_reaction(
+    message_id: str,
+    emoji: str,
+    user_id: str = Depends(require_auth),
+):
+    """Explicitly remove a specific reaction."""
+    try:
+        supabase.table("message_reactions").delete().eq("message_id", message_id).eq("user_id", user_id).eq("emoji", emoji).execute()
+        return {"message": "Reaction removed"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @router.delete("/messages/{message_id}")
 def delete_message(message_id: str, user_id: str = Depends(require_auth)):

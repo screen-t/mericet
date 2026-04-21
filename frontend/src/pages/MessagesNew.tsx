@@ -18,7 +18,7 @@ import { backendApi } from "@/lib/backend-api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { formatDistanceToNow } from "date-fns";
-import { ConversationsResponse, MessagesResponse, User } from '@/types/api';
+import { ConversationsResponse, MessagesResponse, User, MessageReaction } from '@/types/api';
 import {
   Search,
   Send,
@@ -29,6 +29,7 @@ import {
   MoreVertical,
   Check,
   X,
+  Smile,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -51,7 +52,20 @@ const MessagesNew = () => {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const QUICK_EMOJIS = ["👍", "❤️", "😂", "😢", "😮", "🔥"];
+
+  const groupReactions = (reactions: MessageReaction[]) => {
+    const groups: Record<string, { count: number; hasReacted: boolean }> = {};
+    for (const r of reactions) {
+      if (!groups[r.emoji]) groups[r.emoji] = { count: 0, hasReacted: false };
+      groups[r.emoji].count++;
+      if (r.user_id === user?.id) groups[r.emoji].hasReacted = true;
+    }
+    return Object.entries(groups).map(([emoji, data]) => ({ emoji, ...data }));
+  };
 
   const getConversationUserId = (conversation: {
     user?: { id?: string };
@@ -148,9 +162,12 @@ const MessagesNew = () => {
             ...conv,
             last_message: {
               ...(conv.last_message || {}),
+              id: conv.last_message?.id || optimisticId,
+              sender_id: conv.last_message?.sender_id || user?.id || "",
               content,
+              is_read: false,
               created_at: optimisticMessage.created_at,
-            },
+            } as import('@/types/api').Message,
           };
         });
         return { conversations: updated };
@@ -250,6 +267,35 @@ const MessagesNew = () => {
     },
     onError: () => {
       toast({ title: "Failed to delete conversation", variant: "destructive" });
+    },
+  });
+
+  const reactionMutation = useMutation({
+    mutationFn: ({ messageId, emoji }: { messageId: string; emoji: string }) =>
+      backendApi.messages.toggleReaction(messageId, emoji),
+    onMutate: async ({ messageId, emoji }) => {
+      if (!userId) return;
+      await queryClient.cancelQueries({ queryKey: ['messages', userId] });
+      queryClient.setQueryData<MessagesResponse>(['messages', userId], (old) => {
+        if (!old?.messages) return old;
+        return {
+          messages: old.messages.map((m) => {
+            if (m.id !== messageId) return m;
+            const existing = (m.reactions || []).find(
+              (r) => r.user_id === user?.id && r.emoji === emoji
+            );
+            const updatedReactions = existing
+              ? (m.reactions || []).filter((r) => !(r.user_id === user?.id && r.emoji === emoji))
+              : [...(m.reactions || []), { id: `temp-${Date.now()}`, message_id: messageId, user_id: user?.id || "", emoji, created_at: new Date().toISOString() }];
+            return { ...m, reactions: updatedReactions };
+          }),
+        };
+      });
+      setReactionPickerMessageId(null);
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+      toast({ title: "Failed to react", variant: "destructive" });
     },
   });
 
@@ -406,7 +452,7 @@ const MessagesNew = () => {
   const filteredConversations = conversations.filter((conv) => {
     const displayUser = getConversationDisplayUser(conv);
     const fullName = `${displayUser?.first_name || ""} ${displayUser?.last_name || ""}`.trim();
-    const name = fullName || displayUser?.username || "";
+    const name = fullName || (displayUser as { username?: string })?.username || "";
     return name.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
@@ -467,7 +513,7 @@ const MessagesNew = () => {
                     const conversationUser = getConversationDisplayUser(conversation);
                     const conversationUserName = (
                       `${conversationUser?.first_name || ""} ${conversationUser?.last_name || ""}`.trim() ||
-                      conversationUser?.username ||
+                      (conversationUser as { username?: string })?.username ||
                       (conversationUser?.id ? `User ${conversationUser.id.slice(0, 8)}` : "Unknown User")
                     );
                     return (
@@ -600,6 +646,8 @@ const MessagesNew = () => {
                         index === 0 ||
                         messages[index - 1].sender_id !== message.sender_id;
 
+                      const reactionGroups = groupReactions(message.reactions || []);
+
                       return (
                         <motion.div
                           key={message.id}
@@ -607,7 +655,7 @@ const MessagesNew = () => {
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.02 }}
                           className={cn(
-                            "flex gap-2",
+                            "flex gap-2 group",
                             isMyMessage ? "justify-end" : "justify-start"
                           )}
                         >
@@ -622,6 +670,35 @@ const MessagesNew = () => {
                               )}
                             </div>
                           )}
+                          {/* Emoji picker trigger — shown on hover */}
+                          {isMyMessage && (
+                            <div className="self-end mb-1 opacity-0 group-hover:opacity-100 transition-opacity relative">
+                              <Button
+                                type="button" size="icon" variant="ghost"
+                                className="h-7 w-7 text-muted-foreground"
+                                onClick={() => setReactionPickerMessageId(
+                                  reactionPickerMessageId === message.id ? null : message.id
+                                )}
+                              >
+                                <Smile className="w-4 h-4" />
+                              </Button>
+                              {reactionPickerMessageId === message.id && (
+                                <div className="absolute bottom-8 right-0 z-50 bg-card border rounded-full shadow-lg px-2 py-1 flex gap-1">
+                                  {QUICK_EMOJIS.map((emoji) => (
+                                    <button
+                                      key={emoji}
+                                      onClick={() => reactionMutation.mutate({ messageId: message.id, emoji })}
+                                      className="text-lg hover:scale-125 transition-transform p-0.5"
+                                    >
+                                      {emoji}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="flex flex-col">
                           <div
                             className={cn(
                               "max-w-md p-3 rounded-lg",
@@ -713,6 +790,56 @@ const MessagesNew = () => {
                               </div>
                             )}
                           </div>
+
+                          {/* Reaction pills */}
+                          {reactionGroups.length > 0 && (
+                            <div className={cn("flex flex-wrap gap-1 mt-1", isMyMessage ? "justify-end" : "justify-start")}>
+                              {reactionGroups.map(({ emoji, count, hasReacted }) => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => reactionMutation.mutate({ messageId: message.id, emoji })}
+                                  className={cn(
+                                    "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors",
+                                    hasReacted
+                                      ? "bg-primary/20 border-primary/50 text-primary"
+                                      : "bg-muted border-border hover:border-primary/30"
+                                  )}
+                                >
+                                  <span>{emoji}</span>
+                                  <span className="font-medium">{count}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          </div>
+
+                          {/* Emoji picker trigger for received messages */}
+                          {!isMyMessage && (
+                            <div className="self-end mb-1 opacity-0 group-hover:opacity-100 transition-opacity relative">
+                              <Button
+                                type="button" size="icon" variant="ghost"
+                                className="h-7 w-7 text-muted-foreground"
+                                onClick={() => setReactionPickerMessageId(
+                                  reactionPickerMessageId === message.id ? null : message.id
+                                )}
+                              >
+                                <Smile className="w-4 h-4" />
+                              </Button>
+                              {reactionPickerMessageId === message.id && (
+                                <div className="absolute bottom-8 left-0 z-50 bg-card border rounded-full shadow-lg px-2 py-1 flex gap-1">
+                                  {QUICK_EMOJIS.map((emoji) => (
+                                    <button
+                                      key={emoji}
+                                      onClick={() => reactionMutation.mutate({ messageId: message.id, emoji })}
+                                      className="text-lg hover:scale-125 transition-transform p-0.5"
+                                    >
+                                      {emoji}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </motion.div>
                       );
                     })}

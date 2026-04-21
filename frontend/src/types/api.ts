@@ -136,6 +136,14 @@ export interface ConnectionStatus {
   connection_id?: string;
 }
 
+export interface MessageReaction {
+  id: string;
+  message_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string;
+}
+
 export interface Message {
   id: string;
   sender_id: string;
@@ -148,6 +156,7 @@ export interface Message {
   updated_at?: string;
   sender?: User;
   recipient?: User;
+  reactions?: MessageReaction[];
 }
 
 export interface Conversation {

@@ -2,6 +2,11 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
+ALLOWED_EMOJIS = {"👍", "❤️", "😂", "😢", "😮", "🔥"}
+
+class ReactionCreate(BaseModel):
+    emoji: str = Field(..., min_length=1, max_length=10)
+
 class MessageCreate(BaseModel):
     receiver_id: str
     content: str = Field(..., min_length=1, max_length=2000)
@@ -23,6 +28,7 @@ class MessageResponse(BaseModel):
     edited_at: Optional[datetime] = None
     edit_count: int = 0
     sender: Optional[dict] = None
+    reactions: List[dict] = []
 
 class ConversationResponse(BaseModel):
     id: str
