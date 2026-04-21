@@ -254,8 +254,12 @@ def get_conversations(user_id: str = Depends(require_auth)):
         conversation_ids = [p["conversation_id"] for p in participant_data.data]
 
         # 2. Batch-fetch ALL other participants + current user's pin state (1 query each)
-        others_data = supabase.table("conversation_participants").select("conversation_id, user_id").in_("conversation_id", conversation_ids).neq("user_id", user_id).execute()
-        other_rows = others_data.data or []
+        try:
+            others_data = supabase.table("conversation_participants").select("conversation_id, user_id").in_("conversation_id", conversation_ids).neq("user_id", user_id).execute()
+            other_rows = others_data.data or []
+        except Exception as e:
+            print(f"Warning: others_data query failed: {e}")
+            other_rows = []
 
         try:
             pin_data = supabase.table("conversation_participants").select("conversation_id, is_pinned").in_("conversation_id", conversation_ids).eq("user_id", user_id).execute()
@@ -267,8 +271,11 @@ def get_conversations(user_id: str = Depends(require_auth)):
         other_ids = list({r["user_id"] for r in other_rows if r.get("user_id")})
         user_by_id: dict = {}
         if other_ids:
-            profiles = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").in_("id", other_ids).execute()
-            user_by_id = {u["id"]: u for u in (profiles.data or [])}
+            try:
+                profiles = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").in_("id", other_ids).execute()
+                user_by_id = {u["id"]: u for u in (profiles.data or [])}
+            except Exception as e:
+                print(f"Warning: profiles batch query failed: {e}")
 
         # 4. Build conv_id -> other user map (guaranteed to have at least an id placeholder)
         conv_to_user: dict = {}
@@ -283,6 +290,19 @@ def get_conversations(user_id: str = Depends(require_auth)):
                 "first_name": "User",
                 "last_name": uid[:8],
             }
+
+        # 4b. Fallback: for any conversation_id missing from conv_to_user, query individually
+        missing_cids = [cid for cid in conversation_ids if cid not in conv_to_user]
+        for mcid in missing_cids:
+            try:
+                fallback = supabase.table("conversation_participants").select("user_id").eq("conversation_id", mcid).neq("user_id", user_id).limit(1).execute()
+                if fallback.data:
+                    uid = fallback.data[0]["user_id"]
+                    ensure_user_exists(uid)
+                    profile_row = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").eq("id", uid).limit(1).execute()
+                    conv_to_user[mcid] = profile_row.data[0] if profile_row.data else {"id": uid, "username": f"user_{uid[:8]}", "first_name": "User", "last_name": uid[:8]}
+            except Exception as e:
+                print(f"Warning: fallback user lookup failed for conv {mcid}: {e}")
 
         # 5. Fetch conversations and enrich with pre-built data
         conversations = supabase.table("conversations").select("*").in_("id", conversation_ids).order("created_at", desc=True).execute()

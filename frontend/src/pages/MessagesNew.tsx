@@ -91,10 +91,15 @@ const MessagesNew = () => {
   const getConversationUserId = (conversation: {
     user?: { id?: string };
     participants?: Array<{ id?: string }>;
+    last_message?: { sender_id?: string } | null;
   }): string | null => {
     if (conversation.user?.id) return conversation.user.id;
     const fromParticipants = conversation.participants?.find((p) => p.id && p.id !== user?.id)?.id;
-    return fromParticipants || null;
+    if (fromParticipants) return fromParticipants;
+    // Last resort: infer other user from last message sender
+    const fromLastMsg = conversation.last_message?.sender_id;
+    if (fromLastMsg && fromLastMsg !== user?.id) return fromLastMsg;
+    return null;
   };
 
   const getConversationDisplayUser = (conversation: {
@@ -121,7 +126,10 @@ const MessagesNew = () => {
   const { data: conversationsData, isLoading: loadingConversations } = useQuery<ConversationsResponse>({
     queryKey: ['conversations'],
     queryFn: () => backendApi.messages.getConversations(100, 0),
-    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchInterval: 10000,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    staleTime: 5000,
   });
 
   const conversations = conversationsData?.conversations || [];
@@ -669,7 +677,9 @@ const MessagesNew = () => {
                           </div>
                         </div>
                         <p className="text-sm text-muted-foreground truncate">
-                          {conversation.last_message?.content || "No messages yet"}
+                          {conversation.last_message?.is_deleted
+                            ? "🚫 This message was deleted"
+                            : conversation.last_message?.content || "No messages yet"}
                         </p>
                         {conversation.unread_count > 0 && (
                           <div className="mt-1">
