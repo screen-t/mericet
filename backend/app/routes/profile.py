@@ -20,6 +20,11 @@ def get_my_profile(user_id: str = Depends(require_auth)):
     try:
         response = supabase.table("users").select("*").eq("id", user_id).single().execute()
         if not response.data:
+            # Profile row missing — bootstrap it from auth metadata then retry
+            from app.routes.messages import ensure_user_exists
+            ensure_user_exists(user_id)
+            response = supabase.table("users").select("*").eq("id", user_id).single().execute()
+        if not response.data:
             raise HTTPException(status_code=404, detail="Profile not found")
         profile_data = response.data
         work_exp = supabase.table("work_experience").select("*").eq("user_id", user_id).order("start_date", desc=True).execute()

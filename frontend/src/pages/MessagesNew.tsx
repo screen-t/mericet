@@ -583,18 +583,21 @@ const MessagesNew = () => {
                             </h4>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
-                            <button
+                            <div
+                              role="button"
+                              tabIndex={0}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 pinMutation.mutate(conversation.id);
                               }}
-                              className="opacity-0 group-hover/conv:opacity-100 transition-opacity p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                              onKeyDown={(e) => e.key === "Enter" && pinMutation.mutate(conversation.id)}
+                              className="opacity-50 sm:opacity-0 group-hover/conv:opacity-100 transition-opacity p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
                               title={conversation.is_pinned ? "Unpin" : "Pin conversation"}
                             >
                               {conversation.is_pinned
                                 ? <PinOff className="w-3.5 h-3.5" />
                                 : <Pin className="w-3.5 h-3.5" />}
-                            </button>
+                            </div>
                             <span className="text-xs text-muted-foreground">
                               {conversation.last_message?.created_at
                                 ? formatTimestamp(conversation.last_message.created_at)

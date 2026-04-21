@@ -257,8 +257,11 @@ def get_conversations(user_id: str = Depends(require_auth)):
         others_data = supabase.table("conversation_participants").select("conversation_id, user_id").in_("conversation_id", conversation_ids).neq("user_id", user_id).execute()
         other_rows = others_data.data or []
 
-        pin_data = supabase.table("conversation_participants").select("conversation_id, is_pinned").in_("conversation_id", conversation_ids).eq("user_id", user_id).execute()
-        pinned_by_conv = {r["conversation_id"]: r.get("is_pinned", False) for r in (pin_data.data or [])}
+        try:
+            pin_data = supabase.table("conversation_participants").select("conversation_id, is_pinned").in_("conversation_id", conversation_ids).eq("user_id", user_id).execute()
+            pinned_by_conv = {r["conversation_id"]: r.get("is_pinned", False) for r in (pin_data.data or [])}
+        except Exception:
+            pinned_by_conv = {}
 
         # 3. Batch-fetch ALL their profiles in a single users query (1 query)
         other_ids = list({r["user_id"] for r in other_rows if r.get("user_id")})
@@ -355,10 +358,13 @@ def get_conversation_messages(
         message_ids = [m["id"] for m in messages.data]
 
         # Bulk fetch reactions for all messages
-        reactions_data = supabase.table("message_reactions").select("*").in_("message_id", message_ids).execute()
         reactions_by_msg: dict = {}
-        for r in (reactions_data.data or []):
-            reactions_by_msg.setdefault(r["message_id"], []).append(r)
+        try:
+            reactions_data = supabase.table("message_reactions").select("*").in_("message_id", message_ids).execute()
+            for r in (reactions_data.data or []):
+                reactions_by_msg.setdefault(r["message_id"], []).append(r)
+        except Exception:
+            pass
 
         # Enrich with sender info and reactions
         for msg in messages.data:
