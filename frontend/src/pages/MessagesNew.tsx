@@ -57,6 +57,7 @@ const MessagesNew = () => {
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
   const [pickerCategory, setPickerCategory] = useState("Quick");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
 
   const QUICK_EMOJIS = ["👍", "❤️", "😂", "😢", "😮", "🔥"];
 
@@ -358,13 +359,16 @@ const MessagesNew = () => {
     }
   }, [userId, navigate, toast]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom only when new messages arrive (not reaction/edit patches)
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (messages.length > prevMessageCountRef.current) {
+      scrollToBottom();
+    }
+    prevMessageCountRef.current = messages.length;
   }, [messages]);
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -737,7 +741,7 @@ const MessagesNew = () => {
                                 <Smile className="w-4 h-4" />
                               </Button>
                               {reactionPickerMessageId === message.id && (
-                                <div className="absolute bottom-9 right-0 z-50 bg-card border shadow-xl rounded-xl w-64">
+                                <div className="fixed sm:absolute bottom-20 sm:bottom-9 left-3 right-3 sm:left-auto sm:right-0 sm:w-64 z-50 bg-card border shadow-xl rounded-xl">
                                   <div className="flex border-b text-xs">
                                     {EMOJI_CATEGORIES.map((cat) => (
                                       <button
@@ -890,7 +894,7 @@ const MessagesNew = () => {
                                 <Smile className="w-4 h-4" />
                               </Button>
                               {reactionPickerMessageId === message.id && (
-                                <div className="absolute bottom-9 left-0 z-50 bg-card border shadow-xl rounded-xl w-64">
+                                <div className="fixed sm:absolute bottom-20 sm:bottom-9 left-3 right-3 sm:right-auto sm:left-0 sm:w-64 z-50 bg-card border shadow-xl rounded-xl">
                                   <div className="flex border-b text-xs">
                                     {EMOJI_CATEGORIES.map((cat) => (
                                       <button
