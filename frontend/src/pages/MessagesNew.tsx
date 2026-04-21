@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -54,6 +62,7 @@ const MessagesNew = () => {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
   const [pickerCategory, setPickerCategory] = useState("Quick");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -241,12 +250,18 @@ const MessagesNew = () => {
 
   const DELETE_WINDOW_MINUTES = 15;
 
-  const canDeleteMessage = (message: { sender_id: string; created_at: string; is_deleted?: boolean }) => {
+  const normTs = (ts: string) =>
+    ts.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(ts) ? ts : `${ts}Z`;
+
+  const canDeleteForEveryone = (message: { sender_id: string; created_at: string; is_deleted?: boolean }) => {
     if (message.sender_id !== user?.id) return false;
     if (message.is_deleted) return false;
-    const elapsed = (Date.now() - new Date(message.created_at).getTime()) / 1000;
+    const elapsed = (Date.now() - new Date(normTs(message.created_at)).getTime()) / 1000;
     return elapsed <= DELETE_WINDOW_MINUTES * 60;
   };
+
+  const canDeleteMessage = (message: { sender_id: string; created_at: string; is_deleted?: boolean }) =>
+    message.sender_id === user?.id && !message.is_deleted;
 
   const deleteMessageMutation = useMutation({
     mutationFn: (messageId: string) => backendApi.messages.deleteMessage(messageId),
@@ -266,6 +281,7 @@ const MessagesNew = () => {
     },
     onSuccess: () => {
       setConfirmAction(null);
+      setDeleteTargetId(null);
       queryClient.invalidateQueries({ queryKey: ['messages', userId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
@@ -417,6 +433,15 @@ const MessagesNew = () => {
     editMessageMutation.mutate({ messageId: editingMessageId, content: editText.trim() });
   };
 
+  const handleDeleteForMe = (messageId: string) => {
+    if (!userId) return;
+    setDeleteTargetId(null);
+    queryClient.setQueryData<MessagesResponse>(['messages', userId], (old) => {
+      if (!old?.messages) return old;
+      return { messages: old.messages.filter((m) => m.id !== messageId) };
+    });
+  };
+
   const handleDeleteMessage = (messageId: string) => {
     // Optimistic messages use temporary ids and are not persisted yet.
     // Remove them locally instead of calling backend delete.
@@ -428,7 +453,7 @@ const MessagesNew = () => {
       });
       return;
     }
-    setConfirmAction({ type: "delete-message", messageId });
+    setDeleteTargetId(messageId);
   };
 
   const handleDeleteConversation = () => {
@@ -846,7 +871,8 @@ const MessagesNew = () => {
                               {formatTimestamp(message.created_at)}
                               {message.edited_at && !message.is_deleted ? " • edited" : ""}
                             </p>
-                            {isMyMessage && editingMessageId !== message.id && (
+                            {isMyMessage && editingMessageId !== message.id && !message.is_deleted &&
+                              (canEdit || canDeleteMessage(message)) && (
                               <div className="mt-1 flex justify-end">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
@@ -860,7 +886,7 @@ const MessagesNew = () => {
                                       <MoreVertical className="w-3.5 h-3.5" />
                                     </Button>
                                   </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
+                                  <DropdownMenuContent align="end" side="top">
                                     {canEdit && !isOptimisticMessage && !message.is_deleted && (
                                       <DropdownMenuItem onClick={() => startEditingMessage(message.id, message.content)}>
                                         Edit message
@@ -868,11 +894,10 @@ const MessagesNew = () => {
                                     )}
                                     {canDeleteMessage(message) && !isOptimisticMessage && (
                                       <DropdownMenuItem
-                                        onClick={() => handleDeleteMessage(message.id)}
-                                        disabled={deleteMessageMutation.isPending}
+                                        onClick={() => setDeleteTargetId(message.id)}
                                         className="text-destructive"
                                       >
-                                        Delete for everyone
+                                        Delete message
                                       </DropdownMenuItem>
                                     )}
                                   </DropdownMenuContent>
@@ -982,19 +1007,60 @@ const MessagesNew = () => {
           )}
         </div>
       </div>
+      {/* Conversation delete confirm */}
       <ConfirmDialog
-        open={isConfirmOpen}
-        onOpenChange={(open) => {
-          if (!open) setConfirmAction(null);
-        }}
-        title={confirmTitle}
-        description={confirmDescription}
+        open={confirmAction?.type === "delete-conversation"}
+        onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
+        title="Delete this conversation?"
+        description="This will remove this conversation from your inbox."
         confirmLabel="Delete"
         cancelLabel="Cancel"
         confirmVariant="destructive"
         onConfirm={handleConfirmAction}
-        isLoading={confirmLoading}
+        isLoading={deleteConversationMutation.isPending}
       />
+
+      {/* Message delete dialog — Delete for me / Delete for everyone */}
+      {(() => {
+        const targetMsg = messages.find((m) => m.id === deleteTargetId);
+        const canForEveryone = targetMsg ? canDeleteForEveryone(targetMsg) : false;
+        const minutesLeft = targetMsg
+          ? Math.max(0, Math.ceil(DELETE_WINDOW_MINUTES - (Date.now() - new Date(normTs(targetMsg.created_at)).getTime()) / 60000))
+          : 0;
+        return (
+          <Dialog open={deleteTargetId !== null} onOpenChange={(open) => { if (!open) setDeleteTargetId(null); }}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Delete message?</DialogTitle>
+                <DialogDescription>Choose how you want to delete this message.</DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="flex-col gap-2 sm:flex-col">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => deleteTargetId && handleDeleteForMe(deleteTargetId)}
+                >
+                  Delete for me
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  disabled={!canForEveryone || deleteMessageMutation.isPending}
+                  onClick={() => deleteTargetId && deleteMessageMutation.mutate(deleteTargetId)}
+                  title={!canForEveryone ? "Only available within 15 minutes of sending" : undefined}
+                >
+                  {canForEveryone
+                    ? `Delete for everyone (${minutesLeft}m left)`
+                    : "Delete for everyone (expired)"}
+                </Button>
+                <Button variant="ghost" className="w-full" onClick={() => setDeleteTargetId(null)}>
+                  Cancel
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </AppLayout>
   );
 };
