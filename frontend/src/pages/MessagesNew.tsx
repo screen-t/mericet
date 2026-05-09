@@ -67,6 +67,9 @@ const MessagesNew = () => {
   const [pickerCategory, setPickerCategory] = useState("Quick");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(0);
+  // Persists the last resolved conversation ID so the messages query doesn't
+  // drop when the periodic conversations refetch momentarily returns bad/empty data.
+  const stableConvIdRef = useRef<string | undefined>(undefined);
 
   const QUICK_EMOJIS = ["👍", "❤️", "😂", "😢", "😮", "🔥"];
 
@@ -138,10 +141,20 @@ const MessagesNew = () => {
   const selectedConversation = conversations.find((conv) => getConversationUserId(conv) === userId);
   const selectedConversationId = selectedConversation?.id;
 
+  // Keep stableConvIdRef in sync; reset when navigating to a different chat.
+  useEffect(() => {
+    if (selectedConversationId) stableConvIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+  useEffect(() => {
+    stableConvIdRef.current = undefined;
+  }, [userId]);
+  // Use the last-known-good ID so messages never blank out during a bad refetch.
+  const resolvedConversationId = selectedConversationId || stableConvIdRef.current;
+
   const { data: messagesData, isLoading: loadingMessages } = useQuery<MessagesResponse>({
     queryKey: ['messages', userId],
-    queryFn: () => backendApi.messages.getMessagesByConversationId(selectedConversationId!, 100, 0),
-    enabled: !!selectedConversationId,
+    queryFn: () => backendApi.messages.getMessagesByConversationId(resolvedConversationId!, 100, 0),
+    enabled: !!resolvedConversationId,
     refetchInterval: 5000, // Poll for new messages every 5 seconds
   });
 
@@ -170,7 +183,7 @@ const MessagesNew = () => {
 
       const optimisticMessage = {
         id: optimisticId,
-        conversation_id: selectedConversationId || '',
+        conversation_id: resolvedConversationId || '',
         sender_id: user?.id || '',
         content,
         is_read: false,
@@ -406,12 +419,12 @@ const MessagesNew = () => {
 
   // Also mark the whole conversation as read when opening it
   useEffect(() => {
-    if (selectedConversationId && messagesData?.messages?.length) {
-      backendApi.messages.markConversationAsReadById(selectedConversationId).catch(() => {
+    if (resolvedConversationId && messagesData?.messages?.length) {
+      backendApi.messages.markConversationAsReadById(resolvedConversationId).catch(() => {
         // Read-marking is best-effort and should not interrupt chat flow.
       });
     }
-  }, [selectedConversationId, messagesData?.messages?.length]);
+  }, [resolvedConversationId, messagesData?.messages?.length]);
 
   // Guard against malformed URLs like /messages/undefined
   useEffect(() => {
@@ -568,14 +581,26 @@ const MessagesNew = () => {
   const currentConversation = selectedConversation;
   const otherUserFromConversations = currentConversation ? getConversationDisplayUser(currentConversation) : null;
 
-  // If userId is set but not in conversations yet (new conversation), fetch their profile
+  // Always fetch the real profile for the open chat — never rely solely on the
+  // conversations list which can return placeholder data when the backend is slow.
   const { data: newConvProfile } = useQuery<User>({
     queryKey: ['profile', userId],
     queryFn: () => backendApi.profile.getProfile(userId!) as Promise<User>,
-    enabled: !!userId && !otherUserFromConversations,
+    enabled: !!userId,
+    staleTime: 60000,
   });
 
-  const otherUser = otherUserFromConversations || newConvProfile;
+  // A placeholder is what the backend injects when the real profile lookup times out.
+  const isPlaceholderUser = (u?: { first_name?: string } | null) =>
+    !u?.first_name || u.first_name === "User";
+
+  // Prefer the dedicated profile endpoint result; fall back to conversation data
+  // only while the profile is still loading or if the profile fetch failed.
+  const otherUser =
+    (!isPlaceholderUser(newConvProfile) ? newConvProfile : null) ??
+    (!isPlaceholderUser(otherUserFromConversations) ? otherUserFromConversations : null) ??
+    newConvProfile ??
+    otherUserFromConversations;
 
   return (
     <AppLayout>
@@ -755,7 +780,7 @@ const MessagesNew = () => {
 
               {/* Messages */}
               <ScrollArea className="flex-1 p-4">
-                {loadingMessages || (userId && loadingConversations && !selectedConversationId) ? (
+                {loadingMessages || (userId && loadingConversations && !resolvedConversationId) ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="w-8 h-8 animate-spin text-primary" />
                   </div>

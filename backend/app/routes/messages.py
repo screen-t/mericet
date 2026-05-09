@@ -159,7 +159,7 @@ def enrich_conversation(conv: dict, user_id: str):
         print(f"Error loading last message for conversation {conv.get('id')}: {e}")
 
     try:
-        unread = supabase.table("messages").select("id", count="exact").eq("conversation_id", conv["id"]).eq("is_read", False).neq("sender_id", user_id).execute()
+        unread = supabase.table("messages").select("id", count="exact").eq("conversation_id", conv["id"]).eq("is_read", False).eq("is_deleted", False).neq("sender_id", user_id).execute()
         conv["unread_count"] = unread.count if unread.count else 0
     except Exception as e:
         print(f"Warning: messages unread_count query failed for {conv.get('id')}: {e}")
@@ -322,9 +322,9 @@ def get_conversations(user_id: str = Depends(require_auth)):
                 except Exception:
                     conv.setdefault("last_message", None)
 
-                # Unread count
+                # Unread count — exclude soft-deleted messages
                 try:
-                    unread = supabase.table("messages").select("id", count="exact").eq("conversation_id", cid).eq("is_read", False).neq("sender_id", user_id).execute()
+                    unread = supabase.table("messages").select("id", count="exact").eq("conversation_id", cid).eq("is_read", False).eq("is_deleted", False).neq("sender_id", user_id).execute()
                     conv["unread_count"] = unread.count or 0
                 except Exception:
                     conv.setdefault("unread_count", 0)
