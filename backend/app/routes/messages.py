@@ -386,13 +386,19 @@ def get_conversation_messages(
         except Exception:
             pass
 
+        # Batch-fetch all unique senders in a single query instead of N+1 per message
+        sender_by_id: dict = {}
+        sender_ids = list({msg["sender_id"] for msg in messages.data if msg.get("sender_id")})
+        if sender_ids:
+            try:
+                senders_data = supabase.table("users").select("id, username, first_name, last_name, avatar_url").in_("id", sender_ids).execute()
+                sender_by_id = {u["id"]: u for u in (senders_data.data or [])}
+            except Exception as e:
+                print(f"Warning: batch sender fetch failed: {e}")
+
         # Enrich with sender info and reactions
         for msg in messages.data:
-            try:
-                sender = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", msg["sender_id"]).limit(1).execute()
-                msg["sender"] = sender.data[0] if sender.data else None
-            except Exception:
-                msg["sender"] = None
+            msg["sender"] = sender_by_id.get(msg.get("sender_id"))
             msg["reactions"] = reactions_by_msg.get(msg["id"], [])
 
         return messages.data

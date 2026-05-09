@@ -394,6 +394,11 @@ const messages = {
       headers: getAuthHeaders(),
     }).then(handleResponse);
   },
+  markConversationAsReadById: (conversationId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/messages/conversations/${conversationId}/read`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
   deleteConversation: async (otherUserId: string) => {
     const conv = await getConversationWithUser(otherUserId);
     if (!conv) return;

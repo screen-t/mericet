@@ -406,12 +406,12 @@ const MessagesNew = () => {
 
   // Also mark the whole conversation as read when opening it
   useEffect(() => {
-    if (userId && messagesData?.messages?.length) {
-      backendApi.messages.markConversationAsRead(userId).catch(() => {
+    if (selectedConversationId && messagesData?.messages?.length) {
+      backendApi.messages.markConversationAsReadById(selectedConversationId).catch(() => {
         // Read-marking is best-effort and should not interrupt chat flow.
       });
     }
-  }, [userId, messagesData?.messages?.length]);
+  }, [selectedConversationId, messagesData?.messages?.length]);
 
   // Guard against malformed URLs like /messages/undefined
   useEffect(() => {
