@@ -54,7 +54,7 @@ def _to_utc_datetime(raw_ts):
 def get_or_create_conversation(user1_id: str, user2_id: str):
     """Get existing conversation or create new one between two users"""
     try:
-        # Check if conversation exists
+        # Check if conversation exists where BOTH users are participants
         existing = supabase.table("conversation_participants").select("conversation_id").eq("user_id", user1_id).execute()
         
         if existing.data:
@@ -64,17 +64,41 @@ def get_or_create_conversation(user1_id: str, user2_id: str):
                 
                 if check.data:
                     return conv["conversation_id"]
+
+            # Edge case: conversation exists where user1 is a participant, but user2's row
+            # is missing (data integrity gap from a failed insert). Detect and repair this
+            # by checking for messages from user2 in user1's conversations.
+            for conv in existing.data:
+                cid = conv["conversation_id"]
+                try:
+                    msg_check = supabase.table("messages").select("id").eq("conversation_id", cid).eq("sender_id", user2_id).limit(1).execute()
+                    if msg_check.data:
+                        # user2 has sent messages here but their participant row is missing — repair it
+                        try:
+                            supabase.table("conversation_participants").insert({
+                                "conversation_id": cid,
+                                "user_id": user2_id,
+                            }).execute()
+                            print(f"Repaired missing participant row: conv={cid} user={user2_id}")
+                        except Exception as repair_err:
+                            print(f"Note: participant repair skipped for conv {cid}: {repair_err}")
+                        return cid
+                except Exception:
+                    pass
         
         # Create new conversation
         new_conv = supabase.table("conversations").insert({}).execute()
         conversation_id = new_conv.data[0]["id"]
         
-        # Add participants
-        participants = [
-            {"conversation_id": conversation_id, "user_id": user1_id},
-            {"conversation_id": conversation_id, "user_id": user2_id}
-        ]
-        supabase.table("conversation_participants").insert(participants).execute()
+        # Add both participants — insert individually so one failure doesn't block the other
+        for uid in [user1_id, user2_id]:
+            try:
+                supabase.table("conversation_participants").insert({
+                    "conversation_id": conversation_id,
+                    "user_id": uid,
+                }).execute()
+            except Exception as e:
+                print(f"Warning: failed to insert participant {uid} for conv {conversation_id}: {e}")
         
         return conversation_id
     except Exception as e:
@@ -304,6 +328,68 @@ def get_conversations(user_id: str = Depends(require_auth)):
             except Exception as e:
                 print(f"Warning: fallback user lookup failed for conv {mcid}: {e}")
 
+        # 4c. Last-resort fallback: infer the other user from the most recent message's
+        # sender_id. This handles conversations where conversation_participants is missing
+        # the other user's row (a data integrity gap that can occur when the participant
+        # insert failed at conversation creation time). We also repair the missing row so
+        # future calls go through the fast path.
+        still_missing = [cid for cid in conversation_ids if cid not in conv_to_user]
+        if still_missing:
+            try:
+                sender_by_conv: dict = {}
+                for cid in still_missing:
+                    try:
+                        # Find the most recent message in this conversation NOT sent by us
+                        lm = supabase.table("messages").select("sender_id").eq("conversation_id", cid).neq("sender_id", user_id).order("created_at", desc=True).limit(1).execute()
+                        if lm.data:
+                            sender_by_conv[cid] = lm.data[0]["sender_id"]
+                        else:
+                            # All messages sent by us — other user must be someone we messaged first.
+                            # Look at ALL messages (including our own) to find the conversation partner
+                            # by checking the conversation_participants created_at ordering as a last resort.
+                            any_msg = supabase.table("messages").select("sender_id").eq("conversation_id", cid).order("created_at", desc=False).limit(1).execute()
+                            # We can't determine the partner from our own messages alone; skip for now.
+                    except Exception as e:
+                        print(f"Warning: sender inference failed for conv {cid}: {e}")
+
+                inferred_ids = list(set(sender_by_conv.values()))
+                inferred_profiles: dict = {}
+                if inferred_ids:
+                    try:
+                        pr = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").in_("id", inferred_ids).execute()
+                        inferred_profiles = {u["id"]: u for u in (pr.data or [])}
+                    except Exception:
+                        pass
+
+                for cid, sender_id in sender_by_conv.items():
+                    profile = inferred_profiles.get(sender_id)
+                    if not profile:
+                        ensure_user_exists(sender_id)
+                        try:
+                            pr2 = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").eq("id", sender_id).limit(1).execute()
+                            profile = pr2.data[0] if pr2.data else None
+                        except Exception:
+                            pass
+                    conv_to_user[cid] = profile or {
+                        "id": sender_id,
+                        "username": f"user_{sender_id[:8]}",
+                        "first_name": "User",
+                        "last_name": sender_id[:8],
+                    }
+                    # Repair the missing conversation_participants row so future queries
+                    # use the fast path and this fallback doesn't run every time.
+                    try:
+                        supabase.table("conversation_participants").insert({
+                            "conversation_id": cid,
+                            "user_id": sender_id,
+                        }).execute()
+                        print(f"Repaired missing conversation_participants row: conv={cid} user={sender_id}")
+                    except Exception as repair_err:
+                        # Row may already exist with different constraints; non-fatal.
+                        print(f"Note: conversation_participants repair skipped for conv {cid}: {repair_err}")
+            except Exception as e:
+                print(f"Warning: last-message sender fallback failed: {e}")
+
         # 5. Fetch conversations and enrich with pre-built data
         conversations = supabase.table("conversations").select("*").in_("id", conversation_ids).order("created_at", desc=True).execute()
         enriched = []
@@ -321,6 +407,19 @@ def get_conversations(user_id: str = Depends(require_auth)):
                     conv["last_message"] = lm.data[0] if lm.data else None
                 except Exception:
                     conv.setdefault("last_message", None)
+
+                # Emergency inline fallback: if user is still null but we have a last_message
+                # with a sender that isn't us, use them as the conversation partner.
+                if not conv.get("user") and isinstance(conv.get("last_message"), dict):
+                    lm_sender = conv["last_message"].get("sender_id")
+                    if lm_sender and lm_sender != user_id:
+                        try:
+                            pr = supabase.table("users").select("id, username, first_name, last_name, avatar_url, headline").eq("id", lm_sender).limit(1).execute()
+                            fallback_user = pr.data[0] if pr.data else {"id": lm_sender, "username": f"user_{lm_sender[:8]}", "first_name": "User", "last_name": lm_sender[:8]}
+                        except Exception:
+                            fallback_user = {"id": lm_sender, "username": f"user_{lm_sender[:8]}", "first_name": "User", "last_name": lm_sender[:8]}
+                        conv["user"] = fallback_user
+                        conv["participants"] = [fallback_user]
 
                 # Unread count — exclude soft-deleted messages
                 try:

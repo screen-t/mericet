@@ -67,9 +67,11 @@ const MessagesNew = () => {
   const [pickerCategory, setPickerCategory] = useState("Quick");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(0);
-  // Persists the last resolved conversation ID so the messages query doesn't
-  // drop when the periodic conversations refetch momentarily returns bad/empty data.
-  const stableConvIdRef = useRef<string | undefined>(undefined);
+  // Keyed by userId so switching conversations NEVER leaks a stale ID into the
+  // wrong query. The ref is purely a resilience mechanism — if the conversations
+  // refetch momentarily returns bad data the last-known-good convId is used
+  // ONLY when we are still looking at the same conversation partner.
+  const stableConvIdRef = useRef<{ userId: string; convId: string } | undefined>(undefined);
 
   const QUICK_EMOJIS = ["👍", "❤️", "😂", "😢", "😮", "🔥"];
 
@@ -133,6 +135,9 @@ const MessagesNew = () => {
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
     staleTime: 5000,
+    // Override the global refetchOnMount:false — conversations must always be
+    // fresh when the page loads so we resolve the correct conversation ID.
+    refetchOnMount: true,
   });
 
   const conversations = conversationsData?.conversations || [];
@@ -141,21 +146,28 @@ const MessagesNew = () => {
   const selectedConversation = conversations.find((conv) => getConversationUserId(conv) === userId);
   const selectedConversationId = selectedConversation?.id;
 
-  // Keep stableConvIdRef in sync; reset when navigating to a different chat.
+  // Keep stableConvIdRef in sync whenever we have a confirmed conversation ID.
   useEffect(() => {
-    if (selectedConversationId) stableConvIdRef.current = selectedConversationId;
-  }, [selectedConversationId]);
-  useEffect(() => {
-    stableConvIdRef.current = undefined;
-  }, [userId]);
-  // Use the last-known-good ID so messages never blank out during a bad refetch.
-  const resolvedConversationId = selectedConversationId || stableConvIdRef.current;
+    if (selectedConversationId && userId) {
+      stableConvIdRef.current = { userId, convId: selectedConversationId };
+    }
+  }, [selectedConversationId, userId]);
+  // Use the last-known-good ID only when it belongs to the CURRENT conversation
+  // partner. This check is synchronous so it can never use a stale ID from a
+  // previous chat even during the first render after navigation.
+  const resolvedConversationId =
+    selectedConversationId ||
+    (stableConvIdRef.current?.userId === userId ? stableConvIdRef.current?.convId : undefined);
 
   const { data: messagesData, isLoading: loadingMessages } = useQuery<MessagesResponse>({
     queryKey: ['messages', userId],
     queryFn: () => backendApi.messages.getMessagesByConversationId(resolvedConversationId!, 100, 0),
     enabled: !!resolvedConversationId,
-    refetchInterval: 5000, // Poll for new messages every 5 seconds
+    refetchInterval: 5000,
+    // Must be true: the global default is false, which means navigating from
+    // one conversation to another would serve stale cached messages for up to
+    // 5 minutes rather than fetching the real thread.
+    refetchOnMount: true,
   });
 
   // Fetch unread count
@@ -687,7 +699,15 @@ const MessagesNew = () => {
                                 pinMutation.mutate(conversation.id);
                               }}
                               onKeyDown={(e) => e.key === "Enter" && pinMutation.mutate(conversation.id)}
-                              className="opacity-50 sm:opacity-0 group-hover/conv:opacity-100 transition-opacity p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                              className={cn(
+                                "transition-opacity p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer",
+                                // On true pointer devices: hide until hover (desktop).
+                                // On touch devices (iPad, phone): always visible at readable opacity
+                                // because CSS :hover never fires on touch.
+                                conversation.is_pinned
+                                  ? "opacity-100"
+                                  : "opacity-0 group-hover/conv:opacity-100 touch:opacity-60"
+                              )}
                               title={conversation.is_pinned ? "Unpin" : "Pin conversation"}
                             >
                               {conversation.is_pinned

@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { useNavigate, Navigate, useLocation } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { authApi } from './api'
 import type { SignupPayload } from './api'
 import { User } from '@/types/api'
@@ -34,6 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     // Attempt to restore session using stored tokens — no Supabase client needed
@@ -105,6 +107,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setStoredTokens(undefined)
     setUser(null)
+    // Wipe the entire React Query cache so the next user starts with a clean slate.
+    // Without this, User B would see User A's cached messages/profiles on login.
+    queryClient.clear()
     navigate('/login')
   }
 

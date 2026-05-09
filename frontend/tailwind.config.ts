@@ -199,5 +199,12 @@ export default {
   		}
   	}
   },
-  plugins: [tailwindcssAnimate],
+  plugins: [
+    tailwindcssAnimate,
+    // Adds 'touch:' variant for @media (hover: none) — targets iPads and touch devices
+    // where CSS :hover never fires, making hover-reveal patterns inaccessible.
+    function ({ addVariant }: { addVariant: (name: string, definition: string) => void }) {
+      addVariant("touch", "@media (hover: none)");
+    },
+  ],
 } satisfies Config;
