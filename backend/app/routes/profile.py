@@ -33,6 +33,20 @@ def get_my_profile(user_id: str = Depends(require_auth)):
         profile_data["work_experience"] = work_exp.data or []
         profile_data["education"] = education.data or []
         profile_data["skills"] = skills.data or []
+        # Compute connections and followers counts from the connections table
+        try:
+            conn_count = supabase.table("connections").select("id", count="exact").or_(
+                f"requester_id.eq.{user_id},receiver_id.eq.{user_id}"
+            ).eq("status", "accepted").execute()
+            profile_data["connections_count"] = conn_count.count or 0
+        except Exception:
+            profile_data.setdefault("connections_count", 0)
+        # followers = people who sent an accepted request TO this user
+        try:
+            follower_count = supabase.table("connections").select("id", count="exact").eq("receiver_id", user_id).eq("status", "accepted").execute()
+            profile_data["followers_count"] = follower_count.count or 0
+        except Exception:
+            profile_data.setdefault("followers_count", 0)
         return profile_data
     except HTTPException:
         raise
@@ -62,6 +76,19 @@ def get_profile_by_username(identifier: str):
         profile_data["work_experience"] = work_exp.data or []
         profile_data["education"] = education.data or []
         profile_data["skills"] = skills.data or []
+        # Compute connections and followers counts
+        try:
+            conn_count = supabase.table("connections").select("id", count="exact").or_(
+                f"requester_id.eq.{profile_user_id},receiver_id.eq.{profile_user_id}"
+            ).eq("status", "accepted").execute()
+            profile_data["connections_count"] = conn_count.count or 0
+        except Exception:
+            profile_data.setdefault("connections_count", 0)
+        try:
+            follower_count = supabase.table("connections").select("id", count="exact").eq("receiver_id", profile_user_id).eq("status", "accepted").execute()
+            profile_data["followers_count"] = follower_count.count or 0
+        except Exception:
+            profile_data.setdefault("followers_count", 0)
         return profile_data
     except HTTPException:
         raise

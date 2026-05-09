@@ -40,6 +40,9 @@ import {
   Smile,
   Pin,
   PinOff,
+  Reply,
+  CornerUpLeft,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -65,7 +68,13 @@ const MessagesNew = () => {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
   const [pickerCategory, setPickerCategory] = useState("Quick");
+  // Reply state
+  const [replyTo, setReplyTo] = useState<{ id: string; content: string; senderName: string } | null>(null);
+  // People search mode (for starting new conversations)
+  const [peopleSearchMode, setPeopleSearchMode] = useState(false);
+  const [peopleSearchQuery, setPeopleSearchQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(0);
   // Keyed by userId so switching conversations NEVER leaks a stale ID into the
   // wrong query. The ref is purely a resilience mechanism — if the conversations
@@ -185,8 +194,8 @@ const MessagesNew = () => {
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: ({ recipientId, content }: { recipientId: string; content: string; tempId?: string }) =>
-      backendApi.messages.sendMessage(recipientId, content),
+    mutationFn: ({ recipientId, content, conversationId }: { recipientId: string; content: string; tempId?: string; conversationId?: string }) =>
+      backendApi.messages.sendMessage(recipientId, content, conversationId),
     onMutate: async ({ recipientId, content, tempId }) => {
       await queryClient.cancelQueries({ queryKey: ['messages', recipientId] });
       await queryClient.cancelQueries({ queryKey: ['conversations'] });
@@ -230,7 +239,13 @@ const MessagesNew = () => {
 
       return { recipientId, tempId: optimisticId };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // If the backend returned a conversation_id, cache it in the stable ref
+      // so every subsequent rapid send skips the expensive get_or_create lookup.
+      const returnedConvId = (data as { data?: { conversation_id?: string } } | undefined)?.data?.conversation_id;
+      if (returnedConvId && userId) {
+        stableConvIdRef.current = { userId, convId: returnedConvId };
+      }
       queryClient.invalidateQueries({ queryKey: ['messages', userId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       scrollToBottom();
@@ -429,12 +444,25 @@ const MessagesNew = () => {
     },
   });
 
-  // Also mark the whole conversation as read when opening it
+  // Also mark the whole conversation as read when opening it, then refresh unread badge
   useEffect(() => {
     if (resolvedConversationId && messagesData?.messages?.length) {
-      backendApi.messages.markConversationAsReadById(resolvedConversationId).catch(() => {
-        // Read-marking is best-effort and should not interrupt chat flow.
-      });
+      backendApi.messages.markConversationAsReadById(resolvedConversationId)
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
+          // Optimistically clear unread count in the conversations cache
+          queryClient.setQueryData<ConversationsResponse>(['conversations'], (old) => {
+            if (!old?.conversations) return old;
+            return {
+              conversations: old.conversations.map((c) =>
+                c.id === resolvedConversationId ? { ...c, unread_count: 0 } : c
+              ),
+            };
+          });
+        })
+        .catch(() => {
+          // Read-marking is best-effort and should not interrupt chat flow.
+        });
     }
   }, [resolvedConversationId, messagesData?.messages?.length]);
 
@@ -447,29 +475,34 @@ const MessagesNew = () => {
   }, [userId, navigate, toast]);
 
   // Auto-scroll to bottom only when new messages arrive (not reaction/edit patches)
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    const viewport = messagesScrollRef.current;
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior });
+    }
   };
 
   useEffect(() => {
     if (messages.length > prevMessageCountRef.current) {
-      scrollToBottom();
+      // First load: jump instantly. Subsequent arrivals: smooth.
+      const isFirstLoad = prevMessageCountRef.current === 0;
+      scrollToBottom(isFirstLoad ? "instant" : "smooth");
     }
     prevMessageCountRef.current = messages.length;
   }, [messages]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    const content = messageText.trim();
-    if (content && userId) {
-      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      setMessageText("");
-      sendMessageMutation.mutate({
-        recipientId: userId,
-        content,
-        tempId,
-      });
-    }
+    const raw = messageText.trim();
+    if (!raw || !userId) return;
+    // Prepend a reply quote if replying to a message
+    const content = replyTo
+      ? `> ${replyTo.senderName}: ${replyTo.content.slice(0, 100)}${replyTo.content.length > 100 ? "..." : ""}\n${raw}`
+      : raw;
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setMessageText("");
+    setReplyTo(null);
+    sendMessageMutation.mutate({ recipientId: userId, content, tempId, conversationId: resolvedConversationId });
   };
 
   const handleSelectConversation = (convUserId?: string | null) => {
@@ -581,7 +614,18 @@ const MessagesNew = () => {
     }
   };
 
-  // Filter conversations by search
+  // People search query — fires when in search mode
+  const { data: peopleSearchData, isFetching: searchingPeople } = useQuery({
+    queryKey: ['peopleSearch', peopleSearchQuery],
+    queryFn: () => backendApi.search.searchUsers(peopleSearchQuery, 20),
+    enabled: peopleSearchMode && peopleSearchQuery.trim().length >= 1,
+    staleTime: 30000,
+  });
+  const peopleResults = (peopleSearchData as { results?: User[] } | undefined)?.results?.filter(
+    (u) => u.id !== user?.id
+  ) || [];
+
+  // Filter conversations by search (when NOT in people-search mode)
   const filteredConversations = conversations.filter((conv) => {
     const displayUser = getConversationDisplayUser(conv);
     const fullName = `${displayUser?.first_name || ""} ${displayUser?.last_name || ""}`.trim();
@@ -625,21 +669,83 @@ const MessagesNew = () => {
         )}>
           {/* Header */}
           <div className="p-4 border-b">
-            <h2 className="text-xl font-bold mb-3">Messages</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xl font-bold">Messages</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                title="Start new conversation"
+                onClick={() => {
+                  setPeopleSearchMode((v) => !v);
+                  setPeopleSearchQuery("");
+                  setSearchQuery("");
+                }}
+              >
+                {peopleSearchMode ? <X className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
+              </Button>
+            </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search conversations..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+              {peopleSearchMode ? (
+                <Input
+                  placeholder="Search people..."
+                  value={peopleSearchQuery}
+                  onChange={(e) => setPeopleSearchQuery(e.target.value)}
+                  className="pl-9"
+                  autoFocus
+                />
+              ) : (
+                <Input
+                  placeholder="Search conversations..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              )}
             </div>
           </div>
 
-          {/* Conversations */}
+          {/* Conversations / People-search results */}
           <ScrollArea className="flex-1">
-            {loadingConversations ? (
+            {/* People search mode */}
+            {peopleSearchMode ? (
+              <div>
+                {searchingPeople ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  </div>
+                ) : peopleSearchQuery.trim().length === 0 ? (
+                  <div className="text-center py-10 px-4 text-sm text-muted-foreground">
+                    Type a name to search people
+                  </div>
+                ) : peopleResults.length === 0 ? (
+                  <div className="text-center py-10 px-4 text-sm text-muted-foreground">
+                    No people found
+                  </div>
+                ) : (
+                  peopleResults.map((person) => {
+                    const name = `${person.first_name || ""} ${person.last_name || ""}`.trim() || person.username || "Unknown";
+                    return (
+                      <button
+                        key={person.id}
+                        onClick={() => {
+                          setPeopleSearchMode(false);
+                          setPeopleSearchQuery("");
+                          navigate(`/messages/${person.id}`);
+                        }}
+                        className="w-full p-4 border-b hover:bg-muted/50 transition-colors text-left flex items-center gap-3"
+                      >
+                        <UserAvatar src={person.avatar_url} name={name} size="md" />
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{name}</p>
+                          {person.headline && <p className="text-xs text-muted-foreground truncate">{person.headline}</p>}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : loadingConversations ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
@@ -656,8 +762,9 @@ const MessagesNew = () => {
                   (() => {
                     const conversationUserId = getConversationUserId(conversation);
                     const conversationUser = getConversationDisplayUser(conversation);
+                    const fullName = `${conversationUser?.first_name || ""} ${conversationUser?.last_name || ""}`.trim();
                     const conversationUserName = (
-                      `${conversationUser?.first_name || ""} ${conversationUser?.last_name || ""}`.trim() ||
+                      fullName ||
                       (conversationUser as { username?: string })?.username ||
                       (conversationUser?.id ? `User ${conversationUser.id.slice(0, 8)}` : "Unknown User")
                     );
@@ -691,6 +798,7 @@ const MessagesNew = () => {
                             </h4>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
+                            {/* Pin button — always visible on touch devices, hover-only on desktop */}
                             <div
                               role="button"
                               tabIndex={0}
@@ -701,9 +809,6 @@ const MessagesNew = () => {
                               onKeyDown={(e) => e.key === "Enter" && pinMutation.mutate(conversation.id)}
                               className={cn(
                                 "transition-opacity p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer",
-                                // On true pointer devices: hide until hover (desktop).
-                                // On touch devices (iPad, phone): always visible at readable opacity
-                                // because CSS :hover never fires on touch.
                                 conversation.is_pinned
                                   ? "opacity-100"
                                   : "opacity-0 group-hover/conv:opacity-100 touch:opacity-60"
@@ -799,7 +904,7 @@ const MessagesNew = () => {
               </div>
 
               {/* Messages */}
-              <ScrollArea className="flex-1 p-4">
+              <div ref={messagesScrollRef} className="flex-1 overflow-y-auto p-4">
                 {loadingMessages || (userId && loadingConversations && !resolvedConversationId) ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -936,9 +1041,28 @@ const MessagesNew = () => {
                               <p className={cn("text-sm italic", isMyMessage ? "text-white/60" : "text-muted-foreground")}>
                                 🚫 This message was deleted
                               </p>
-                            ) : (
-                              <p className="text-sm">{message.content}</p>
-                            )}
+                            ) : (() => {
+                              // Detect reply-quoted format: "> Name: quote\nactual message"
+                              const replyMatch = message.content.match(/^> (.+?): (.+)\n([\s\S]+)$/);
+                              if (replyMatch) {
+                                const [, quotedName, quotedText, actualContent] = replyMatch;
+                                return (
+                                  <>
+                                    <div className={cn(
+                                      "text-xs px-2 py-1 rounded mb-1 border-l-2",
+                                      isMyMessage
+                                        ? "bg-white/10 border-white/40 text-white/80"
+                                        : "bg-background/60 border-primary/50 text-muted-foreground"
+                                    )}>
+                                      <span className="font-medium">{quotedName}</span>
+                                      <p className="truncate">{quotedText}</p>
+                                    </div>
+                                    <p className="text-sm">{actualContent}</p>
+                                  </>
+                                );
+                              }
+                              return <p className="text-sm">{message.content}</p>;
+                            })()}
                             <p
                               className={cn(
                                 "text-xs mt-1",
@@ -966,6 +1090,17 @@ const MessagesNew = () => {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" side="top">
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        const senderName = isMyMessage
+                                          ? `${user?.first_name || "You"}`
+                                          : `${otherUser?.first_name || ""}`;
+                                        setReplyTo({ id: message.id, content: message.content, senderName });
+                                      }}
+                                    >
+                                      <CornerUpLeft className="w-4 h-4 mr-2" />
+                                      Reply
+                                    </DropdownMenuItem>
                                     {canEdit && !isOptimisticMessage && !message.is_deleted && (
                                       <DropdownMenuItem onClick={() => startEditingMessage(message.id, message.content)}>
                                         Edit message
@@ -983,6 +1118,24 @@ const MessagesNew = () => {
                                 </DropdownMenu>
                               </div>
                             )}
+                          {/* Reply + actions for received messages */}
+                          {!isMyMessage && !message.is_deleted && (
+                            <div className="mt-1 flex justify-start opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 text-muted-foreground"
+                                title="Reply"
+                                onClick={() => {
+                                  const senderName = `${otherUser?.first_name || ""}`;
+                                  setReplyTo({ id: message.id, content: message.content, senderName });
+                                }}
+                              >
+                                <CornerUpLeft className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          )}
                           </div>
 
                           {/* Reaction pills */}
@@ -1050,10 +1203,31 @@ const MessagesNew = () => {
                     <div ref={messagesEndRef} />
                   </div>
                 )}
-              </ScrollArea>
+              </div>
 
               {/* Message Input */}
               <div className="p-4 border-t bg-card">
+                {/* Reply banner */}
+                {replyTo && (
+                  <div className="flex items-start justify-between gap-2 mb-2 px-3 py-2 bg-muted rounded-lg text-sm">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <Reply className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-primary">{replyTo.senderName}</p>
+                        <p className="text-muted-foreground truncate">{replyTo.content.slice(0, 80)}{replyTo.content.length > 80 ? "..." : ""}</p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-5 w-5 shrink-0"
+                      onClick={() => setReplyTo(null)}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                )}
                 <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                   <Button type="button" variant="ghost" size="icon">
                     <Paperclip className="w-5 h-5" />
