@@ -2,15 +2,51 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from app.lib.supabase import supabase
 from app.lib.auth_helpers import check_username_availability
 from app.middleware.auth import require_auth
+from app.middleware.auth import optional_auth
 from app.models.profile import (
     ProfileUpdateRequest, ProfileResponse, PrivacySettingsUpdate,
     WorkExperienceCreate, WorkExperienceUpdate, WorkExperienceResponse,
     EducationCreate, EducationUpdate, EducationResponse,
     SkillCreate, SkillResponse
 )
-from typing import List
+from typing import List, Optional
 
 router = APIRouter(prefix="/profile", tags=["Profile"])
+
+
+def _apply_privacy_filters(profile_data: dict, viewer_id: Optional[str]):
+    """Remove or mask fields from profile_data based on the user's privacy flags.
+
+    The function mutates and returns profile_data.
+    If the viewer is the profile owner, all fields are preserved.
+    """
+    profile_user_id = profile_data.get("id")
+    if not profile_user_id:
+        return profile_data
+
+    # If the viewer is the owner, show everything
+    if viewer_id == profile_user_id:
+        return profile_data
+
+    # Email
+    if not profile_data.get("email_visible", True):
+        profile_data.pop("email", None)
+
+    # Connections count / list
+    if not profile_data.get("connections_visible", True):
+        profile_data.pop("connections_count", None)
+        profile_data.pop("connections", None)
+
+    # Work history / education
+    if not profile_data.get("work_history_visible", True):
+        profile_data["work_experience"] = []
+        profile_data["education"] = []
+
+    # Activity status / last active
+    if not profile_data.get("activity_status_visible", True):
+        profile_data.pop("last_active_at", None)
+
+    return profile_data
 
 # ==================== PROFILE CRUD ====================
 
@@ -54,7 +90,7 @@ def get_my_profile(user_id: str = Depends(require_auth)):
         raise HTTPException(status_code=404, detail="Profile not found")
 
 @router.get("/{identifier}")
-def get_profile_by_username(identifier: str):
+def get_profile_by_username(identifier: str, viewer_id: Optional[str] = Depends(optional_auth)):
     """Get user profile by username or user UUID (public), with nested work experience, education, and skills"""
     import re
     uuid_pattern = re.compile(
@@ -89,6 +125,8 @@ def get_profile_by_username(identifier: str):
             profile_data["followers_count"] = follower_count.count or 0
         except Exception:
             profile_data.setdefault("followers_count", 0)
+        # Apply privacy filters based on stored flags and the viewing user
+        profile_data = _apply_privacy_filters(profile_data, viewer_id)
         return profile_data
     except HTTPException:
         raise
