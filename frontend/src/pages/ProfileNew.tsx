@@ -31,8 +31,15 @@ import {
   Check,
   X,
   Camera,
+  MoreVertical,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const ProfilePage = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -374,30 +381,6 @@ export const ProfilePage = () => {
                                 Follow
                               </Button>
                             )}
-                            {/* Block / Unblock */}
-                            {connectionStatus?.status === 'blocked' ? (
-                              connectionStatus.is_requester ? (
-                                <Button
-                                  variant="destructive"
-                                  onClick={() => unblockMutation.mutate()}
-                                  disabled={unblockMutation.isPending}
-                                  className="w-full sm:w-auto"
-                                >
-                                  Unblock
-                                </Button>
-                              ) : (
-                                <Button variant="outline" disabled className="w-full sm:w-auto">Blocked</Button>
-                              )
-                            ) : (
-                              <Button
-                                variant="destructive"
-                                onClick={() => blockMutation.mutate()}
-                                disabled={blockMutation.isPending}
-                                className="w-full sm:w-auto"
-                              >
-                                Block
-                              </Button>
-                            )}
                             <Button
                               variant="outline"
                               onClick={() => removeConnection.mutate()}
@@ -406,6 +389,38 @@ export const ProfilePage = () => {
                               <UserCheck className="w-4 h-4 mr-2" />
                               Connected
                             </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon" className="w-10 h-10">
+                                  <MoreVertical className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {connectionStatus?.status === 'blocked' ? (
+                                  connectionStatus.is_requester ? (
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => unblockMutation.mutate()}
+                                      disabled={unblockMutation.isPending}
+                                    >
+                                      Unblock
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem disabled>
+                                      Blocked
+                                    </DropdownMenuItem>
+                                  )
+                                ) : (
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => blockMutation.mutate()}
+                                    disabled={blockMutation.isPending}
+                                  >
+                                    Block
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </>
                         ) : connectionStatus?.status === 'pending_from_them' ? (
                           <>

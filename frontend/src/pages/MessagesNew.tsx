@@ -195,6 +195,13 @@ const MessagesNew = () => {
 
   const canChat = !userId || chatConnectionStatus?.status === 'accepted';
   const isChatRestricted = !!userId && !loadingChatConnection && !canChat;
+  const chatRestrictionMessage = !userId || loadingChatConnection
+    ? ""
+    : chatConnectionStatus?.status === 'blocked'
+      ? chatConnectionStatus.is_requester
+        ? "You blocked this user, you cannot send a message."
+        : "You cannot send a message."
+      : "You can only message people you are connected with.";
 
   // Backend returns messages newest-first; reverse so oldest is at top
   const messages = [...(messagesData?.messages || [])].reverse();
@@ -267,7 +274,11 @@ const MessagesNew = () => {
           return { messages: old.messages.filter((m) => m.id !== ctx.tempId) };
         });
       }
-      toast({ title: "Failed to send message", variant: "destructive" });
+      const errorMessage = _err instanceof Error ? _err.message : "Failed to send message";
+      toast({
+        title: errorMessage || "Failed to send message",
+        variant: "destructive",
+      });
     },
   });
 
@@ -506,7 +517,7 @@ const MessagesNew = () => {
     const raw = messageText.trim();
     if (!raw || !userId) return;
     if (isChatRestricted) {
-      toast({ title: "You can only message connections", variant: "destructive" });
+      toast({ title: chatRestrictionMessage || "You cannot send a message.", variant: "destructive" });
       return;
     }
     // Prepend a reply quote if replying to a message
@@ -1237,7 +1248,7 @@ const MessagesNew = () => {
               <div className="p-4 border-t bg-card">
                 {isChatRestricted && (
                   <div className="mb-2 text-xs text-muted-foreground">
-                    You can only message people you are connected with.
+                    {chatRestrictionMessage}
                   </div>
                 )}
                 {/* Reply banner */}

@@ -1,50 +1,28 @@
-import { useState, useEffect } from "react";
-import { useSearchParams, Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { PostCardNew } from "@/components/feed/PostCardNew";
 import { backendApi } from "@/lib/backend-api";
-import { SearchResponse, User, Post, MessageSearchResult, SearchSuggestion } from '@/types/api';
+import { SearchResponse, User, Post, MessageSearchResult } from '@/types/api';
 import {
   Search as SearchIcon,
   Users,
   FileText,
   Loader2,
   UserPlus,
-  Building2,
 } from "lucide-react";
 
 const SearchPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
-  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
+  const searchQuery = searchParams.get('q')?.trim() || '';
   const [activeTab, setActiveTab] = useState("all");
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const navigate = useNavigate();
-
-  // Debounce search query
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-      if (searchQuery) {
-        setSearchParams({ q: searchQuery });
-      } else {
-        setSearchParams({});
-      }
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, setSearchParams]);
-
-  useEffect(() => {
-    setShowSuggestions(searchQuery.length > 0);
-  }, [searchQuery]);
+  const debouncedQuery = searchQuery;
 
   // Search all
   const { data: allResults, isLoading: loadingAll } = useQuery<SearchResponse>({
@@ -79,13 +57,6 @@ const SearchPage = () => {
     queryKey: ['search', 'saved', debouncedQuery],
     queryFn: () => backendApi.search.searchSaved(debouncedQuery, 50),
     enabled: !!debouncedQuery && activeTab === 'saved',
-  });
-
-  // Suggestions
-  const { data: suggestionsData } = useQuery<{ suggestions?: SearchSuggestion[] }>({
-    queryKey: ['search', 'suggestions', searchQuery],
-    queryFn: () => backendApi.search.searchSuggestions(searchQuery, 6),
-    enabled: searchQuery.length > 0,
   });
 
   const isLoading = loadingAll || loadingUsers || loadingPosts || loadingMessages || loadingSaved;
@@ -143,52 +114,13 @@ const SearchPage = () => {
           className="space-y-4"
         >
           <h1 className="text-3xl font-bold">Search</h1>
-          
-          <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <Input
-              placeholder="Search for people, posts, and more..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 text-lg h-12"
-              autoFocus
-            />
-            {showSuggestions && (suggestionsData?.suggestions?.length ?? 0) > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-card border rounded-lg shadow-lg overflow-hidden z-20">
-                {suggestionsData?.suggestions?.map((s, index) => (
-                  <button
-                    key={`${s.type}-${s.user_id || s.username || s.text}-${index}`}
-                    onClick={() => {
-                      if (s.type === "user" && s.user_id) {
-                        navigate(`/profile/${s.user_id}`);
-                      } else if (s.type === "company") {
-                        navigate(`/companies?q=${encodeURIComponent(s.text)}`);
-                      } else if (s.type === "post" && s.post_id) {
-                        navigate(`/posts/${s.post_id}`);
-                      } else {
-                        setSearchQuery(s.text);
-                      }
-                      setShowSuggestions(false);
-                    }}
-                    className="w-full text-left px-4 py-2 hover:bg-muted text-sm flex items-center gap-2"
-                  >
-                    {s.type === "user" ? (
-                      <UserAvatar src={s.avatar_url} name={s.text} size="sm" />
-                    ) : s.type === "company" ? (
-                      <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Building2 className="h-4 w-4 text-primary" />
-                      </div>
-                    ) : (
-                      <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
-                        <FileText className="h-4 w-4 text-primary" />
-                      </div>
-                    )}
-                    <span>{s.text}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {searchQuery && (
+            <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1 text-sm text-muted-foreground">
+              <SearchIcon className="w-4 h-4" />
+              <span>Searching for</span>
+              <span className="font-medium text-foreground">{searchQuery}</span>
+            </div>
+          )}
         </motion.div>
 
         {/* Results */}
