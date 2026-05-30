@@ -28,6 +28,7 @@ import {
   Users,
   Building2,
   Bookmark,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -89,10 +90,14 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
     setShowSearchSuggestions(false);
   };
 
-  const handleSuggestionPick = (suggestion: { text: string; user_id?: string }) => {
+  const handleSuggestionPick = (suggestion: { text: string; user_id?: string; post_id?: string; type?: string }) => {
     setSearchQuery(suggestion.text);
-    if (suggestion.user_id) {
+    if (suggestion.type === "user" && suggestion.user_id) {
       navigate(`/profile/${suggestion.user_id}`);
+    } else if (suggestion.type === "company") {
+      navigate(`/companies?q=${encodeURIComponent(suggestion.text)}`);
+    } else if (suggestion.type === "post" && suggestion.post_id) {
+      navigate(`/posts/${suggestion.post_id}`);
     } else {
       navigate(`/search?q=${encodeURIComponent(suggestion.text)}`);
     }
@@ -138,7 +143,17 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                         onClick={() => handleSuggestionPick(s)}
                         className="w-full text-left px-4 py-2 hover:bg-muted text-sm flex items-center gap-2"
                       >
-                        <UserAvatar src={s.avatar_url} name={s.text} size="sm" />
+                        {s.type === "user" ? (
+                          <UserAvatar src={s.avatar_url} name={s.text} size="sm" />
+                        ) : s.type === "company" ? (
+                          <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Building2 className="h-4 w-4 text-primary" />
+                          </div>
+                        ) : (
+                          <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                            <FileText className="h-4 w-4 text-primary" />
+                          </div>
+                        )}
                         <span>{s.text}</span>
                       </button>
                     ))}
@@ -305,7 +320,17 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                             onClick={() => handleSuggestionPick(s)}
                             className="w-full text-left px-4 py-2 hover:bg-muted text-sm flex items-center gap-2"
                           >
-                            <UserAvatar src={s.avatar_url} name={s.text} size="sm" />
+                            {s.type === "user" ? (
+                              <UserAvatar src={s.avatar_url} name={s.text} size="sm" />
+                            ) : s.type === "company" ? (
+                              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                                <Building2 className="h-4 w-4 text-primary" />
+                              </div>
+                            ) : (
+                              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                                <FileText className="h-4 w-4 text-primary" />
+                              </div>
+                            )}
                             <span>{s.text}</span>
                           </button>
                         ))}

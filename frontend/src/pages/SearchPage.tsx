@@ -17,6 +17,7 @@ import {
   FileText,
   Loader2,
   UserPlus,
+  Building2,
 } from "lucide-react";
 
 const SearchPage = () => {
@@ -158,8 +159,12 @@ const SearchPage = () => {
                   <button
                     key={`${s.type}-${s.user_id || s.username || s.text}-${index}`}
                     onClick={() => {
-                      if (s.user_id) {
+                      if (s.type === "user" && s.user_id) {
                         navigate(`/profile/${s.user_id}`);
+                      } else if (s.type === "company") {
+                        navigate(`/companies?q=${encodeURIComponent(s.text)}`);
+                      } else if (s.type === "post" && s.post_id) {
+                        navigate(`/posts/${s.post_id}`);
                       } else {
                         setSearchQuery(s.text);
                       }
@@ -167,7 +172,17 @@ const SearchPage = () => {
                     }}
                     className="w-full text-left px-4 py-2 hover:bg-muted text-sm flex items-center gap-2"
                   >
-                    <UserAvatar src={s.avatar_url} name={s.text} size="sm" />
+                    {s.type === "user" ? (
+                      <UserAvatar src={s.avatar_url} name={s.text} size="sm" />
+                    ) : s.type === "company" ? (
+                      <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Building2 className="h-4 w-4 text-primary" />
+                      </div>
+                    ) : (
+                      <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                        <FileText className="h-4 w-4 text-primary" />
+                      </div>
+                    )}
                     <span>{s.text}</span>
                   </button>
                 ))}

@@ -510,6 +510,13 @@ const search = {
       { headers: getAuthHeaders() }
     ).then(handleResponse<{ suggestions?: import('@/types/api').SearchSuggestion[] }>);
   },
+  searchCompanies: async (q: string, limit: number): Promise<import('@/types/api').CompanySearchResult[]> => {
+    const data = await fetchWithAuth(
+      `${API_BASE_URL}/search/companies?q=${encodeURIComponent(q)}&limit=${limit}`,
+      { headers: getAuthHeaders() }
+    ).then(handleResponse<{ results?: import('@/types/api').CompanySearchResult[] }>);
+    return Array.isArray(data.results) ? data.results : [];
+  },
 };
 
 // --- Saves (Folders + Bookmarks) ---

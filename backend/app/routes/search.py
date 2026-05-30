@@ -230,7 +230,65 @@ def get_search_suggestions(
                 "avatar_url": user.get("avatar_url"),
             })
 
+        # Company suggestions (derived from users.current_company)
+        company_rows = supabase.table("users").select(
+            "current_company"
+        ).ilike("current_company", search_term).neq("current_company", None).limit(limit * 3).execute()
+        seen_companies = set()
+        for row in (company_rows.data or []):
+            name = (row.get("current_company") or "").strip()
+            if not name or name in seen_companies:
+                continue
+            seen_companies.add(name)
+            suggestions.append({
+                "type": "company",
+                "text": name,
+            })
+
+        # Post suggestions
+        post_rows = supabase.table("posts").select(
+            "id, content"
+        ).ilike("content", f"%{q}%").eq("is_published", True).eq("is_draft", False).eq("visibility", "public").order("created_at", desc=True).limit(limit).execute()
+        for post in (post_rows.data or []):
+            content = (post.get("content") or "").strip()
+            if not content:
+                continue
+            snippet = content[:80] + ("…" if len(content) > 80 else "")
+            suggestions.append({
+                "type": "post",
+                "text": snippet,
+                "post_id": post.get("id"),
+            })
+
         return {"suggestions": suggestions}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/companies")
+def search_companies(
+    q: str = Query(..., min_length=1, max_length=100),
+    limit: int = Query(20, ge=1, le=50)
+):
+    """Search companies by name (derived from users.current_company)."""
+    try:
+        search_term = f"%{q}%"
+        company_rows = supabase.table("users").select(
+            "current_company"
+        ).ilike("current_company", search_term).neq("current_company", None).limit(limit * 3).execute()
+
+        seen = set()
+        results = []
+        for row in (company_rows.data or []):
+            name = (row.get("current_company") or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            results.append({"name": name})
+            if len(results) >= limit:
+                break
+
+        return {"results": results, "count": len(results)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

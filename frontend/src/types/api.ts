@@ -230,11 +230,16 @@ export interface SearchResponse {
 }
 
 export interface SearchSuggestion {
-  type: 'user';
+  type: 'user' | 'company' | 'post';
   text: string;
   username?: string;
   user_id?: string;
   avatar_url?: string;
+  post_id?: string;
+}
+
+export interface CompanySearchResult {
+  name: string;
 }
 
 export interface UnreadCountResponse {
