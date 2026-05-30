@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { ReportDialog } from "@/components/modals/ReportDialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
@@ -50,6 +51,7 @@ export const ProfilePage = () => {
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const [showReportDialog, setShowReportDialog] = useState(false);
 
   const uploadAvatarMutation = useMutation({
     mutationFn: (file: File) => backendApi.profile.uploadAvatar(file),
@@ -481,6 +483,9 @@ export const ProfilePage = () => {
                                   Block
                                 </DropdownMenuItem>
                               )}
+                              <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
+                                Report user
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         )}
@@ -499,6 +504,14 @@ export const ProfilePage = () => {
             </div>
           </Card>
         </motion.div>
+
+        <ReportDialog
+          open={showReportDialog}
+          onOpenChange={setShowReportDialog}
+          targetType="user"
+          targetId={profileUserId!}
+          targetLabel="user"
+        />
 
         {/* Profile Tabs */}
         <Tabs defaultValue="about" className="w-full">

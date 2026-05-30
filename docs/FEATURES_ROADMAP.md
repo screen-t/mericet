@@ -103,7 +103,8 @@ This document lists requested features, short descriptions, priorities, and a st
 18. Report Content / User
     - Concept: Reporting flow + moderation queue
     - Priority: High
-    - Status: planned
+    - Notes: User-facing report submission is implemented for posts and profiles; moderation queue/admin review still pending.
+    - Status: partial (backend/app/routes/reports.py, backend/app/models/report.py, frontend/src/components/modals/ReportDialog.tsx)
 
 19. Typing Indicator Control
     - Concept: Toggle typing indicator visibility

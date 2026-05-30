@@ -621,6 +621,25 @@ const follows = {
     }).then(handleResponse<{ is_following: boolean }>),
 };
 
+// --- Reports ---
+const reports = {
+  createReport: (data: {
+    target_type: "post" | "user";
+    target_id: string;
+    reason: string;
+    details?: string;
+  }) =>
+    fetchWithAuth(`${API_BASE_URL}/reports`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse),
+  getMyReports: (limit = 50, offset = 0) =>
+    fetchWithAuth(`${API_BASE_URL}/reports/mine?limit=${limit}&offset=${offset}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+};
+
 export const backendApi = {
   auth,
   profile,
@@ -631,4 +650,5 @@ export const backendApi = {
   search,
   saves,
   follows,
+  reports,
 };

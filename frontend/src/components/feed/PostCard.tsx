@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { SkillTag } from "@/components/ui/SkillTag";
+import { ReportDialog } from "@/components/modals/ReportDialog";
 import {
   Heart,
   MessageCircle,
@@ -64,6 +65,7 @@ export const PostCard = ({
   onShare,
   onSave,
 }: PostCardProps) => {
+  const [showReportDialog, setShowReportDialog] = useState(false);
   const [isLiked, setIsLiked] = useState(post.isLiked);
   const [isSaved, setIsSaved] = useState(post.isSaved);
   const [likes, setLikes] = useState(post.likes);
@@ -129,7 +131,7 @@ export const PostCard = ({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem>Copy link</DropdownMenuItem>
-            <DropdownMenuItem>Report</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowReportDialog(true)}>Report</DropdownMenuItem>
             <DropdownMenuItem>Hide</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -161,6 +163,14 @@ export const PostCard = ({
           />
         </div>
       )}
+
+      <ReportDialog
+        open={showReportDialog}
+        onOpenChange={setShowReportDialog}
+        targetType="post"
+        targetId={post.id}
+        targetLabel="post"
+      />
 
       {/* Actions */}
       <div className="flex items-center justify-between pt-3 border-t border-border">
