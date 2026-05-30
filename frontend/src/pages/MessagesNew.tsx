@@ -186,6 +186,16 @@ const MessagesNew = () => {
     refetchInterval: 15000,
   });
 
+  const { data: chatConnectionStatus, isLoading: loadingChatConnection } = useQuery({
+    queryKey: ['connectionStatus', userId],
+    queryFn: () => backendApi.connections.getConnectionStatus(userId!),
+    enabled: !!userId,
+    staleTime: 30000,
+  });
+
+  const canChat = !userId || chatConnectionStatus?.status === 'accepted';
+  const isChatRestricted = !!userId && !loadingChatConnection && !canChat;
+
   // Backend returns messages newest-first; reverse so oldest is at top
   const messages = [...(messagesData?.messages || [])].reverse();
 
@@ -495,6 +505,10 @@ const MessagesNew = () => {
     e.preventDefault();
     const raw = messageText.trim();
     if (!raw || !userId) return;
+    if (isChatRestricted) {
+      toast({ title: "You can only message connections", variant: "destructive" });
+      return;
+    }
     // Prepend a reply quote if replying to a message
     const content = replyTo
       ? `> ${replyTo.senderName}: ${replyTo.content.slice(0, 100)}${replyTo.content.length > 100 ? "..." : ""}\n${raw}`
@@ -614,16 +628,25 @@ const MessagesNew = () => {
     }
   };
 
-  // People search query — fires when in search mode
-  const { data: peopleSearchData, isFetching: searchingPeople } = useQuery({
-    queryKey: ['peopleSearch', peopleSearchQuery],
-    queryFn: () => backendApi.search.searchUsers(peopleSearchQuery, 20),
-    enabled: peopleSearchMode && peopleSearchQuery.trim().length >= 1,
+  const { data: connectionsData, isFetching: loadingConnections } = useQuery<import('@/types/api').ConnectionsResponse>({
+    queryKey: ['connections', 'accepted'],
+    queryFn: () => backendApi.connections.getConnections('accepted', 200, 0),
+    enabled: true,
     staleTime: 30000,
   });
-  const peopleResults = (peopleSearchData as { results?: User[] } | undefined)?.results?.filter(
-    (u) => u.id !== user?.id
-  ) || [];
+
+  const connectionsPeople = (connectionsData?.connections || [])
+    .map((conn) => conn.user)
+    .filter((u): u is User => !!u && u.id !== user?.id);
+
+  const hasConnections = connectionsPeople.length > 0;
+
+  const peopleResults = peopleSearchQuery.trim().length === 0
+    ? []
+    : connectionsPeople.filter((u) => {
+        const haystack = `${u.first_name || ''} ${u.last_name || ''} ${u.username || ''} ${u.headline || ''}`.toLowerCase();
+        return haystack.includes(peopleSearchQuery.toLowerCase());
+      });
 
   // Filter conversations by search (when NOT in people-search mode)
   const filteredConversations = conversations.filter((conv) => {
@@ -671,24 +694,29 @@ const MessagesNew = () => {
           <div className="p-4 border-b">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xl font-bold">Messages</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Start new conversation"
-                onClick={() => {
-                  setPeopleSearchMode((v) => !v);
-                  setPeopleSearchQuery("");
-                  setSearchQuery("");
-                }}
-              >
-                {peopleSearchMode ? <X className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
-              </Button>
+              {!hasConnections && (
+                <span className="text-xs text-muted-foreground">No connections yet</span>
+              )}
+              {hasConnections && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Start new conversation"
+                  onClick={() => {
+                    setPeopleSearchMode((v) => !v);
+                    setPeopleSearchQuery("");
+                    setSearchQuery("");
+                  }}
+                >
+                  {peopleSearchMode ? <X className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
+                </Button>
+              )}
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               {peopleSearchMode ? (
                 <Input
-                  placeholder="Search people..."
+                  placeholder="Search connections..."
                   value={peopleSearchQuery}
                   onChange={(e) => setPeopleSearchQuery(e.target.value)}
                   className="pl-9"
@@ -710,17 +738,17 @@ const MessagesNew = () => {
             {/* People search mode */}
             {peopleSearchMode ? (
               <div>
-                {searchingPeople ? (
+                {loadingConnections ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-6 h-6 animate-spin text-primary" />
                   </div>
                 ) : peopleSearchQuery.trim().length === 0 ? (
                   <div className="text-center py-10 px-4 text-sm text-muted-foreground">
-                    Type a name to search people
+                    Type a name to search your connections
                   </div>
                 ) : peopleResults.length === 0 ? (
                   <div className="text-center py-10 px-4 text-sm text-muted-foreground">
-                    No people found
+                    No connections found
                   </div>
                 ) : (
                   peopleResults.map((person) => {
@@ -1207,6 +1235,11 @@ const MessagesNew = () => {
 
               {/* Message Input */}
               <div className="p-4 border-t bg-card">
+                {isChatRestricted && (
+                  <div className="mb-2 text-xs text-muted-foreground">
+                    You can only message people you are connected with.
+                  </div>
+                )}
                 {/* Reply banner */}
                 {replyTo && (
                   <div className="flex items-start justify-between gap-2 mb-2 px-3 py-2 bg-muted rounded-lg text-sm">
@@ -1237,10 +1270,11 @@ const MessagesNew = () => {
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
                     className="flex-1"
+                    disabled={isChatRestricted}
                   />
                   <Button
                     type="submit"
-                    disabled={!messageText.trim()}
+                    disabled={!messageText.trim() || isChatRestricted}
                   >
                     <Send className="w-5 h-5" />
                   </Button>

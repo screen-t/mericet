@@ -282,3 +282,41 @@ def get_connection_suggestions(user_id: str = Depends(require_auth), limit: int 
         return {"suggestions": suggestions.data}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/block/{other_user_id}")
+def block_user(other_user_id: str, user_id: str = Depends(require_auth)):
+    """Block another user. This creates or replaces any existing connection row with status 'blocked'."""
+    try:
+        if other_user_id == user_id:
+            raise HTTPException(status_code=400, detail="Cannot block yourself")
+
+        # Remove any existing connection rows between these users
+        supabase.table("connections").delete().or_(
+            f"and(requester_id.eq.{user_id},receiver_id.eq.{other_user_id}),and(requester_id.eq.{other_user_id},receiver_id.eq.{user_id})"
+        ).execute()
+
+        # Insert blocked row with current user as requester
+        row = {
+            "requester_id": user_id,
+            "receiver_id": other_user_id,
+            "status": "blocked"
+        }
+        resp = supabase.table("connections").insert(row).execute()
+        enriched = enrich_connection(resp.data[0], user_id)
+        return {"message": "User blocked", "data": enriched}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/unblock/{other_user_id}")
+def unblock_user(other_user_id: str, user_id: str = Depends(require_auth)):
+    """Unblock a previously blocked user (only removes blocks created by the current user)."""
+    try:
+        # Delete block rows where current user was the requester (blocker)
+        supabase.table("connections").delete().eq("requester_id", user_id).eq("receiver_id", other_user_id).eq("status", "blocked").execute()
+        return {"message": "User unblocked"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

@@ -143,6 +143,28 @@ export const ProfilePage = () => {
     },
   });
 
+  const blockMutation = useMutation({
+    mutationFn: () => backendApi.connections.blockUser(profileUserId!),
+    onSuccess: () => {
+      toast({ title: "User blocked" });
+      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+    },
+    onError: () => toast({ title: "Failed to block user", variant: "destructive" }),
+  });
+
+  const unblockMutation = useMutation({
+    mutationFn: () => backendApi.connections.unblockUser(profileUserId!),
+    onSuccess: () => {
+      toast({ title: "User unblocked" });
+      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+    },
+    onError: () => toast({ title: "Failed to unblock user", variant: "destructive" }),
+  });
+
   if (isLoading) {
     return (
       <AppLayout>
@@ -350,6 +372,30 @@ export const ProfilePage = () => {
                                 className="w-full sm:w-auto"
                               >
                                 Follow
+                              </Button>
+                            )}
+                            {/* Block / Unblock */}
+                            {connectionStatus?.status === 'blocked' ? (
+                              connectionStatus.is_requester ? (
+                                <Button
+                                  variant="destructive"
+                                  onClick={() => unblockMutation.mutate()}
+                                  disabled={unblockMutation.isPending}
+                                  className="w-full sm:w-auto"
+                                >
+                                  Unblock
+                                </Button>
+                              ) : (
+                                <Button variant="outline" disabled className="w-full sm:w-auto">Blocked</Button>
+                              )
+                            ) : (
+                              <Button
+                                variant="destructive"
+                                onClick={() => blockMutation.mutate()}
+                                disabled={blockMutation.isPending}
+                                className="w-full sm:w-auto"
+                              >
+                                Block
                               </Button>
                             )}
                             <Button
