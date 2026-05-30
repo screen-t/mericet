@@ -43,14 +43,14 @@ This document lists requested features, short descriptions, priorities, and a st
 7. Chat with Connections
    - Concept: Messaging scoped to connections (connection only or optional).
    - Priority: High
-    - Notes: Messaging does not enforce connection-only; requires backend check + UI guard.
-    - Status: planned
+    - Notes: Enforced on backend send and guarded in UI; people search limited to accepted connections.
+    - Status: done (backend/app/routes/messages.py, frontend/src/pages/MessagesNew.tsx)
 
 8. Block User
    - Concept: Block removes visibility and messaging from blocked users.
    - Priority: High
-   - Notes: Requires `blocks` table and RLS policy updates.
-   - Status: planned
+    - Notes: Implemented simple block using `connections.status='blocked'` (backend endpoints + frontend UI). RLS/policies and automated tests still required.
+  - Status: partial (backend+frontend implemented, RLS/tests pending)
 
 9. Profile Privacy
    - Concept: Public/private profile settings

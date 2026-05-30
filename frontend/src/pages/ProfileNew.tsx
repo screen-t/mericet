@@ -31,8 +31,15 @@ import {
   Check,
   X,
   Camera,
+  MoreVertical,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const ProfilePage = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -141,6 +148,28 @@ export const ProfilePage = () => {
       queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
       queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
     },
+  });
+
+  const blockMutation = useMutation({
+    mutationFn: () => backendApi.connections.blockUser(profileUserId!),
+    onSuccess: () => {
+      toast({ title: "User blocked" });
+      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+    },
+    onError: () => toast({ title: "Failed to block user", variant: "destructive" }),
+  });
+
+  const unblockMutation = useMutation({
+    mutationFn: () => backendApi.connections.unblockUser(profileUserId!),
+    onSuccess: () => {
+      toast({ title: "User unblocked" });
+      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+    },
+    onError: () => toast({ title: "Failed to unblock user", variant: "destructive" }),
   });
 
   if (isLoading) {
@@ -360,6 +389,38 @@ export const ProfilePage = () => {
                               <UserCheck className="w-4 h-4 mr-2" />
                               Connected
                             </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon" className="w-10 h-10">
+                                  <MoreVertical className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {connectionStatus?.status === 'blocked' ? (
+                                  connectionStatus.is_requester ? (
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => unblockMutation.mutate()}
+                                      disabled={unblockMutation.isPending}
+                                    >
+                                      Unblock
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem disabled>
+                                      Blocked
+                                    </DropdownMenuItem>
+                                  )
+                                ) : (
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => blockMutation.mutate()}
+                                    disabled={blockMutation.isPending}
+                                  >
+                                    Block
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </>
                         ) : connectionStatus?.status === 'pending_from_them' ? (
                           <>

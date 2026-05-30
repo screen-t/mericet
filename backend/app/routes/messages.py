@@ -9,6 +9,55 @@ router = APIRouter(prefix="/messages", tags=["Messages"])
 EDIT_WINDOW_MINUTES = 15
 MAX_MESSAGE_EDITS = 3
 
+def _is_connected(user_id: str, other_user_id: str) -> bool:
+    if not other_user_id:
+        return False
+    try:
+        connection = supabase.table("connections").select("id").or_(
+            f"and(requester_id.eq.{user_id},receiver_id.eq.{other_user_id}),and(requester_id.eq.{other_user_id},receiver_id.eq.{user_id})"
+        ).eq("status", "accepted").limit(1).execute()
+        return bool(connection.data)
+    except Exception:
+        return False
+
+def _is_blocked(user_id: str, other_user_id: str) -> bool:
+    """Return True if either user has blocked the other."""
+    if not other_user_id:
+        return False
+    try:
+        blocked = supabase.table("connections").select("id").or_(
+            f"and(requester_id.eq.{user_id},receiver_id.eq.{other_user_id}),and(requester_id.eq.{other_user_id},receiver_id.eq.{user_id})"
+        ).eq("status", "blocked").limit(1).execute()
+        return bool(blocked.data)
+    except Exception:
+        return False
+
+def _blocked_message_detail(user_id: str, other_user_id: str) -> str | None:
+    """Return a user-facing message for blocked chat attempts, preserving who blocked whom."""
+    if not other_user_id:
+        return None
+    try:
+        blocked = supabase.table("connections").select("requester_id, receiver_id, status").or_(
+            f"and(requester_id.eq.{user_id},receiver_id.eq.{other_user_id}),and(requester_id.eq.{other_user_id},receiver_id.eq.{user_id})"
+        ).eq("status", "blocked").limit(1).execute()
+        if not blocked.data:
+            return None
+        row = blocked.data[0]
+        if row.get("requester_id") == user_id:
+            return "You blocked this user, you cannot send a message"
+        return "You cannot send a message"
+    except Exception:
+        return None
+
+def _get_other_participant(conversation_id: str, user_id: str) -> str | None:
+    try:
+        row = supabase.table("conversation_participants").select("user_id").eq(
+            "conversation_id", conversation_id
+        ).neq("user_id", user_id).limit(1).execute()
+        return row.data[0]["user_id"] if row.data else None
+    except Exception:
+        return None
+
 def ensure_user_exists(user_id: str):
     """Ensure a users row exists for auth user id to avoid FK failures in messaging."""
     try:
@@ -202,6 +251,19 @@ def send_message(payload: MessageCreate, user_id: str = Depends(require_auth)):
     try:
         ensure_user_exists(user_id)
 
+        other_user_id = payload.receiver_id
+        if payload.conversation_id:
+            participant_other = _get_other_participant(payload.conversation_id, user_id)
+            if participant_other:
+                other_user_id = participant_other
+
+        # If either party has blocked the other, forbid messaging.
+        block_detail = _blocked_message_detail(user_id, other_user_id)
+        if block_detail:
+            raise HTTPException(status_code=403, detail=block_detail)
+        if not _is_connected(user_id, other_user_id):
+            raise HTTPException(status_code=403, detail="Messaging is limited to connections")
+
         # Fast path: if the client already knows the conversation_id, skip the expensive
         # get_or_create_conversation() lookup entirely.  Only verify the user is a participant
         # (cheap single-row query) to prevent sending to arbitrary conversations.
@@ -258,6 +320,13 @@ def send_message_to_conversation(payload: MessageSend, user_id: str = Depends(re
         
         if not participant.data:
             raise HTTPException(status_code=403, detail="Not a participant in this conversation")
+
+        other_user_id = _get_other_participant(payload.conversation_id, user_id)
+        block_detail = _blocked_message_detail(user_id, other_user_id)
+        if block_detail:
+            raise HTTPException(status_code=403, detail=block_detail)
+        if not _is_connected(user_id, other_user_id):
+            raise HTTPException(status_code=403, detail="Messaging is limited to connections")
         
         # Create message
         message_data = {

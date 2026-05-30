@@ -325,6 +325,16 @@ const connections = {
       const suggestions: import('@/types/api').User[] = Array.isArray(data) ? data : ((data as { suggestions?: import('@/types/api').User[] })?.suggestions ?? []);
       return { suggestions };
     }) as Promise<import('@/types/api').SuggestionsResponse>,
+  blockUser: (otherUserId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/connections/block/${encodeURIComponent(otherUserId)}`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  unblockUser: (otherUserId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/connections/unblock/${encodeURIComponent(otherUserId)}`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
 };
 
 // --- Messages ---
