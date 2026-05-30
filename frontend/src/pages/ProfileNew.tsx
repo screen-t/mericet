@@ -327,16 +327,18 @@ export const ProfilePage = () => {
                     </div>
 
                     {/* Stats */}
-                    <div className="flex gap-6 mt-4 text-sm">
-                      <div>
-                        <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
-                        <span className="text-muted-foreground">Connections</span>
+                    {(isOwnProfile || profile.connections_visible) && (
+                      <div className="flex gap-6 mt-4 text-sm">
+                        <div>
+                          <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
+                          <span className="text-muted-foreground">Connections</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
+                          <span className="text-muted-foreground">Followers</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
-                        <span className="text-muted-foreground">Followers</span>
-                      </div>
-                    </div>
+                    )}
                     {!isOwnProfile && followStatus?.is_following && (
                       <div className="mt-2 text-xs text-muted-foreground">
                         You follow this user
@@ -529,7 +531,7 @@ export const ProfilePage = () => {
             >
               <SkillsSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
               
-              {profile.current_position && (
+              {(isOwnProfile || profile.work_history_visible) && profile.current_position && (
                 <Card className="p-6 mt-6">
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <Briefcase className="w-5 h-5" />

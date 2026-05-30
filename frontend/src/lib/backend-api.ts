@@ -103,6 +103,20 @@ const profile = {
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
     }).then(handleResponse),
+  updatePrivacy: (data: {
+    email_visible?: boolean;
+    phone_visible?: boolean;
+    birthday_visible?: boolean;
+    location_visible?: boolean;
+    work_history_visible?: boolean;
+    connections_visible?: boolean;
+    activity_status_visible?: boolean;
+  }) =>
+    fetchWithAuth(`${API_BASE_URL}/profile/privacy`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse),
   uploadAvatar: (file: File): Promise<{ avatar_url: string }> => {
     const form = new FormData();
     form.append("file", file);
