@@ -162,6 +162,10 @@ export interface Message {
   deleted_at?: string | null;
 }
 
+export interface MessageSearchResult extends Message {
+  other_user?: User;
+}
+
 export interface Conversation {
   id: string;
   created_at: string;
@@ -221,6 +225,16 @@ export interface NotificationsResponse {
 export interface SearchResponse {
   users?: User[];
   posts?: Post[];
+  messages?: MessageSearchResult[];
+  saved?: Post[];
+}
+
+export interface SearchSuggestion {
+  type: 'user';
+  text: string;
+  username?: string;
+  user_id?: string;
+  avatar_url?: string;
 }
 
 export interface UnreadCountResponse {

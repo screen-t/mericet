@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { PostCardNew } from "@/components/feed/PostCardNew";
 import { backendApi } from "@/lib/backend-api";
-import { SearchResponse, User, Post } from '@/types/api';
+import { SearchResponse, User, Post, MessageSearchResult, SearchSuggestion } from '@/types/api';
 import {
   Search as SearchIcon,
   Users,
@@ -24,6 +24,8 @@ const SearchPage = () => {
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
   const [activeTab, setActiveTab] = useState("all");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const navigate = useNavigate();
 
   // Debounce search query
   useEffect(() => {
@@ -38,6 +40,10 @@ const SearchPage = () => {
 
     return () => clearTimeout(timer);
   }, [searchQuery, setSearchParams]);
+
+  useEffect(() => {
+    setShowSuggestions(searchQuery.length > 0);
+  }, [searchQuery]);
 
   // Search all
   const { data: allResults, isLoading: loadingAll } = useQuery<SearchResponse>({
@@ -60,7 +66,28 @@ const SearchPage = () => {
     enabled: !!debouncedQuery && activeTab === 'posts',
   });
 
-  const isLoading = loadingAll || loadingUsers || loadingPosts;
+  // Search messages
+  const { data: messagesResults, isLoading: loadingMessages } = useQuery<SearchResponse>({
+    queryKey: ['search', 'messages', debouncedQuery],
+    queryFn: () => backendApi.search.searchMessages(debouncedQuery, 50),
+    enabled: !!debouncedQuery && activeTab === 'messages',
+  });
+
+  // Search saved
+  const { data: savedResults, isLoading: loadingSaved } = useQuery<SearchResponse>({
+    queryKey: ['search', 'saved', debouncedQuery],
+    queryFn: () => backendApi.search.searchSaved(debouncedQuery, 50),
+    enabled: !!debouncedQuery && activeTab === 'saved',
+  });
+
+  // Suggestions
+  const { data: suggestionsData } = useQuery<{ suggestions?: SearchSuggestion[] }>({
+    queryKey: ['search', 'suggestions', searchQuery],
+    queryFn: () => backendApi.search.searchSuggestions(searchQuery, 6),
+    enabled: searchQuery.length > 0,
+  });
+
+  const isLoading = loadingAll || loadingUsers || loadingPosts || loadingMessages || loadingSaved;
 
   const renderUserCard = (user: User) => (
     <Card key={user.id} className="p-4">
@@ -125,6 +152,27 @@ const SearchPage = () => {
               className="pl-10 text-lg h-12"
               autoFocus
             />
+            {showSuggestions && (suggestionsData?.suggestions?.length ?? 0) > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-card border rounded-lg shadow-lg overflow-hidden z-20">
+                {suggestionsData?.suggestions?.map((s, index) => (
+                  <button
+                    key={`${s.type}-${s.user_id || s.username || s.text}-${index}`}
+                    onClick={() => {
+                      if (s.user_id) {
+                        navigate(`/profile/${s.user_id}`);
+                      } else {
+                        setSearchQuery(s.text);
+                      }
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full text-left px-4 py-2 hover:bg-muted text-sm flex items-center gap-2"
+                  >
+                    <UserAvatar src={s.avatar_url} name={s.text} size="sm" />
+                    <span>{s.text}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </motion.div>
 
@@ -139,7 +187,7 @@ const SearchPage = () => {
           </div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full max-w-2xl grid-cols-3">
+            <TabsList className="grid w-full max-w-3xl grid-cols-5">
               <TabsTrigger value="all" className="flex items-center gap-2">
                 <SearchIcon className="w-4 h-4" />
                 All
@@ -151,6 +199,14 @@ const SearchPage = () => {
               <TabsTrigger value="posts" className="flex items-center gap-2">
                 <FileText className="w-4 h-4" />
                 Posts
+              </TabsTrigger>
+              <TabsTrigger value="messages" className="flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Messages
+              </TabsTrigger>
+              <TabsTrigger value="saved" className="flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Saved
               </TabsTrigger>
             </TabsList>
 
@@ -208,7 +264,73 @@ const SearchPage = () => {
                     </div>
                   )}
 
-                  {(!allResults?.users?.length && !allResults?.posts?.length) &&
+                  {/* Messages Section */}
+                  {allResults?.messages && allResults.messages.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xl font-semibold flex items-center gap-2">
+                          <FileText className="w-5 h-5" />
+                          Messages
+                        </h3>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setActiveTab('messages')}
+                        >
+                          See all
+                        </Button>
+                      </div>
+                      <div className="space-y-3">
+                        {allResults.messages.slice(0, 4).map((m: MessageSearchResult) => (
+                          <Card key={m.id} className="p-3">
+                            <Link to={`/messages/${m.other_user?.id ?? ''}`}>
+                              <div className="flex items-center gap-3">
+                                <UserAvatar
+                                  src={m.other_user?.avatar_url}
+                                  name={`${m.other_user?.first_name || ''} ${m.other_user?.last_name || ''}`.trim()}
+                                  size="sm"
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">
+                                    {m.other_user?.first_name} {m.other_user?.last_name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {m.content}
+                                  </p>
+                                </div>
+                              </div>
+                            </Link>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Saved Section */}
+                  {allResults?.saved && allResults.saved.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xl font-semibold flex items-center gap-2">
+                          <FileText className="w-5 h-5" />
+                          Saved
+                        </h3>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setActiveTab('saved')}
+                        >
+                          See all
+                        </Button>
+                      </div>
+                      <div className="space-y-4">
+                        {allResults.saved.slice(0, 3).map((post: Post) => (
+                          <PostCardNew key={post.id} post={post} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(!allResults?.users?.length && !allResults?.posts?.length && !allResults?.messages?.length && !allResults?.saved?.length) &&
                     renderEmptyState('Try searching with different keywords')
                   }
                 </>
@@ -260,6 +382,70 @@ const SearchPage = () => {
                 </div>
               ) : (
                 renderEmptyState('No posts found matching your search')
+              )}
+            </TabsContent>
+
+            {/* Messages Results */}
+            <TabsContent value="messages" className="mt-6">
+              {loadingMessages ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : messagesResults?.messages && messagesResults.messages.length > 0 ? (
+                <div className="space-y-3">
+                  {messagesResults.messages.map((m: MessageSearchResult, index: number) => (
+                    <motion.div
+                      key={m.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                    >
+                      <Card className="p-3">
+                        <Link to={`/messages/${m.other_user?.id ?? ''}`}>
+                          <div className="flex items-center gap-3">
+                            <UserAvatar
+                              src={m.other_user?.avatar_url}
+                              name={`${m.other_user?.first_name || ''} ${m.other_user?.last_name || ''}`.trim()}
+                              size="sm"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {m.other_user?.first_name} {m.other_user?.last_name}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">{m.content}</p>
+                            </div>
+                          </div>
+                        </Link>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                renderEmptyState('No messages found matching your search')
+              )}
+            </TabsContent>
+
+            {/* Saved Results */}
+            <TabsContent value="saved" className="mt-6">
+              {loadingSaved ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : savedResults?.saved && savedResults.saved.length > 0 ? (
+                <div className="space-y-4">
+                  {savedResults.saved.map((post: Post, index: number) => (
+                    <motion.div
+                      key={post.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                    >
+                      <PostCardNew post={post} />
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                renderEmptyState('No saved posts found matching your search')
               )}
             </TabsContent>
           </Tabs>
