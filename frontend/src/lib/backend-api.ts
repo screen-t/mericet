@@ -593,6 +593,24 @@ const saves = {
   },
 };
 
+// --- Follows ---
+const follows = {
+  follow: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/follows/${userId}`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  unfollow: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/follows/${userId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  status: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/follows/status/${userId}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ is_following: boolean }>),
+};
+
 export const backendApi = {
   auth,
   profile,
@@ -602,4 +620,5 @@ export const backendApi = {
   notifications,
   search,
   saves,
+  follows,
 };

@@ -31,8 +31,8 @@ This document lists requested features, short descriptions, priorities, and a st
 5. Follow / Unfollow
    - Concept: Follow users to see their content, unfollow to stop.
    - Priority: High
-    - Notes: Connections (requests/accept/remove) exist, but there is no follow/unfollow model or feed linkage.
-    - Status: partial (backend/app/routes/connections.py, frontend/src/pages/NetworkNew.tsx)
+    - Notes: Follow/unfollow implemented with a separate follows table and UI, and following feed uses it.
+    - Status: done (backend/app/routes/follows.py, backend/app/routes/posts.py, frontend/src/pages/ProfileNew.tsx, supabase/migrations/17_add_follows.sql)
 
 6. Suggested Users
    - Concept: Recommend users by interests, connections, or activity.

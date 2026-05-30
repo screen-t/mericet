@@ -202,24 +202,24 @@ const SearchPage = () => {
           </div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full max-w-3xl grid-cols-5">
-              <TabsTrigger value="all" className="flex items-center gap-2">
+            <TabsList className="flex w-full max-w-3xl flex-wrap gap-2">
+              <TabsTrigger value="all" className="flex items-center gap-2 whitespace-nowrap">
                 <SearchIcon className="w-4 h-4" />
                 All
               </TabsTrigger>
-              <TabsTrigger value="users" className="flex items-center gap-2">
+              <TabsTrigger value="users" className="flex items-center gap-2 whitespace-nowrap">
                 <Users className="w-4 h-4" />
                 People
               </TabsTrigger>
-              <TabsTrigger value="posts" className="flex items-center gap-2">
+              <TabsTrigger value="posts" className="flex items-center gap-2 whitespace-nowrap">
                 <FileText className="w-4 h-4" />
                 Posts
               </TabsTrigger>
-              <TabsTrigger value="messages" className="flex items-center gap-2">
+              <TabsTrigger value="messages" className="flex items-center gap-2 whitespace-nowrap">
                 <FileText className="w-4 h-4" />
                 Messages
               </TabsTrigger>
-              <TabsTrigger value="saved" className="flex items-center gap-2">
+              <TabsTrigger value="saved" className="flex items-center gap-2 whitespace-nowrap">
                 <FileText className="w-4 h-4" />
                 Saved
               </TabsTrigger>

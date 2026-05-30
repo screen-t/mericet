@@ -259,22 +259,14 @@ def get_feed(
     """Get feed posts (for_you or following)"""
     try:
         if feed_type == "following":
-            # Get posts from connections
-            connections = supabase.table("connections").select("requester_id, receiver_id").or_(f"requester_id.eq.{user_id},receiver_id.eq.{user_id}").eq("status", "accepted").execute()
-            
-            # Extract connected user IDs
-            connected_ids = set()
-            for conn in connections.data:
-                if conn["requester_id"] == user_id:
-                    connected_ids.add(conn["receiver_id"])
-                else:
-                    connected_ids.add(conn["requester_id"])
-            
-            if not connected_ids:
+            # Get posts from users the current user follows
+            following = supabase.table("follows").select("following_id").eq("follower_id", user_id).execute()
+            following_ids = [r["following_id"] for r in (following.data or [])]
+            if not following_ids:
                 return []
             
             # Get posts from connected users
-            posts = supabase.table("posts").select("*").in_("author_id", list(connected_ids)).eq("is_published", True).eq("is_draft", False).order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+            posts = supabase.table("posts").select("*").in_("author_id", following_ids).eq("is_published", True).eq("is_draft", False).order("created_at", desc=True).range(offset, offset + limit - 1).execute()
         else:
             # For You feed - all public posts
             posts = supabase.table("posts").select("*").eq("is_published", True).eq("is_draft", False).eq("visibility", "public").order("created_at", desc=True).range(offset, offset + limit - 1).execute()
