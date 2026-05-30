@@ -468,10 +468,12 @@ const search = {
     const data = await fetchWithAuth(
       `${API_BASE_URL}/search/all?q=${encodeURIComponent(q)}&users_limit=${limit ?? 20}&posts_limit=${limit ?? 20}`,
       { headers: getAuthHeaders() }
-    ).then(handleResponse<{ users?: { results: import('@/types/api').User[] }; posts?: { results: import('@/types/api').Post[] } }>);
+    ).then(handleResponse<{ users?: { results: import('@/types/api').User[] }; posts?: { results: import('@/types/api').Post[] }; messages?: { results: import('@/types/api').MessageSearchResult[] }; saved?: { results: import('@/types/api').Post[] } }>);
     return {
       users: data.users?.results ?? [],
       posts: data.posts?.results ?? [],
+      messages: data.messages?.results ?? [],
+      saved: data.saved?.results ?? [],
     };
   },
   searchUsers: async (q: string, limit: number, _offset?: number): Promise<import('@/types/api').SearchResponse> => {
@@ -487,6 +489,33 @@ const search = {
       { headers: getAuthHeaders() }
     ).then(handleResponse<{ results: import('@/types/api').Post[]; count?: number }>);
     return { posts: Array.isArray(data.results) ? data.results : [] };
+  },
+  searchMessages: async (q: string, limit: number): Promise<import('@/types/api').SearchResponse> => {
+    const data = await fetchWithAuth(
+      `${API_BASE_URL}/search/messages?q=${encodeURIComponent(q)}&limit=${limit}`,
+      { headers: getAuthHeaders() }
+    ).then(handleResponse<{ results: import('@/types/api').MessageSearchResult[]; count?: number }>);
+    return { messages: Array.isArray(data.results) ? data.results : [] };
+  },
+  searchSaved: async (q: string, limit: number): Promise<import('@/types/api').SearchResponse> => {
+    const data = await fetchWithAuth(
+      `${API_BASE_URL}/search/saved?q=${encodeURIComponent(q)}&limit=${limit}`,
+      { headers: getAuthHeaders() }
+    ).then(handleResponse<{ results: import('@/types/api').Post[]; count?: number }>);
+    return { saved: Array.isArray(data.results) ? data.results : [] };
+  },
+  searchSuggestions: async (q: string, limit: number) => {
+    return fetchWithAuth(
+      `${API_BASE_URL}/search/suggestions?q=${encodeURIComponent(q)}&limit=${limit}`,
+      { headers: getAuthHeaders() }
+    ).then(handleResponse<{ suggestions?: import('@/types/api').SearchSuggestion[] }>);
+  },
+  searchCompanies: async (q: string, limit: number): Promise<import('@/types/api').CompanySearchResult[]> => {
+    const data = await fetchWithAuth(
+      `${API_BASE_URL}/search/companies?q=${encodeURIComponent(q)}&limit=${limit}`,
+      { headers: getAuthHeaders() }
+    ).then(handleResponse<{ results?: import('@/types/api').CompanySearchResult[] }>);
+    return Array.isArray(data.results) ? data.results : [];
   },
 };
 
@@ -564,6 +593,24 @@ const saves = {
   },
 };
 
+// --- Follows ---
+const follows = {
+  follow: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/follows/${userId}`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  unfollow: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/follows/${userId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  status: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/follows/status/${userId}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ is_following: boolean }>),
+};
+
 export const backendApi = {
   auth,
   profile,
@@ -573,4 +620,5 @@ export const backendApi = {
   notifications,
   search,
   saves,
+  follows,
 };

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -28,6 +28,7 @@ import {
   Users,
   Building2,
   Bookmark,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -40,7 +41,10 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { logout, user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -61,6 +65,12 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
     refetchInterval: 60000, // Reduce from 30s to 60s to avoid socket pressure on Windows
   });
 
+  const { data: searchSuggestions } = useQuery({
+    queryKey: ['searchSuggestions', searchQuery],
+    queryFn: () => backendApi.search.searchSuggestions(searchQuery, 6),
+    enabled: isAuthenticated && searchQuery.trim().length > 0,
+  });
+
   const unreadMessages = messageCount?.count || 0;
   const unreadNotifications = notificationCount?.count || 0;
 
@@ -70,6 +80,29 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
     } catch (error) {
       console.error('Logout failed:', error);
     }
+  };
+
+  const handleSearchSubmit = () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    navigate(`/search?q=${encodeURIComponent(q)}`);
+    setIsMobileMenuOpen(false);
+    setShowSearchSuggestions(false);
+  };
+
+  const handleSuggestionPick = (suggestion: { text: string; user_id?: string; post_id?: string; type?: string }) => {
+    setSearchQuery(suggestion.text);
+    if (suggestion.type === "user" && suggestion.user_id) {
+      navigate(`/profile/${suggestion.user_id}`);
+    } else if (suggestion.type === "company") {
+      navigate(`/companies?q=${encodeURIComponent(suggestion.text)}`);
+    } else if (suggestion.type === "post" && suggestion.post_id) {
+      navigate(`/posts/${suggestion.post_id}`);
+    } else {
+      navigate(`/search?q=${encodeURIComponent(suggestion.text)}`);
+    }
+    setIsMobileMenuOpen(false);
+    setShowSearchSuggestions(false);
   };
 
   return (
@@ -90,7 +123,42 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                 <Input
                   placeholder="Search people, companies, posts..."
                   className="pl-10 bg-secondary/50 border-0 focus-visible:ring-primary"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setShowSearchSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSearchSubmit();
+                    }
+                  }}
                 />
+                {showSearchSuggestions && (searchSuggestions?.suggestions?.length ?? 0) > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-card border rounded-lg shadow-lg overflow-hidden z-20">
+                    {searchSuggestions?.suggestions?.map((s, index) => (
+                      <button
+                        key={`${s.type}-${s.user_id || s.username || s.text}-${index}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSuggestionPick(s)}
+                        className="w-full text-left px-4 py-2 hover:bg-muted text-sm flex items-center gap-2"
+                      >
+                        {s.type === "user" ? (
+                          <UserAvatar src={s.avatar_url} name={s.text} size="sm" />
+                        ) : s.type === "company" ? (
+                          <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Building2 className="h-4 w-4 text-primary" />
+                          </div>
+                        ) : (
+                          <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                            <FileText className="h-4 w-4 text-primary" />
+                          </div>
+                        )}
+                        <span>{s.text}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -232,7 +300,42 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                     <Input
                       placeholder="Search..."
                       className="pl-10 bg-secondary/50 border-0"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onFocus={() => setShowSearchSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleSearchSubmit();
+                        }
+                      }}
                     />
+                    {showSearchSuggestions && (searchSuggestions?.suggestions?.length ?? 0) > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-card border rounded-lg shadow-lg overflow-hidden z-20">
+                        {searchSuggestions?.suggestions?.map((s, index) => (
+                          <button
+                            key={`${s.type}-${s.user_id || s.username || s.text}-${index}`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleSuggestionPick(s)}
+                            className="w-full text-left px-4 py-2 hover:bg-muted text-sm flex items-center gap-2"
+                          >
+                            {s.type === "user" ? (
+                              <UserAvatar src={s.avatar_url} name={s.text} size="sm" />
+                            ) : s.type === "company" ? (
+                              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                                <Building2 className="h-4 w-4 text-primary" />
+                              </div>
+                            ) : (
+                              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                                <FileText className="h-4 w-4 text-primary" />
+                              </div>
+                            )}
+                            <span>{s.text}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Primary nav links */}

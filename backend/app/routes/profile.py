@@ -41,9 +41,9 @@ def get_my_profile(user_id: str = Depends(require_auth)):
             profile_data["connections_count"] = conn_count.count or 0
         except Exception:
             profile_data.setdefault("connections_count", 0)
-        # followers = people who sent an accepted request TO this user
+        # followers = users following this user
         try:
-            follower_count = supabase.table("connections").select("id", count="exact").eq("receiver_id", user_id).eq("status", "accepted").execute()
+            follower_count = supabase.table("follows").select("id", count="exact").eq("following_id", user_id).execute()
             profile_data["followers_count"] = follower_count.count or 0
         except Exception:
             profile_data.setdefault("followers_count", 0)
@@ -85,7 +85,7 @@ def get_profile_by_username(identifier: str):
         except Exception:
             profile_data.setdefault("connections_count", 0)
         try:
-            follower_count = supabase.table("connections").select("id", count="exact").eq("receiver_id", profile_user_id).eq("status", "accepted").execute()
+            follower_count = supabase.table("follows").select("id", count="exact").eq("following_id", profile_user_id).execute()
             profile_data["followers_count"] = follower_count.count or 0
         except Exception:
             profile_data.setdefault("followers_count", 0)

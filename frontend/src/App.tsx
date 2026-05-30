@@ -21,6 +21,7 @@ import MessagesNew from "./pages/MessagesNew";
 import Notifications from "./pages/Notifications";
 import NotificationsNew from "./pages/NotificationsNew";
 import SearchPage from "./pages/SearchPage";
+import PostDetail from "./pages/PostDetail";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import OAuthCallback from "./pages/OAuthCallBack";
@@ -68,6 +69,7 @@ const App = () => (
             <Route path="/messages/:userId" element={<RequireAuth><MessagesNew /></RequireAuth>} />
             <Route path="/notifications" element={<RequireAuth><NotificationsNew /></RequireAuth>} />
             <Route path="/search" element={<RequireAuth><SearchPage /></RequireAuth>} />
+            <Route path="/posts/:postId" element={<RequireAuth><PostDetail /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             <Route path="/companies" element={<RequireAuth><Companies /></RequireAuth>} />
             <Route path="/saved" element={<RequireAuth><Saved /></RequireAuth>} />

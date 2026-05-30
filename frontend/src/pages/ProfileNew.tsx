@@ -85,6 +85,12 @@ export const ProfilePage = () => {
     enabled: !isOwnProfile && !!profileUserId,
   });
 
+  const { data: followStatus } = useQuery({
+    queryKey: ['followStatus', profileUserId],
+    queryFn: () => backendApi.follows.status(profileUserId!),
+    enabled: !isOwnProfile && !!profileUserId,
+  });
+
   // Connection actions
   const sendConnectionRequest = useMutation({
     mutationFn: () => backendApi.connections.sendRequest(profileUserId!),
@@ -118,6 +124,22 @@ export const ProfilePage = () => {
     },
     onError: () => {
       toast({ title: "Failed to respond to request", variant: "destructive" });
+    },
+  });
+
+  const followMutation = useMutation({
+    mutationFn: () => backendApi.follows.follow(profileUserId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+    },
+  });
+
+  const unfollowMutation = useMutation({
+    mutationFn: () => backendApi.follows.unfollow(profileUserId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
     },
   });
 
@@ -284,12 +306,17 @@ export const ProfilePage = () => {
                         <span className="text-muted-foreground">Followers</span>
                       </div>
                     </div>
+                    {!isOwnProfile && followStatus?.is_following && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        You follow this user
+                      </div>
+                    )}
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 md:justify-end">
                     {isOwnProfile ? (
-                      <Button variant="outline" asChild>
+                      <Button variant="outline" asChild className="w-full sm:w-auto">
                         <Link to="/settings">
                           <Edit3 className="w-4 h-4 mr-2" />
                           Edit Profile
@@ -299,13 +326,36 @@ export const ProfilePage = () => {
                       <>
                         {connectionStatus?.status === 'accepted' ? (
                           <>
-                            <Button variant="default" onClick={() => navigate(`/messages/${profileUserId}`)}>
+                            <Button
+                              variant="default"
+                              onClick={() => navigate(`/messages/${profileUserId}`)}
+                              className="w-full sm:w-auto"
+                            >
                               <MessageSquare className="w-4 h-4 mr-2" />
                               Message
                             </Button>
+                            {followStatus?.is_following ? (
+                              <Button
+                                variant="outline"
+                                onClick={() => unfollowMutation.mutate()}
+                                disabled={unfollowMutation.isPending}
+                                className="w-full sm:w-auto"
+                              >
+                                Following
+                              </Button>
+                            ) : (
+                              <Button
+                                onClick={() => followMutation.mutate()}
+                                disabled={followMutation.isPending}
+                                className="w-full sm:w-auto"
+                              >
+                                Follow
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               onClick={() => removeConnection.mutate()}
+                              className="w-full sm:w-auto"
                             >
                               <UserCheck className="w-4 h-4 mr-2" />
                               Connected
@@ -316,6 +366,7 @@ export const ProfilePage = () => {
                             <Button
                               onClick={() => respondToRequest.mutate(true)}
                               disabled={respondToRequest.isPending}
+                              className="w-full sm:w-auto"
                             >
                               <Check className="w-4 h-4 mr-2" />
                               Accept Request
@@ -324,23 +375,46 @@ export const ProfilePage = () => {
                               variant="outline"
                               onClick={() => respondToRequest.mutate(false)}
                               disabled={respondToRequest.isPending}
+                              className="w-full sm:w-auto"
                             >
                               <X className="w-4 h-4 mr-2" />
                               Decline
                             </Button>
                           </>
                         ) : connectionStatus?.status === 'pending' ? (
-                          <Button variant="outline" disabled>
+                          <Button variant="outline" disabled className="w-full sm:w-auto">
                             Request Pending
                           </Button>
                         ) : (
-                          <Button
-                            onClick={() => sendConnectionRequest.mutate()}
-                            disabled={sendConnectionRequest.isPending}
-                          >
-                            <UserPlus className="w-4 h-4 mr-2" />
-                            Connect
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            {followStatus?.is_following ? (
+                              <Button
+                                variant="outline"
+                                onClick={() => unfollowMutation.mutate()}
+                                disabled={unfollowMutation.isPending}
+                                className="w-full sm:w-auto"
+                              >
+                                Following
+                              </Button>
+                            ) : (
+                              <Button
+                                onClick={() => followMutation.mutate()}
+                                disabled={followMutation.isPending}
+                                className="w-full sm:w-auto"
+                              >
+                                Follow
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              onClick={() => sendConnectionRequest.mutate()}
+                              disabled={sendConnectionRequest.isPending}
+                              className="w-full sm:w-auto"
+                            >
+                              <UserPlus className="w-4 h-4 mr-2" />
+                              Connect
+                            </Button>
+                          </div>
                         )}
                       </>
                     )}
