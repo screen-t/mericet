@@ -22,6 +22,7 @@ import Notifications from "./pages/Notifications";
 import NotificationsNew from "./pages/NotificationsNew";
 import SearchPage from "./pages/SearchPage";
 import PostDetail from "./pages/PostDetail";
+import ModerationQueue from "./pages/ModerationQueue";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import OAuthCallback from "./pages/OAuthCallBack";
@@ -70,6 +71,7 @@ const App = () => (
             <Route path="/notifications" element={<RequireAuth><NotificationsNew /></RequireAuth>} />
             <Route path="/search" element={<RequireAuth><SearchPage /></RequireAuth>} />
             <Route path="/posts/:postId" element={<RequireAuth><PostDetail /></RequireAuth>} />
+            <Route path="/moderation" element={<RequireAuth><ModerationQueue /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             <Route path="/companies" element={<RequireAuth><Companies /></RequireAuth>} />
             <Route path="/saved" element={<RequireAuth><Saved /></RequireAuth>} />

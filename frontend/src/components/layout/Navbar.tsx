@@ -29,6 +29,7 @@ import {
   Building2,
   Bookmark,
   FileText,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -69,6 +70,13 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
     queryKey: ['searchSuggestions', searchQuery],
     queryFn: () => backendApi.search.searchSuggestions(searchQuery, 6),
     enabled: isAuthenticated && searchQuery.trim().length > 0,
+  });
+
+  const { data: moderatorStatus } = useQuery({
+    queryKey: ['moderatorStatus'],
+    queryFn: () => backendApi.reports.moderatorStatus(),
+    enabled: isAuthenticated,
+    staleTime: 5 * 60 * 1000,
   });
 
   const unreadMessages = messageCount?.count || 0;
@@ -224,6 +232,14 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                       Settings
                     </Link>
                   </DropdownMenuItem>
+                  {moderatorStatus?.can_moderate && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/moderation" className="cursor-pointer">
+                        <ShieldAlert className="mr-2 h-4 w-4" />
+                        Moderation
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
                     className="text-destructive cursor-pointer"
@@ -347,6 +363,7 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                       { icon: Bookmark, label: "Saved", href: "/saved" },
                       { icon: Settings, label: "Settings", href: "/settings" },
                       { icon: User, label: "Profile", href: "/profile" },
+                      ...(moderatorStatus?.can_moderate ? [{ icon: ShieldAlert, label: "Moderation", href: "/moderation" }] : []),
                     ].map(({ icon: Icon, label, href }) => (
                       <Button
                         key={href}

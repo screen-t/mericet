@@ -623,6 +623,10 @@ const follows = {
 
 // --- Reports ---
 const reports = {
+  moderatorStatus: () =>
+    fetchWithAuth(`${API_BASE_URL}/reports/moderator/status`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ can_moderate: boolean }>),
   createReport: (data: {
     target_type: "post" | "user";
     target_id: string;
@@ -637,6 +641,16 @@ const reports = {
   getMyReports: (limit = 50, offset = 0) =>
     fetchWithAuth(`${API_BASE_URL}/reports/mine?limit=${limit}&offset=${offset}`, {
       headers: getAuthHeaders(),
+    }).then(handleResponse),
+  getQueue: (status: "pending" | "reviewed" | "resolved" | "dismissed" = "pending", limit = 50, offset = 0) =>
+    fetchWithAuth(`${API_BASE_URL}/reports/queue?status=${status}&limit=${limit}&offset=${offset}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  updateStatus: (reportId: string, status: "pending" | "reviewed" | "resolved" | "dismissed") =>
+    fetchWithAuth(`${API_BASE_URL}/reports/${encodeURIComponent(reportId)}`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status }),
     }).then(handleResponse),
 };
 
