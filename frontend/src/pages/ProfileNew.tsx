@@ -389,38 +389,6 @@ export const ProfilePage = () => {
                               <UserCheck className="w-4 h-4 mr-2" />
                               Connected
                             </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="icon" className="w-10 h-10">
-                                  <MoreVertical className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                {connectionStatus?.status === 'blocked' ? (
-                                  connectionStatus.is_requester ? (
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={() => unblockMutation.mutate()}
-                                      disabled={unblockMutation.isPending}
-                                    >
-                                      Unblock
-                                    </DropdownMenuItem>
-                                  ) : (
-                                    <DropdownMenuItem disabled>
-                                      Blocked
-                                    </DropdownMenuItem>
-                                  )
-                                ) : (
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={() => blockMutation.mutate()}
-                                    disabled={blockMutation.isPending}
-                                  >
-                                    Block
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
                           </>
                         ) : connectionStatus?.status === 'pending_from_them' ? (
                           <>
@@ -476,6 +444,40 @@ export const ProfilePage = () => {
                               Connect
                             </Button>
                           </div>
+                        )}
+                        {!isOwnProfile && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="icon" className="w-10 h-10">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {connectionStatus?.status === 'blocked' ? (
+                                connectionStatus.is_requester ? (
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => unblockMutation.mutate()}
+                                    disabled={unblockMutation.isPending}
+                                  >
+                                    Unblock
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem disabled>
+                                    Blocked
+                                  </DropdownMenuItem>
+                                )
+                              ) : (
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => blockMutation.mutate()}
+                                  disabled={blockMutation.isPending}
+                                >
+                                  Block
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </>
                     )}
