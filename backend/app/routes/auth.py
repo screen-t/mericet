@@ -77,16 +77,9 @@ def signup(payload: SignupRequest, request: Request):
             "is_verified": False
         }).execute()
     except Exception as e:
-<<<<<<< Updated upstream
-        # Log profile creation failure
-        pass
-        # If profile creation fails, we should ideally clean up the auth user
-        # For now, let's at least log the error and continue
-=======
->>>>>>> Stashed changes
         raise HTTPException(
             status_code=500,
-            detail=f"User account created but profile setup failed: {str(e)}"
+            detail="Account created but profile setup failed. Please contact support."
         )
     
     # Track login activity
