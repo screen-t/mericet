@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { SaveToFolderModal } from "@/components/feed/SaveToFolderModal";
+import { ReportDialog } from "@/components/modals/ReportDialog";
 
 interface PostCardNewProps {
   post: Post;
@@ -62,6 +63,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   const [showRepostDialog, setShowRepostDialog] = useState(false);
   const [repostComment, setRepostComment] = useState("");
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
   const [optimisticLiked, setOptimisticLiked] = useState(post.is_liked ?? false);
   const [optimisticLikeCount, setOptimisticLikeCount] = useState(post.like_count ?? post.likes_count ?? 0);
   const [editContent, setEditContent] = useState(post.content || "");
@@ -462,7 +464,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
               </>
             ) : (
               <>
-                <DropdownMenuItem>Report</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowReportDialog(true)}>Report</DropdownMenuItem>
                 <DropdownMenuItem>Hide</DropdownMenuItem>
               </>
             )}
@@ -660,6 +662,13 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           queryClient.invalidateQueries({ queryKey: ['feed'] });
           queryClient.invalidateQueries({ queryKey: ['savedPosts'] });
         }}
+      />
+      <ReportDialog
+        open={showReportDialog}
+        onOpenChange={setShowReportDialog}
+        targetType="post"
+        targetId={post.id}
+        targetLabel="post"
       />
 
       {/* Comments Section */}

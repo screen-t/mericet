@@ -77,13 +77,16 @@ def signup(payload: SignupRequest, request: Request):
         }).execute()
         pass  # User profile created successfully
     except Exception as e:
-        # Log profile creation failure
-        pass
-        # If profile creation fails, we should ideally clean up the auth user
-        # For now, let's at least log the error and continue
+        error_str = str(e)
+        # Duplicate primary key means this email/account already exists
+        if "23505" in error_str or "duplicate key" in error_str.lower():
+            raise HTTPException(
+                status_code=409,
+                detail="An account with this email already exists. Please sign in instead."
+            )
         raise HTTPException(
             status_code=500,
-            detail=f"User account created but profile setup failed: {str(e)}"
+            detail="Account created but profile setup failed. Please contact support."
         )
     
     # Track login activity

@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { ReportDialog } from "@/components/modals/ReportDialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
@@ -50,6 +51,7 @@ export const ProfilePage = () => {
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const [showReportDialog, setShowReportDialog] = useState(false);
 
   const uploadAvatarMutation = useMutation({
     mutationFn: (file: File) => backendApi.profile.uploadAvatar(file),
@@ -325,16 +327,18 @@ export const ProfilePage = () => {
                     </div>
 
                     {/* Stats */}
-                    <div className="flex gap-6 mt-4 text-sm">
-                      <div>
-                        <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
-                        <span className="text-muted-foreground">Connections</span>
+                    {(isOwnProfile || profile.connections_visible) && (
+                      <div className="flex gap-6 mt-4 text-sm">
+                        <div>
+                          <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
+                          <span className="text-muted-foreground">Connections</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
+                          <span className="text-muted-foreground">Followers</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
-                        <span className="text-muted-foreground">Followers</span>
-                      </div>
-                    </div>
+                    )}
                     {!isOwnProfile && followStatus?.is_following && (
                       <div className="mt-2 text-xs text-muted-foreground">
                         You follow this user
@@ -389,38 +393,6 @@ export const ProfilePage = () => {
                               <UserCheck className="w-4 h-4 mr-2" />
                               Connected
                             </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="icon" className="w-10 h-10">
-                                  <MoreVertical className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                {connectionStatus?.status === 'blocked' ? (
-                                  connectionStatus.is_requester ? (
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={() => unblockMutation.mutate()}
-                                      disabled={unblockMutation.isPending}
-                                    >
-                                      Unblock
-                                    </DropdownMenuItem>
-                                  ) : (
-                                    <DropdownMenuItem disabled>
-                                      Blocked
-                                    </DropdownMenuItem>
-                                  )
-                                ) : (
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={() => blockMutation.mutate()}
-                                    disabled={blockMutation.isPending}
-                                  >
-                                    Block
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
                           </>
                         ) : connectionStatus?.status === 'pending_from_them' ? (
                           <>
@@ -477,6 +449,48 @@ export const ProfilePage = () => {
                             </Button>
                           </div>
                         )}
+                        {!isOwnProfile && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="w-10 h-10"
+                                disabled={blockMutation.isPending || unblockMutation.isPending}
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {connectionStatus?.status === 'blocked' ? (
+                                connectionStatus.is_requester ? (
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => unblockMutation.mutate()}
+                                    disabled={unblockMutation.isPending}
+                                  >
+                                    Unblock
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem disabled>
+                                    Blocked
+                                  </DropdownMenuItem>
+                                )
+                              ) : (
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => blockMutation.mutate()}
+                                  disabled={blockMutation.isPending}
+                                >
+                                  Block
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
+                                Report user
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </>
                     )}
                   </div>
@@ -492,6 +506,14 @@ export const ProfilePage = () => {
             </div>
           </Card>
         </motion.div>
+
+        <ReportDialog
+          open={showReportDialog}
+          onOpenChange={setShowReportDialog}
+          targetType="user"
+          targetId={profileUserId!}
+          targetLabel="user"
+        />
 
         {/* Profile Tabs */}
         <Tabs defaultValue="about" className="w-full">
@@ -509,7 +531,7 @@ export const ProfilePage = () => {
             >
               <SkillsSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
               
-              {profile.current_position && (
+              {(isOwnProfile || profile.work_history_visible) && profile.current_position && (
                 <Card className="p-6 mt-6">
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <Briefcase className="w-5 h-5" />

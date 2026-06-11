@@ -6,6 +6,7 @@ export interface User {
   username: string;
   first_name: string;
   last_name: string;
+  phone?: string;
   avatar_url?: string;
   cover_url?: string;
   headline?: string;
@@ -16,6 +17,12 @@ export interface User {
   current_position?: string;
   current_company?: string;
   email_visible: boolean;
+  phone_visible: boolean;
+  birthday_visible?: boolean;
+  location_visible?: boolean;
+  work_history_visible: boolean;
+  connections_visible: boolean;
+  activity_status_visible: boolean;
   account_type: 'personal' | 'business';
   created_at: string;
   updated_at: string;
@@ -24,9 +31,17 @@ export interface User {
 }
 
 export interface Profile extends User {
+  [key: string]: any;
   work_experience?: WorkExperience[];
   education?: Education[];
   skills?: Skill[];
+  // Privacy flags (repeat here for clarity in some components)
+  phone_visible?: boolean;
+  birthday_visible?: boolean;
+  location_visible?: boolean;
+  work_history_visible?: boolean;
+  connections_visible?: boolean;
+  activity_status_visible?: boolean;
 }
 
 export interface WorkExperience {
