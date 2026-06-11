@@ -291,6 +291,12 @@ def block_user(other_user_id: str, user_id: str = Depends(require_auth)):
         if other_user_id == user_id:
             raise HTTPException(status_code=400, detail="Cannot block yourself")
 
+        existing_block = supabase.table("connections").select("id, requester_id, receiver_id, status").eq(
+            "requester_id", user_id
+        ).eq("receiver_id", other_user_id).eq("status", "blocked").limit(1).execute()
+        if existing_block.data:
+            return {"message": "User already blocked", "data": enrich_connection(existing_block.data[0], user_id)}
+
         # Remove any existing connection rows between these users
         supabase.table("connections").delete().or_(
             f"and(requester_id.eq.{user_id},receiver_id.eq.{other_user_id}),and(requester_id.eq.{other_user_id},receiver_id.eq.{user_id})"
@@ -315,6 +321,10 @@ def block_user(other_user_id: str, user_id: str = Depends(require_auth)):
 def unblock_user(other_user_id: str, user_id: str = Depends(require_auth)):
     """Unblock a previously blocked user (only removes blocks created by the current user)."""
     try:
+        existing_block = supabase.table("connections").select("id").eq("requester_id", user_id).eq("receiver_id", other_user_id).eq("status", "blocked").limit(1).execute()
+        if not existing_block.data:
+            return {"message": "User already unblocked"}
+
         # Delete block rows where current user was the requester (blocker)
         supabase.table("connections").delete().eq("requester_id", user_id).eq("receiver_id", other_user_id).eq("status", "blocked").execute()
         return {"message": "User unblocked"}

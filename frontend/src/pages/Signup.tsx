@@ -398,7 +398,8 @@ const Signup = () => {
             </Button>
           </form>
 
-          <div className="relative my-8">
+          {/* Social Sign-up Options — hidden until OAuth is fully implemented */}
+          {/* <div className="relative my-8">
             <Separator />
             <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-3 text-xs text-muted-foreground">
               or sign up with
@@ -406,8 +407,8 @@ const Signup = () => {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="w-full"
               onClick={() => handleOAuthSignup('google')}
               disabled={oauthLoading === 'google' || !agreeTerms}
@@ -436,8 +437,8 @@ const Signup = () => {
               )}
               Google
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="w-full"
               onClick={() => handleOAuthSignup('github')}
               disabled={oauthLoading === 'github' || !agreeTerms}
@@ -451,7 +452,7 @@ const Signup = () => {
               )}
               GitHub
             </Button>
-          </div>
+          </div> */}
 
           <p className="text-center text-sm text-muted-foreground mt-8">
             Already have an account?{" "}

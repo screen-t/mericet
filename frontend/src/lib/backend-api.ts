@@ -103,6 +103,20 @@ const profile = {
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
     }).then(handleResponse),
+  updatePrivacy: (data: {
+    email_visible?: boolean;
+    phone_visible?: boolean;
+    birthday_visible?: boolean;
+    location_visible?: boolean;
+    work_history_visible?: boolean;
+    connections_visible?: boolean;
+    activity_status_visible?: boolean;
+  }) =>
+    fetchWithAuth(`${API_BASE_URL}/profile/privacy`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse),
   uploadAvatar: (file: File): Promise<{ avatar_url: string }> => {
     const form = new FormData();
     form.append("file", file);
@@ -621,6 +635,39 @@ const follows = {
     }).then(handleResponse<{ is_following: boolean }>),
 };
 
+// --- Reports ---
+const reports = {
+  moderatorStatus: () =>
+    fetchWithAuth(`${API_BASE_URL}/reports/moderator/status`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ can_moderate: boolean }>),
+  createReport: (data: {
+    target_type: "post" | "user";
+    target_id: string;
+    reason: string;
+    details?: string;
+  }) =>
+    fetchWithAuth(`${API_BASE_URL}/reports`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse),
+  getMyReports: (limit = 50, offset = 0) =>
+    fetchWithAuth(`${API_BASE_URL}/reports/mine?limit=${limit}&offset=${offset}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  getQueue: (status: "pending" | "reviewed" | "resolved" | "dismissed" = "pending", limit = 50, offset = 0) =>
+    fetchWithAuth(`${API_BASE_URL}/reports/queue?status=${status}&limit=${limit}&offset=${offset}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  updateStatus: (reportId: string, status: "pending" | "reviewed" | "resolved" | "dismissed") =>
+    fetchWithAuth(`${API_BASE_URL}/reports/${encodeURIComponent(reportId)}`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status }),
+    }).then(handleResponse),
+};
+
 export const backendApi = {
   auth,
   profile,
@@ -631,4 +678,5 @@ export const backendApi = {
   search,
   saves,
   follows,
+  reports,
 };

@@ -103,7 +103,8 @@ This document lists requested features, short descriptions, priorities, and a st
 18. Report Content / User
     - Concept: Reporting flow + moderation queue
     - Priority: High
-    - Status: planned
+    - Notes: Deferred for now; user-facing report submission and moderation queue exist, but admin workflow/policies are still incomplete.
+    - Status: planned (deferred; revisit later for full moderation workflow)
 
 19. Typing Indicator Control
     - Concept: Toggle typing indicator visibility

@@ -56,6 +56,14 @@ const Settings = () => {
         username: profileData.username || "",
         headline: profileData.headline || "",
       });
+      setPrivacy({
+        profileVisibility: profileData.connections_visible === false ? "private" : "public",
+        showEmail: !!profileData.email_visible,
+        showConnections: !!profileData.connections_visible,
+        allowMessages: true,
+        showWorkHistory: !!profileData.work_history_visible,
+        showActivityStatus: !!profileData.activity_status_visible,
+      });
     }
   }, [profileData]);
 
@@ -98,6 +106,8 @@ const Settings = () => {
     showEmail: false,
     showConnections: true,
     allowMessages: true,
+    showWorkHistory: true,
+    showActivityStatus: true,
   });
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -154,6 +164,25 @@ const Settings = () => {
     },
   });
 
+  const updatePrivacyMutation = useMutation({
+    mutationFn: (data: {
+      email_visible?: boolean;
+      connections_visible?: boolean;
+      work_history_visible?: boolean;
+      activity_status_visible?: boolean;
+    }) => backendApi.profile.updatePrivacy(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Privacy update failed",
+        description: error?.message || "Unable to save privacy settings.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSaveProfile = () => {
     const usernamePattern = /^[a-z0-9_-]+$/;
 
@@ -189,6 +218,13 @@ const Settings = () => {
       last_name: profile.lastName,
       username: normalizedUsername,
       headline: profile.headline,
+    });
+
+    updatePrivacyMutation.mutate({
+      email_visible: privacy.showEmail,
+      connections_visible: privacy.showConnections,
+      work_history_visible: privacy.showWorkHistory,
+      activity_status_visible: privacy.showActivityStatus,
     });
   };
   const handleLogout = async () => {
