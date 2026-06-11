@@ -65,9 +65,10 @@ def signup(payload: SignupRequest, request: Request):
 
     user_id = auth_res.user.id
 
-    # Create user profile
+    # Create/update user profile — upsert handles the case where the DB trigger
+    # already inserted a placeholder row when the auth user was created.
     try:
-        profile_result = supabase.table("users").insert({
+        supabase.table("users").upsert({
             "id": user_id,
             "email": payload.email,
             "username": payload.username,
@@ -75,12 +76,14 @@ def signup(payload: SignupRequest, request: Request):
             "last_name": payload.last_name,
             "is_verified": False
         }).execute()
-        pass  # User profile created successfully
     except Exception as e:
+<<<<<<< Updated upstream
         # Log profile creation failure
         pass
         # If profile creation fails, we should ideally clean up the auth user
         # For now, let's at least log the error and continue
+=======
+>>>>>>> Stashed changes
         raise HTTPException(
             status_code=500,
             detail=f"User account created but profile setup failed: {str(e)}"
