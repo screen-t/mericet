@@ -80,53 +80,56 @@ body {
   }
 
   .dark {
-    --background: 213 73% 10%;
-    --foreground: 210 40% 96%;
+    /* Deep cobalt-navy backgrounds */
+    --background: 218 60% 7%;
+    --foreground: 210 30% 90%;
 
-    --card: 213 73% 13%;
-    --card-foreground: 210 40% 96%;
+    --card: 216 55% 10%;
+    --card-foreground: 210 30% 90%;
 
-    --popover: 213 73% 13%;
-    --popover-foreground: 210 40% 96%;
+    --popover: 216 55% 10%;
+    --popover-foreground: 210 30% 90%;
 
-    --primary: 220 100% 60%;
+    /* Electric Blue stays as primary, slightly brighter for dark bg contrast */
+    --primary: 220 100% 62%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 213 50% 20%;
-    --secondary-foreground: 210 40% 96%;
+    --secondary: 216 45% 16%;
+    --secondary-foreground: 210 30% 90%;
 
-    --muted: 213 50% 18%;
-    --muted-foreground: 210 25% 60%;
+    --muted: 216 45% 14%;
+    --muted-foreground: 213 20% 55%;
 
-    --accent: 220 100% 60%;
-    --accent-foreground: 0 0% 100%;
+    /* Deep cobalt as accent on dark is too dark — use mid cobalt */
+    --accent: 216 45% 16%;
+    --accent-foreground: 210 30% 90%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 213 50% 22%;
-    --input: 213 50% 22%;
-    --ring: 220 100% 60%;
+    --border: 216 40% 18%;
+    --input: 216 40% 18%;
+    --ring: 220 100% 62%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(220 100% 60%) 0%, hsl(213 73% 35%) 100%);
-    --gradient-hero: linear-gradient(180deg, hsl(213 73% 10%) 0%, hsl(213 73% 13%) 100%);
-    --gradient-card: linear-gradient(145deg, hsl(213 73% 13%) 0%, hsl(213 73% 16%) 100%);
-    --shadow-glow: 0 0 40px hsl(220 100% 55% / 0.25);
+    --gradient-primary: linear-gradient(135deg, hsl(220 100% 62%) 0%, hsl(216 55% 30%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(218 60% 7%) 0%, hsl(216 55% 10%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(216 55% 10%) 0%, hsl(216 55% 13%) 100%);
+    --shadow-glow: 0 0 40px hsl(220 100% 62% / 0.2);
 
-    --sidebar-background: 213 73% 8%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-primary: 220 100% 60%;
+    --sidebar-background: 218 60% 6%;
+    --sidebar-foreground: 210 30% 90%;
+    --sidebar-primary: 220 100% 62%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 213 50% 18%;
-    --sidebar-accent-foreground: 210 40% 96%;
-    --sidebar-border: 213 50% 20%;
-    --sidebar-ring: 220 100% 60%;
-    --chart-1: 220 100% 60%;
-    --chart-2: 213 73% 45%;
+    --sidebar-accent: 216 45% 14%;
+    --sidebar-accent-foreground: 210 30% 90%;
+    --sidebar-border: 216 40% 16%;
+    --sidebar-ring: 220 100% 62%;
+    --chart-1: 220 100% 62%;
+    --chart-2: 213 60% 50%;
     --chart-3: 210 40% 70%;
     --chart-4: 220 80% 75%;
-    --chart-5: 213 50% 55%;
-    --sidebar: 213 73% 10%;
+    --chart-5: 216 50% 55%;
+    --sidebar: 218 60% 7%;
     --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
     --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
     --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);

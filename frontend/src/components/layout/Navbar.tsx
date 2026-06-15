@@ -30,9 +30,12 @@ import {
   Bookmark,
   FileText,
   ShieldAlert,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTheme } from "@/lib/theme";
 
 interface NavbarProps {
   isAuthenticated?: boolean;
@@ -47,6 +50,7 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
 
   const isLandingPage = location.pathname === "/" && !isAuthenticated;
@@ -194,9 +198,17 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                   )}
                 </Link>
               </Button>
-              <Button 
-                variant="default" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                aria-label="Toggle theme"
+              >
+                {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
                 className="gap-2"
                 onClick={() => setIsCreatePostOpen(true)}
               >
@@ -396,8 +408,17 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                     </Button>
                   </div>
 
-                  <Button 
-                    variant="default" 
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={toggleTheme}
+                  >
+                    {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                    {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                  </Button>
+
+                  <Button
+                    variant="default"
                     className="w-full gap-2"
                     onClick={() => { setIsCreatePostOpen(true); setIsMobileMenuOpen(false); }}
                   >
