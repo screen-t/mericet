@@ -64,6 +64,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   const [repostComment, setRepostComment] = useState("");
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
+  const [showAuthGate, setShowAuthGate] = useState(false);
   const [optimisticLiked, setOptimisticLiked] = useState(post.is_liked ?? false);
   const [optimisticLikeCount, setOptimisticLikeCount] = useState(post.like_count ?? post.likes_count ?? 0);
   const [editContent, setEditContent] = useState(post.content || "");
@@ -264,17 +265,20 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
 
   // Handle actions
   const handleLike = () => {
-    if (likeMutation.isPending) return; // prevent double-click
-    likeMutation.mutate(displayLiked);  // pass like state at click time — avoids stale closure
+    if (!user) { setShowAuthGate(true); return; }
+    if (likeMutation.isPending) return;
+    likeMutation.mutate(displayLiked);
   };
-  
+
   const handleComment = () => {
+    if (!user) { setShowAuthGate(true); return; }
     if (commentText.trim()) {
       commentMutation.mutate(commentText);
     }
   };
 
   const handleRepost = () => {
+    if (!user) { setShowAuthGate(true); return; }
     repostMutation.mutate();
   };
 
@@ -614,7 +618,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setShowComments(!showComments)}
+          onClick={() => { if (!user) { setShowAuthGate(true); return; } setShowComments(!showComments); }}
           className="gap-2"
         >
           <MessageCircle className="h-4 w-4" />
@@ -642,6 +646,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           variant="ghost"
           size="sm"
           onClick={() => {
+            if (!user) { setShowAuthGate(true); return; }
             if (post.is_saved) {
               if (!unsaveMutation.isPending) unsaveMutation.mutate();
             } else {
@@ -670,6 +675,25 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
         targetId={post.id}
         targetLabel="post"
       />
+
+      <Dialog open={showAuthGate} onOpenChange={setShowAuthGate}>
+        <DialogContent className="max-w-sm text-center">
+          <DialogHeader>
+            <DialogTitle>Join to interact</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-4">
+            Sign in or create a free account to like, comment, and save posts.
+          </p>
+          <div className="flex flex-col gap-2">
+            <a href="/login" className="w-full">
+              <Button className="w-full">Log in</Button>
+            </a>
+            <a href="/signup" className="w-full">
+              <Button variant="outline" className="w-full">Sign up</Button>
+            </a>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Comments Section */}
       {showComments && (

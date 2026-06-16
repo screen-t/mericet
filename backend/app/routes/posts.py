@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.lib.supabase import supabase
-from app.middleware.auth import require_auth
+from app.middleware.auth import require_auth, optional_auth
 from app.models.post import (
     PostCreate, PostUpdate, PostResponse,
     CommentCreate, CommentUpdate, CommentResponse,
@@ -277,7 +277,7 @@ def get_feed(
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/{post_id}", response_model=PostResponse)
-def get_post(post_id: str, user_id: Optional[str] = Depends(require_auth)):
+def get_post(post_id: str, user_id: Optional[str] = Depends(optional_auth)):
     """Get a single post by ID"""
     try:
         post = supabase.table("posts").select("*").eq("id", post_id).single().execute()
@@ -500,7 +500,7 @@ def get_saved_posts(
 @router.get("/{post_id}/comments", response_model=List[CommentResponse])
 def get_comments(
     post_id: str,
-    user_id: Optional[str] = Depends(require_auth),
+    user_id: Optional[str] = Depends(optional_auth),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0)
 ):
