@@ -668,6 +668,20 @@ const reports = {
     }).then(handleResponse),
 };
 
+const media = {
+  upload: async (file: File): Promise<{ url: string }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem(ACCESS_TOKEN_KEY) : null;
+    const res = await fetchWithAuth(`${API_BASE_URL}/media/upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    return handleResponse<{ url: string }>(res);
+  },
+};
+
 export const backendApi = {
   auth,
   profile,
@@ -679,4 +693,5 @@ export const backendApi = {
   saves,
   follows,
   reports,
+  media,
 };

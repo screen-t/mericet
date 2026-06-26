@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { backendApi } from "@/lib/backend-api";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { Post, Comment, CommentsResponse } from '@/types/api';
@@ -361,16 +360,8 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     try {
       const uploaded: string[] = [];
       for (const file of files) {
-        const ext = file.name.split(".").pop();
-        const path = `posts/${user?.id ?? "anon"}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error } = await supabase.storage
-          .from("post-media")
-          .upload(path, file, { upsert: false });
-        if (error) throw error;
-        const { data: urlData } = supabase.storage
-          .from("post-media")
-          .getPublicUrl(path);
-        uploaded.push(urlData.publicUrl);
+        const result = await backendApi.media.upload(file);
+        uploaded.push(result.url);
       }
 
       setEditMediaUrls((prev) => [...prev, ...uploaded]);
