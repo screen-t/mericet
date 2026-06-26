@@ -65,9 +65,10 @@ def signup(payload: SignupRequest, request: Request):
 
     user_id = auth_res.user.id
 
-    # Create user profile
+    # Create/update user profile — upsert handles the case where the DB trigger
+    # already inserted a placeholder row when the auth user was created.
     try:
-        profile_result = supabase.table("users").insert({
+        supabase.table("users").upsert({
             "id": user_id,
             "email": payload.email,
             "username": payload.username,
@@ -75,15 +76,7 @@ def signup(payload: SignupRequest, request: Request):
             "last_name": payload.last_name,
             "is_verified": False
         }).execute()
-        pass  # User profile created successfully
     except Exception as e:
-        error_str = str(e)
-        # Duplicate primary key means this email/account already exists
-        if "23505" in error_str or "duplicate key" in error_str.lower():
-            raise HTTPException(
-                status_code=409,
-                detail="An account with this email already exists. Please sign in instead."
-            )
         raise HTTPException(
             status_code=500,
             detail="Account created but profile setup failed. Please contact support."

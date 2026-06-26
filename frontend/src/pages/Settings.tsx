@@ -22,12 +22,16 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "@/lib/theme";
 
 const Settings = () => {
   const { toast } = useToast();
   const { logout, refreshUser } = useAuth();
+  const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
 
   // Fetch profile data
@@ -270,6 +274,10 @@ const Settings = () => {
             <TabsTrigger value="privacy" className="gap-2">
               <Shield className="h-4 w-4" />
               Privacy
+            </TabsTrigger>
+            <TabsTrigger value="appearance" className="gap-2">
+              <Palette className="h-4 w-4" />
+              Appearance
             </TabsTrigger>
           </TabsList>
 
@@ -652,6 +660,59 @@ const Settings = () => {
                   <LogOut className="h-4 w-4" />
                   Sign Out
                 </Button>
+              </div>
+            </motion.div>
+          </TabsContent>
+          {/* Appearance Tab */}
+          <TabsContent value="appearance">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-card rounded-xl border border-border p-6 space-y-6"
+            >
+              <div>
+                <h3 className="font-semibold mb-1">Theme</h3>
+                <p className="text-sm text-muted-foreground mb-6">
+                  Choose how Mericet looks for you.
+                </p>
+
+                <div className="grid grid-cols-2 gap-4 max-w-sm">
+                  {/* Light option */}
+                  <button
+                    onClick={() => setTheme("light")}
+                    className={`relative rounded-xl border-2 p-4 flex flex-col items-center gap-3 transition-all ${
+                      theme === "light"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40"
+                    }`}
+                  >
+                    <div className="h-14 w-14 rounded-full bg-[#F8FAFC] border border-border flex items-center justify-center shadow-sm">
+                      <Sun className="h-6 w-6 text-[#1A66FF]" />
+                    </div>
+                    <span className="text-sm font-medium">Light</span>
+                    {theme === "light" && (
+                      <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />
+                    )}
+                  </button>
+
+                  {/* Dark option */}
+                  <button
+                    onClick={() => setTheme("dark")}
+                    className={`relative rounded-xl border-2 p-4 flex flex-col items-center gap-3 transition-all ${
+                      theme === "dark"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40"
+                    }`}
+                  >
+                    <div className="h-14 w-14 rounded-full bg-[#060D1A] border border-border flex items-center justify-center shadow-sm">
+                      <Moon className="h-6 w-6 text-[#4D8AFF]" />
+                    </div>
+                    <span className="text-sm font-medium">Dark</span>
+                    {theme === "dark" && (
+                      <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </TabsContent>
