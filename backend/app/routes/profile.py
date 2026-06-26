@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
-from app.lib.supabase import supabase
-from app.lib.auth_helpers import check_username_availability
-from app.middleware.auth import require_auth
-from app.middleware.auth import optional_auth
+from app.middleware.auth import require_auth, optional_auth
+from app.deps import (
+    get_user_repo, get_work_experience_repo, get_education_repo,
+    get_skill_repo, get_storage_service, get_auth_service,
+)
 from app.models.profile import (
     ProfileUpdateRequest, ProfileResponse, PrivacySettingsUpdate,
     WorkExperienceCreate, WorkExperienceUpdate, WorkExperienceResponse,
@@ -10,186 +11,142 @@ from app.models.profile import (
     SkillCreate, SkillResponse
 )
 from typing import List, Optional
+import re
+import time
 
 router = APIRouter(prefix="/profile", tags=["Profile"])
 
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
+
 
 def _apply_privacy_filters(profile_data: dict, viewer_id: Optional[str]):
-    """Remove or mask fields from profile_data based on the user's privacy flags.
-
-    The function mutates and returns profile_data.
-    If the viewer is the profile owner, all fields are preserved.
-    """
     profile_user_id = profile_data.get("id")
     if not profile_user_id:
         return profile_data
-
-    # If the viewer is the owner, show everything
     if viewer_id == profile_user_id:
         return profile_data
-
-    # Email
     if not profile_data.get("email_visible", True):
         profile_data.pop("email", None)
-
-    # Connections count / list
     if not profile_data.get("connections_visible", True):
         profile_data.pop("connections_count", None)
         profile_data.pop("connections", None)
-
-    # Work history / education
     if not profile_data.get("work_history_visible", True):
         profile_data["work_experience"] = []
         profile_data["education"] = []
-
-    # Activity status / last active
     if not profile_data.get("activity_status_visible", True):
         profile_data.pop("last_active_at", None)
-
     return profile_data
+
+
+def _enrich_profile(profile_data, user_id, user_repo, work_repo, edu_repo, skill_repo):
+    profile_data["work_experience"] = work_repo.get_by_user(user_id)
+    profile_data["education"] = edu_repo.get_by_user(user_id)
+    profile_data["skills"] = skill_repo.get_by_user(user_id)
+    profile_data["connections_count"] = user_repo.get_connections_count(user_id)
+    profile_data["followers_count"] = user_repo.get_followers_count(user_id)
+    return profile_data
+
 
 # ==================== PROFILE CRUD ====================
 
 @router.get("/me")
-def get_my_profile(user_id: str = Depends(require_auth)):
+def get_my_profile(
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+    work_repo=Depends(get_work_experience_repo),
+    edu_repo=Depends(get_education_repo),
+    skill_repo=Depends(get_skill_repo),
+    auth_service=Depends(get_auth_service),
+):
     """Get current user's profile with nested work experience, education, and skills"""
-    try:
-        response = supabase.table("users").select("*").eq("id", user_id).single().execute()
-        if not response.data:
-            # Profile row missing — bootstrap it from auth metadata then retry
-            from app.routes.messages import ensure_user_exists
-            ensure_user_exists(user_id)
-            response = supabase.table("users").select("*").eq("id", user_id).single().execute()
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Profile not found")
-        profile_data = response.data
-        work_exp = supabase.table("work_experience").select("*").eq("user_id", user_id).order("start_date", desc=True).execute()
-        education = supabase.table("education").select("*").eq("user_id", user_id).order("start_date", desc=True).execute()
-        skills = supabase.table("user_skills").select("*").eq("user_id", user_id).execute()
-        profile_data["work_experience"] = work_exp.data or []
-        profile_data["education"] = education.data or []
-        profile_data["skills"] = skills.data or []
-        # Compute connections and followers counts from the connections table
-        try:
-            conn_count = supabase.table("connections").select("id", count="exact").or_(
-                f"requester_id.eq.{user_id},receiver_id.eq.{user_id}"
-            ).eq("status", "accepted").execute()
-            profile_data["connections_count"] = conn_count.count or 0
-        except Exception:
-            profile_data.setdefault("connections_count", 0)
-        # followers = users following this user
-        try:
-            follower_count = supabase.table("follows").select("id", count="exact").eq("following_id", user_id).execute()
-            profile_data["followers_count"] = follower_count.count or 0
-        except Exception:
-            profile_data.setdefault("followers_count", 0)
-        return profile_data
-    except HTTPException:
-        raise
-    except Exception as e:
+    profile_data = user_repo.get_by_id(user_id)
+    if not profile_data:
+        _ensure_user_exists(user_id, user_repo, auth_service)
+        profile_data = user_repo.get_by_id(user_id)
+    if not profile_data:
         raise HTTPException(status_code=404, detail="Profile not found")
+    return _enrich_profile(profile_data, user_id, user_repo, work_repo, edu_repo, skill_repo)
+
 
 @router.get("/{identifier}")
-def get_profile_by_username(identifier: str, viewer_id: Optional[str] = Depends(optional_auth)):
-    """Get user profile by username or user UUID (public), with nested work experience, education, and skills"""
-    import re
-    uuid_pattern = re.compile(
-        r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-        re.IGNORECASE
-    )
-    try:
-        if uuid_pattern.match(identifier):
-            response = supabase.table("users").select("*").eq("id", identifier).single().execute()
-        else:
-            response = supabase.table("users").select("*").eq("username", identifier).single().execute()
-        if not response.data:
-            raise HTTPException(status_code=404, detail="User not found")
-        profile_data = response.data
-        profile_user_id = profile_data["id"]
-        work_exp = supabase.table("work_experience").select("*").eq("user_id", profile_user_id).order("start_date", desc=True).execute()
-        education = supabase.table("education").select("*").eq("user_id", profile_user_id).order("start_date", desc=True).execute()
-        skills = supabase.table("user_skills").select("*").eq("user_id", profile_user_id).execute()
-        profile_data["work_experience"] = work_exp.data or []
-        profile_data["education"] = education.data or []
-        profile_data["skills"] = skills.data or []
-        # Compute connections and followers counts
-        try:
-            conn_count = supabase.table("connections").select("id", count="exact").or_(
-                f"requester_id.eq.{profile_user_id},receiver_id.eq.{profile_user_id}"
-            ).eq("status", "accepted").execute()
-            profile_data["connections_count"] = conn_count.count or 0
-        except Exception:
-            profile_data.setdefault("connections_count", 0)
-        try:
-            follower_count = supabase.table("follows").select("id", count="exact").eq("following_id", profile_user_id).execute()
-            profile_data["followers_count"] = follower_count.count or 0
-        except Exception:
-            profile_data.setdefault("followers_count", 0)
-        # Apply privacy filters based on stored flags and the viewing user
-        profile_data = _apply_privacy_filters(profile_data, viewer_id)
-        return profile_data
-    except HTTPException:
-        raise
-    except Exception as e:
+def get_profile_by_username(
+    identifier: str,
+    viewer_id: Optional[str] = Depends(optional_auth),
+    user_repo=Depends(get_user_repo),
+    work_repo=Depends(get_work_experience_repo),
+    edu_repo=Depends(get_education_repo),
+    skill_repo=Depends(get_skill_repo),
+):
+    """Get user profile by username or user UUID (public)"""
+    if _UUID_RE.match(identifier):
+        profile_data = user_repo.get_by_id(identifier)
+    else:
+        profile_data = user_repo.get_by_username(identifier)
+    if not profile_data:
         raise HTTPException(status_code=404, detail="User not found")
+    profile_user_id = profile_data["id"]
+    _enrich_profile(profile_data, profile_user_id, user_repo, work_repo, edu_repo, skill_repo)
+    return _apply_privacy_filters(profile_data, viewer_id)
+
 
 @router.put("/me")
-def update_my_profile(payload: ProfileUpdateRequest, user_id: str = Depends(require_auth)):
+def update_my_profile(
+    payload: ProfileUpdateRequest,
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+):
     """Update current user's profile"""
+    update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    current = user_repo.get_by_id(user_id, "username, email")
+    current_username = (current or {}).get("username")
+    current_email = (current or {}).get("email")
+
+    if "username" in update_data:
+        new_username = update_data["username"]
+        if current_username != new_username and not user_repo.check_username_available(new_username):
+            raise HTTPException(status_code=409, detail="Username already taken")
+
+    if "email" in update_data:
+        new_email = str(update_data["email"]).strip().lower()
+        update_data["email"] = new_email
+        if current_email != new_email and not user_repo.check_email_available(new_email):
+            raise HTTPException(status_code=409, detail="Email already in use")
+
+    update_data["updated_at"] = "now()"
+
     try:
-        # Build update dictionary excluding None values
-        update_data = {k: v for k, v in payload.dict().items() if v is not None}
-        
-        if not update_data:
-            raise HTTPException(status_code=400, detail="No fields to update")
-
-        current_user = supabase.table("users").select("username,email").eq("id", user_id).single().execute()
-        current_username = (current_user.data or {}).get("username")
-        current_email = (current_user.data or {}).get("email")
-
-        # Handle username updates explicitly to provide clear conflict errors.
-        if "username" in update_data:
-            new_username = update_data["username"]
-
-            if current_username != new_username and not check_username_availability(new_username):
-                raise HTTPException(status_code=409, detail="Username already taken")
-
-        if "email" in update_data:
-            new_email = str(update_data["email"]).strip().lower()
-            update_data["email"] = new_email
-
-            if current_email != new_email:
-                existing = supabase.table("users").select("id").eq("email", new_email).limit(1).execute()
-                if getattr(existing, "data", None):
-                    raise HTTPException(status_code=409, detail="Email already in use")
-        
-        # Add updated_at timestamp
-        update_data["updated_at"] = "now()"
-        
-        response = supabase.table("users").update(update_data).eq("id", user_id).execute()
-        
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Profile not found")
-        
-        return {"message": "Profile updated successfully", "data": response.data[0]}
-    except HTTPException:
-        raise
+        updated = user_repo.update(user_id, update_data)
     except Exception as e:
-        # Fall back to conflict status for DB-level unique violations.
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
             if "email" in str(e).lower():
                 raise HTTPException(status_code=409, detail="Email already in use")
             raise HTTPException(status_code=409, detail="Username already taken")
         raise HTTPException(status_code=400, detail=str(e))
 
+    if not updated:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"message": "Profile updated successfully", "data": updated}
+
+
 # ==================== IMAGE UPLOADS ====================
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
+
 
 @router.post("/upload-avatar")
-async def upload_avatar(file: UploadFile = File(...), user_id: str = Depends(require_auth)):
-    """Upload a profile avatar image to Supabase Storage and update the user's avatar_url"""
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+    storage=Depends(get_storage_service),
+):
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are allowed")
     contents = await file.read()
@@ -197,24 +154,19 @@ async def upload_avatar(file: UploadFile = File(...), user_id: str = Depends(req
         raise HTTPException(status_code=400, detail="Image must be smaller than 5 MB")
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
     path = f"{user_id}/avatar.{ext}"
-    try:
-        # upsert=True replaces existing file
-        supabase.storage.from_("avatars").upload(path, contents, {"content-type": file.content_type, "upsert": "true"})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Storage upload failed: {str(e)}")
-    public_url = supabase.storage.from_("avatars").get_public_url(path)
-    # append cache-bust so the browser refreshes the image
-    import time
+    public_url = storage.upload("avatars", path, contents, file.content_type)
     public_url = f"{public_url}?t={int(time.time())}"
-    try:
-        supabase.table("users").update({"avatar_url": public_url}).eq("id", user_id).execute()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save avatar URL: {str(e)}")
+    user_repo.update(user_id, {"avatar_url": public_url})
     return {"avatar_url": public_url}
 
+
 @router.post("/upload-cover")
-async def upload_cover(file: UploadFile = File(...), user_id: str = Depends(require_auth)):
-    """Upload a cover image to Supabase Storage and update the user's cover_url"""
+async def upload_cover(
+    file: UploadFile = File(...),
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+    storage=Depends(get_storage_service),
+):
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are allowed")
     contents = await file.read()
@@ -222,261 +174,240 @@ async def upload_cover(file: UploadFile = File(...), user_id: str = Depends(requ
         raise HTTPException(status_code=400, detail="Image must be smaller than 5 MB")
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
     path = f"{user_id}/cover.{ext}"
-    try:
-        supabase.storage.from_("covers").upload(path, contents, {"content-type": file.content_type, "upsert": "true"})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Storage upload failed: {str(e)}")
-    public_url = supabase.storage.from_("covers").get_public_url(path)
-    import time
+    public_url = storage.upload("covers", path, contents, file.content_type)
     public_url = f"{public_url}?t={int(time.time())}"
-    try:
-        supabase.table("users").update({"cover_url": public_url}).eq("id", user_id).execute()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save cover URL: {str(e)}")
+    user_repo.update(user_id, {"cover_url": public_url})
     return {"cover_url": public_url}
 
+
 @router.put("/privacy")
-def update_privacy_settings(payload: PrivacySettingsUpdate, user_id: str = Depends(require_auth)):
-    """Update user's privacy settings"""
-    try:
-        update_data = {k: v for k, v in payload.dict().items() if v is not None}
-        
-        if not update_data:
-            raise HTTPException(status_code=400, detail="No settings to update")
-        
-        response = supabase.table("users").update(update_data).eq("id", user_id).execute()
-        
-        return {"message": "Privacy settings updated", "data": response.data[0]}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def update_privacy_settings(
+    payload: PrivacySettingsUpdate,
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+):
+    update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No settings to update")
+    updated = user_repo.update(user_id, update_data)
+    return {"message": "Privacy settings updated", "data": updated}
+
 
 # ==================== WORK EXPERIENCE ====================
 
 @router.get("/work-experience", response_model=List[WorkExperienceResponse])
-def get_work_experience(user_id: str = Depends(require_auth)):
-    """Get current user's work experience"""
-    try:
-        response = supabase.table("work_experience").select("*").eq("user_id", user_id).order("start_date", desc=True).execute()
-        return response.data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def get_work_experience(
+    user_id: str = Depends(require_auth),
+    work_repo=Depends(get_work_experience_repo),
+):
+    return work_repo.get_by_user(user_id)
+
 
 @router.get("/work-experience/{username}", response_model=List[WorkExperienceResponse])
-def get_user_work_experience(username: str):
-    """Get work experience for a specific user by username"""
-    try:
-        # First get user_id from username
-        user_response = supabase.table("users").select("id").eq("username", username).single().execute()
-        if not user_response.data:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        response = supabase.table("work_experience").select("*").eq("user_id", user_response.data["id"]).order("start_date", desc=True).execute()
-        return response.data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def get_user_work_experience(
+    username: str,
+    user_repo=Depends(get_user_repo),
+    work_repo=Depends(get_work_experience_repo),
+):
+    user = user_repo.get_by_username(username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return work_repo.get_by_user(user["id"])
+
 
 @router.post("/work-experience")
-def create_work_experience(payload: WorkExperienceCreate, user_id: str = Depends(require_auth)):
-    """Add work experience"""
-    try:
-        from datetime import date as date_type
-        data = payload.dict()
-        data["user_id"] = user_id
-        for field in ("start_date", "end_date"):
-            if isinstance(data.get(field), date_type):
-                data[field] = data[field].isoformat()
-        
-        response = supabase.table("work_experience").insert(data).execute()
-        return {"message": "Work experience added", "data": response.data[0]}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def create_work_experience(
+    payload: WorkExperienceCreate,
+    user_id: str = Depends(require_auth),
+    work_repo=Depends(get_work_experience_repo),
+):
+    from datetime import date as date_type
+    data = payload.dict()
+    data["user_id"] = user_id
+    for field in ("start_date", "end_date"):
+        if isinstance(data.get(field), date_type):
+            data[field] = data[field].isoformat()
+    return {"message": "Work experience added", "data": work_repo.create(data)}
+
 
 @router.put("/work-experience/{experience_id}")
-def update_work_experience(experience_id: str, payload: WorkExperienceUpdate, user_id: str = Depends(require_auth)):
-    """Update work experience"""
-    try:
-        from datetime import date as date_type
-        update_data = {k: v for k, v in payload.dict().items() if v is not None}
-        # When marking as current, explicitly clear end_date in the DB
-        if payload.is_current:
-            update_data["end_date"] = None
-        
-        if not update_data:
-            raise HTTPException(status_code=400, detail="No fields to update")
-        
-        for field in ("start_date", "end_date"):
-            if isinstance(update_data.get(field), date_type):
-                update_data[field] = update_data[field].isoformat()
-        
-        # Verify ownership
-        check = supabase.table("work_experience").select("user_id").eq("id", experience_id).single().execute()
-        if not check.data or check.data["user_id"] != user_id:
-            raise HTTPException(status_code=403, detail="Not authorized")
-        
-        response = supabase.table("work_experience").update(update_data).eq("id", experience_id).execute()
-        return {"message": "Work experience updated", "data": response.data[0]}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def update_work_experience(
+    experience_id: str,
+    payload: WorkExperienceUpdate,
+    user_id: str = Depends(require_auth),
+    work_repo=Depends(get_work_experience_repo),
+):
+    from datetime import date as date_type
+    owner = work_repo.get_owner(experience_id)
+    if owner != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    if payload.is_current:
+        update_data["end_date"] = None
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    for field in ("start_date", "end_date"):
+        if isinstance(update_data.get(field), date_type):
+            update_data[field] = update_data[field].isoformat()
+    return {"message": "Work experience updated", "data": work_repo.update(experience_id, update_data)}
+
 
 @router.delete("/work-experience/{experience_id}")
-def delete_work_experience(experience_id: str, user_id: str = Depends(require_auth)):
-    """Delete work experience"""
-    try:
-        # Verify ownership
-        check = supabase.table("work_experience").select("user_id").eq("id", experience_id).single().execute()
-        if not check.data or check.data["user_id"] != user_id:
-            raise HTTPException(status_code=403, detail="Not authorized")
-        
-        supabase.table("work_experience").delete().eq("id", experience_id).execute()
-        return {"message": "Work experience deleted"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def delete_work_experience(
+    experience_id: str,
+    user_id: str = Depends(require_auth),
+    work_repo=Depends(get_work_experience_repo),
+):
+    owner = work_repo.get_owner(experience_id)
+    if owner != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    work_repo.delete(experience_id)
+    return {"message": "Work experience deleted"}
+
 
 # ==================== EDUCATION ====================
 
 @router.get("/education", response_model=List[EducationResponse])
-def get_education(user_id: str = Depends(require_auth)):
-    """Get current user's education"""
-    try:
-        response = supabase.table("education").select("*").eq("user_id", user_id).order("start_date", desc=True).execute()
-        return response.data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def get_education(
+    user_id: str = Depends(require_auth),
+    edu_repo=Depends(get_education_repo),
+):
+    return edu_repo.get_by_user(user_id)
+
 
 @router.get("/education/{username}", response_model=List[EducationResponse])
-def get_user_education(username: str):
-    """Get education for a specific user by username"""
-    try:
-        # First get user_id from username
-        user_response = supabase.table("users").select("id").eq("username", username).single().execute()
-        if not user_response.data:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        response = supabase.table("education").select("*").eq("user_id", user_response.data["id"]).order("start_date", desc=True).execute()
-        return response.data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def get_user_education(
+    username: str,
+    user_repo=Depends(get_user_repo),
+    edu_repo=Depends(get_education_repo),
+):
+    user = user_repo.get_by_username(username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return edu_repo.get_by_user(user["id"])
+
 
 @router.post("/education")
-def create_education(payload: EducationCreate, user_id: str = Depends(require_auth)):
-    """Add education"""
-    try:
-        from datetime import date as date_type
-        data = payload.dict()
-        data["user_id"] = user_id
-        for field in ("start_date", "end_date"):
-            if isinstance(data.get(field), date_type):
-                data[field] = data[field].isoformat()
-        
-        response = supabase.table("education").insert(data).execute()
-        return {"message": "Education added", "data": response.data[0]}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def create_education(
+    payload: EducationCreate,
+    user_id: str = Depends(require_auth),
+    edu_repo=Depends(get_education_repo),
+):
+    from datetime import date as date_type
+    data = payload.dict()
+    data["user_id"] = user_id
+    for field in ("start_date", "end_date"):
+        if isinstance(data.get(field), date_type):
+            data[field] = data[field].isoformat()
+    return {"message": "Education added", "data": edu_repo.create(data)}
+
 
 @router.put("/education/{education_id}")
-def update_education(education_id: str, payload: EducationUpdate, user_id: str = Depends(require_auth)):
-    """Update education"""
-    try:
-        from datetime import date as date_type
-        update_data = {k: v for k, v in payload.dict().items() if v is not None}
-        # When marking as current, explicitly clear end_date in the DB
-        if payload.is_current:
-            update_data["end_date"] = None
-        
-        if not update_data:
-            raise HTTPException(status_code=400, detail="No fields to update")
-        
-        for field in ("start_date", "end_date"):
-            if isinstance(update_data.get(field), date_type):
-                update_data[field] = update_data[field].isoformat()
-        
-        # Verify ownership
-        check = supabase.table("education").select("user_id").eq("id", education_id).single().execute()
-        if not check.data or check.data["user_id"] != user_id:
-            raise HTTPException(status_code=403, detail="Not authorized")
-        
-        response = supabase.table("education").update(update_data).eq("id", education_id).execute()
-        return {"message": "Education updated", "data": response.data[0]}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def update_education(
+    education_id: str,
+    payload: EducationUpdate,
+    user_id: str = Depends(require_auth),
+    edu_repo=Depends(get_education_repo),
+):
+    from datetime import date as date_type
+    owner = edu_repo.get_owner(education_id)
+    if owner != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    if payload.is_current:
+        update_data["end_date"] = None
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    for field in ("start_date", "end_date"):
+        if isinstance(update_data.get(field), date_type):
+            update_data[field] = update_data[field].isoformat()
+    return {"message": "Education updated", "data": edu_repo.update(education_id, update_data)}
+
 
 @router.delete("/education/{education_id}")
-def delete_education(education_id: str, user_id: str = Depends(require_auth)):
-    """Delete education"""
-    try:
-        # Verify ownership
-        check = supabase.table("education").select("user_id").eq("id", education_id).single().execute()
-        if not check.data or check.data["user_id"] != user_id:
-            raise HTTPException(status_code=403, detail="Not authorized")
-        
-        supabase.table("education").delete().eq("id", education_id).execute()
-        return {"message": "Education deleted"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def delete_education(
+    education_id: str,
+    user_id: str = Depends(require_auth),
+    edu_repo=Depends(get_education_repo),
+):
+    owner = edu_repo.get_owner(education_id)
+    if owner != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    edu_repo.delete(education_id)
+    return {"message": "Education deleted"}
+
 
 # ==================== SKILLS ====================
 
 @router.get("/skills", response_model=List[SkillResponse])
-def get_skills(user_id: str = Depends(require_auth)):
-    """Get current user's skills"""
-    try:
-        response = supabase.table("user_skills").select("*").eq("user_id", user_id).execute()
-        return response.data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def get_skills(
+    user_id: str = Depends(require_auth),
+    skill_repo=Depends(get_skill_repo),
+):
+    return skill_repo.get_by_user(user_id)
+
 
 @router.get("/skills/{username}", response_model=List[SkillResponse])
-def get_user_skills(username: str):
-    """Get skills for a specific user by username"""
-    try:
-        # First get user_id from username
-        user_response = supabase.table("users").select("id").eq("username", username).single().execute()
-        if not user_response.data:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        response = supabase.table("user_skills").select("*").eq("user_id", user_response.data["id"]).execute()
-        return response.data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def get_user_skills(
+    username: str,
+    user_repo=Depends(get_user_repo),
+    skill_repo=Depends(get_skill_repo),
+):
+    user = user_repo.get_by_username(username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return skill_repo.get_by_user(user["id"])
+
 
 @router.post("/skills")
-def add_skill(payload: SkillCreate, user_id: str = Depends(require_auth)):
-    """Add a skill"""
+def add_skill(
+    payload: SkillCreate,
+    user_id: str = Depends(require_auth),
+    skill_repo=Depends(get_skill_repo),
+):
+    data = {"user_id": user_id, "skill": payload.skill.lower().strip(), "endorsement_count": 0}
     try:
-        data = {
-            "user_id": user_id,
-            "skill": payload.skill.lower().strip(),
-            "endorsement_count": 0
-        }
-        
-        response = supabase.table("user_skills").insert(data).execute()
-        return {"message": "Skill added", "data": response.data[0]}
+        return {"message": "Skill added", "data": skill_repo.create(data)}
     except Exception as e:
-        # Check for unique constraint violation
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
             raise HTTPException(status_code=409, detail="Skill already exists")
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @router.delete("/skills/{skill_id}")
-def delete_skill(skill_id: str, user_id: str = Depends(require_auth)):
-    """Delete a skill"""
+def delete_skill(
+    skill_id: str,
+    user_id: str = Depends(require_auth),
+    skill_repo=Depends(get_skill_repo),
+):
+    owner = skill_repo.get_owner(skill_id)
+    if owner != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    skill_repo.delete(skill_id)
+    return {"message": "Skill deleted"}
+
+
+# ==================== HELPERS ====================
+
+def _ensure_user_exists(user_id: str, user_repo, auth_service):
+    """Auto-create a users row for any auth user not yet in the DB."""
     try:
-        # Verify ownership
-        check = supabase.table("user_skills").select("user_id").eq("id", skill_id).single().execute()
-        if not check.data or check.data["user_id"] != user_id:
-            raise HTTPException(status_code=403, detail="Not authorized")
-        
-        supabase.table("user_skills").delete().eq("id", skill_id).execute()
-        return {"message": "Skill deleted"}
-    except HTTPException:
-        raise
+        existing = user_repo.get_by_id(user_id, "id")
+        if existing:
+            return
+        auth_user = auth_service.get_user_by_id(user_id)
+        email = auth_user.email if auth_user and auth_user.email else f"{user_id[:8]}@placeholder.local"
+        username = f"user_{user_id[:8]}"
+        metadata = auth_user.user_metadata if auth_user else {}
+        first_name = metadata.get("first_name") or "User"
+        last_name = metadata.get("last_name") or username
+        user_repo.create({
+            "id": user_id,
+            "email": email,
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+            "is_verified": False,
+        })
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        print(f"ensure_user_exists error for {user_id}: {e}")

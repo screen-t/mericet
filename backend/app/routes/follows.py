@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.middleware.auth import require_auth
-from app.deps import get_follow_repo
+from app.deps import get_follow_repo, get_user_repo
 from app.repositories.protocols import FollowRepository
 
 router = APIRouter(prefix="/follows", tags=["Follows"])
@@ -46,6 +46,7 @@ def follow_status(
 def list_following(
     user_id: str = Depends(require_auth),
     follow_repo: FollowRepository = Depends(get_follow_repo),
+    user_repo=Depends(get_user_repo),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
@@ -53,17 +54,14 @@ def list_following(
     ids = follow_repo.get_following_ids(user_id, limit, offset)
     if not ids:
         return []
-    from app.lib.supabase import supabase
-    users = supabase.table("users") \
-        .select("id, username, first_name, last_name, avatar_url, headline") \
-        .in_("id", ids).execute()
-    return users.data or []
+    return user_repo.get_many_by_ids(ids, "id, username, first_name, last_name, avatar_url, headline")
 
 
 @router.get("/followers")
 def list_followers(
     user_id: str = Depends(require_auth),
     follow_repo: FollowRepository = Depends(get_follow_repo),
+    user_repo=Depends(get_user_repo),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
@@ -71,8 +69,4 @@ def list_followers(
     ids = follow_repo.get_follower_ids(user_id, limit, offset)
     if not ids:
         return []
-    from app.lib.supabase import supabase
-    users = supabase.table("users") \
-        .select("id, username, first_name, last_name, avatar_url, headline") \
-        .in_("id", ids).execute()
-    return users.data or []
+    return user_repo.get_many_by_ids(ids, "id, username, first_name, last_name, avatar_url, headline")

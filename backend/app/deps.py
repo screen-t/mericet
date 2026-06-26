@@ -47,39 +47,46 @@ def get_report_repo():
     return SupabaseReportRepository(supabase)
 
 
-# --- Phase 4+ (uncomment as implemented) ---
+from app.repositories.supabase.user_repo import (
+    SupabaseUserRepository,
+    SupabaseWorkExperienceRepository,
+    SupabaseEducationRepository,
+    SupabaseSkillRepository,
+    SupabaseLoginActivityRepository,
+)
 
-# from app.repositories.supabase.user_repo import (
-#     SupabaseUserRepository,
-#     SupabaseWorkExperienceRepository,
-#     SupabaseEducationRepository,
-#     SupabaseSkillRepository,
-#     SupabaseLoginActivityRepository,
-# )
+
+@lru_cache(maxsize=1)
+def get_user_repo():
+    return SupabaseUserRepository(supabase)
+
+
+@lru_cache(maxsize=1)
+def get_work_experience_repo():
+    return SupabaseWorkExperienceRepository(supabase)
+
+
+@lru_cache(maxsize=1)
+def get_education_repo():
+    return SupabaseEducationRepository(supabase)
+
+
+@lru_cache(maxsize=1)
+def get_skill_repo():
+    return SupabaseSkillRepository(supabase)
+
+
+@lru_cache(maxsize=1)
+def get_login_activity_repo():
+    return SupabaseLoginActivityRepository(supabase)
+
+
+# --- Phase 6+ (uncomment as implemented) ---
+
 # from app.repositories.supabase.connection_repo import SupabaseConnectionRepository
 # from app.repositories.supabase.save_repo import SupabaseSaveRepository
 # from app.repositories.supabase.post_repo import SupabasePostRepository
 # from app.repositories.supabase.message_repo import SupabaseMessageRepository
-
-# @lru_cache(maxsize=1)
-# def get_user_repo():
-#     return SupabaseUserRepository(supabase)
-
-# @lru_cache(maxsize=1)
-# def get_work_experience_repo():
-#     return SupabaseWorkExperienceRepository(supabase)
-
-# @lru_cache(maxsize=1)
-# def get_education_repo():
-#     return SupabaseEducationRepository(supabase)
-
-# @lru_cache(maxsize=1)
-# def get_skill_repo():
-#     return SupabaseSkillRepository(supabase)
-
-# @lru_cache(maxsize=1)
-# def get_login_activity_repo():
-#     return SupabaseLoginActivityRepository(supabase)
 
 # @lru_cache(maxsize=1)
 # def get_connection_repo():
