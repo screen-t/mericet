@@ -37,7 +37,9 @@ import {
   Twitter,
   Instagram,
   Github,
+  StickyNote,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   DropdownMenu,
@@ -56,6 +58,8 @@ export const ProfilePage = () => {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [showReportDialog, setShowReportDialog] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [noteEditing, setNoteEditing] = useState(false);
 
   const uploadAvatarMutation = useMutation({
     mutationFn: (file: File) => backendApi.profile.uploadAvatar(file),
@@ -95,6 +99,26 @@ export const ProfilePage = () => {
       queryClient.invalidateQueries({ queryKey: ['muteStatus', profileUserId] });
     },
     onError: () => toast({ title: "Failed to update mute status", variant: "destructive" }),
+  });
+
+  const { data: noteData } = useQuery({
+    queryKey: ['connectionNote', profileUserId],
+    queryFn: () => backendApi.connections.getConnectionNote(profileUserId!),
+    enabled: !isOwnProfile && !!profileUserId,
+  });
+
+  useEffect(() => {
+    if (noteData?.note !== undefined) setNoteText(noteData.note || "");
+  }, [noteData]);
+
+  const saveNoteMutation = useMutation({
+    mutationFn: (note: string) => backendApi.connections.saveConnectionNote(profileUserId!, note),
+    onSuccess: () => {
+      toast({ title: noteText.trim() ? "Note saved" : "Note removed" });
+      setNoteEditing(false);
+      queryClient.invalidateQueries({ queryKey: ['connectionNote', profileUserId] });
+    },
+    onError: () => toast({ title: "Failed to save note", variant: "destructive" }),
   });
 
   // Fetch profile data
@@ -627,6 +651,56 @@ export const ProfilePage = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
+              {/* Private Note (only on other profiles) */}
+              {!isOwnProfile && connectionStatus?.status === 'accepted' && (
+                <Card className="p-4 mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <StickyNote className="w-4 h-4" />
+                      Private Note
+                    </h3>
+                    {!noteEditing && (
+                      <Button variant="ghost" size="sm" onClick={() => setNoteEditing(true)}>
+                        {noteText ? "Edit" : "Add note"}
+                      </Button>
+                    )}
+                  </div>
+                  {noteEditing ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        placeholder="e.g. Met at conference, interested in AI..."
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        rows={3}
+                        maxLength={500}
+                      />
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">{noteText.length}/500</span>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setNoteText(noteData?.note || "");
+                            setNoteEditing(false);
+                          }}>
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => saveNoteMutation.mutate(noteText)}
+                            disabled={saveNoteMutation.isPending}
+                          >
+                            {saveNoteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : noteText ? (
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{noteText}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Only you can see this note.</p>
+                  )}
+                </Card>
+              )}
+
               <SkillsSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
               
               {(isOwnProfile || profile.work_history_visible) && profile.current_position && (

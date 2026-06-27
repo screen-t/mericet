@@ -110,3 +110,27 @@ class SupabaseConnectionRepository:
             .not_.in_("id", list(exclude_ids)) \
             .eq("is_active", True).limit(limit).execute()
         return result.data or []
+
+    # --- Connection Notes ---
+
+    def get_note(self, user_id: str, target_user_id: str) -> Optional[dict]:
+        try:
+            result = self._client.table("connection_notes").select("*") \
+                .eq("user_id", user_id).eq("target_user_id", target_user_id) \
+                .maybe_single().execute()
+            return result.data if result and result.data else None
+        except Exception:
+            return None
+
+    def upsert_note(self, user_id: str, target_user_id: str, note: str) -> dict:
+        result = self._client.table("connection_notes").upsert({
+            "user_id": user_id,
+            "target_user_id": target_user_id,
+            "note": note,
+            "updated_at": "now()",
+        }).execute()
+        return result.data[0]
+
+    def delete_note(self, user_id: str, target_user_id: str) -> None:
+        self._client.table("connection_notes").delete() \
+            .eq("user_id", user_id).eq("target_user_id", target_user_id).execute()

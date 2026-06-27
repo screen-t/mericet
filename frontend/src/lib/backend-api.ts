@@ -349,6 +349,16 @@ const connections = {
       method: "POST",
       headers: getAuthHeaders(),
     }).then(handleResponse),
+  getConnectionNote: (targetUserId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/connections/notes/${targetUserId}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ note: string | null }>),
+  saveConnectionNote: (targetUserId: string, note: string) =>
+    fetchWithAuth(`${API_BASE_URL}/connections/notes/${targetUserId}`, {
+      method: "PUT",
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    }).then(handleResponse),
 };
 
 // --- Messages ---

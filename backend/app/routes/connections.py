@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from app.middleware.auth import require_auth
 from app.deps import get_connection_repo, get_user_repo
 from app.models.connection import ConnectionRequest, ConnectionUpdate, ConnectionResponse
@@ -213,3 +213,30 @@ def unblock_user(
         return {"message": "User already unblocked"}
     conn_repo.delete_between(user_id, other_user_id)
     return {"message": "User unblocked"}
+
+
+# ==================== CONNECTION NOTES ====================
+
+@router.get("/notes/{target_user_id}")
+def get_connection_note(
+    target_user_id: str,
+    user_id: str = Depends(require_auth),
+    conn_repo=Depends(get_connection_repo),
+):
+    note = conn_repo.get_note(user_id, target_user_id)
+    return {"note": note.get("note") if note else None}
+
+
+@router.put("/notes/{target_user_id}")
+def save_connection_note(
+    target_user_id: str,
+    user_id: str = Depends(require_auth),
+    conn_repo=Depends(get_connection_repo),
+    body: dict = Body(...),
+):
+    note_text = (body or {}).get("note", "")
+    if not note_text.strip():
+        conn_repo.delete_note(user_id, target_user_id)
+        return {"message": "Note removed"}
+    conn_repo.upsert_note(user_id, target_user_id, note_text.strip()[:500])
+    return {"message": "Note saved"}

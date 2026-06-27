@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { SaveToFolderModal } from "@/components/feed/SaveToFolderModal";
+import { SharePostModal } from "@/components/feed/SharePostModal";
 import { ReportDialog } from "@/components/modals/ReportDialog";
 
 interface PostCardNewProps {
@@ -61,6 +62,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   const [commentText, setCommentText] = useState("");
   const [showRepostDialog, setShowRepostDialog] = useState(false);
   const [showUndoRepostDialog, setShowUndoRepostDialog] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [repostComment, setRepostComment] = useState("");
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
@@ -637,9 +639,22 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           <span>{post.repost_count ?? post.reposts_count ?? 0}</span>
         </Button>
 
-        <Button variant="ghost" size="sm" onClick={handleCopyLink} className="gap-2">
-          <Share2 className="h-4 w-4" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="gap-2">
+              <Share2 className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleCopyLink}>Copy link</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              if (!user) { setShowAuthGate(true); return; }
+              setShowShareModal(true);
+            }}>
+              Send in message
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <Button
           variant="ghost"
@@ -657,6 +672,12 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           <Bookmark className={cn("h-4 w-4 transition-all", post.is_saved && "fill-current")} />
         </Button>
       </div>
+
+      <SharePostModal
+        postId={post.id}
+        open={showShareModal}
+        onOpenChange={setShowShareModal}
+      />
 
       <SaveToFolderModal
         postId={post.id}
