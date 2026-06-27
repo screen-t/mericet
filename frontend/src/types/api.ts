@@ -32,6 +32,7 @@ export interface User {
   updated_at: string;
   connections_count?: number;
   followers_count?: number;
+  last_active_at?: string;
 }
 
 export interface Profile extends User {

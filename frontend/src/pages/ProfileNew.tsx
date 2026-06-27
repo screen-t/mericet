@@ -356,6 +356,36 @@ export const ProfilePage = () => {
                       </div>
                     )}
 
+                    {/* Activity Status */}
+                    {!isOwnProfile && profile.last_active_at && (
+                      <div className="mt-2">
+                        {(() => {
+                          const lastActive = new Date(profile.last_active_at);
+                          const now = new Date();
+                          const diffMs = now.getTime() - lastActive.getTime();
+                          const diffMin = Math.floor(diffMs / 60000);
+                          const isOnline = diffMin < 5;
+                          if (isOnline) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-green-600">
+                                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                Active now
+                              </span>
+                            );
+                          }
+                          let timeAgo: string;
+                          if (diffMin < 60) timeAgo = `${diffMin}m ago`;
+                          else if (diffMin < 1440) timeAgo = `${Math.floor(diffMin / 60)}h ago`;
+                          else timeAgo = `${Math.floor(diffMin / 1440)}d ago`;
+                          return (
+                            <span className="text-xs text-muted-foreground">
+                              Last seen {timeAgo}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     {/* Stats */}
                     {(isOwnProfile || profile.connections_visible) && (
                       <div className="flex gap-6 mt-4 text-sm">
