@@ -27,6 +27,74 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/lib/theme";
+import { Link } from "react-router-dom";
+import { Connection } from "@/types/api";
+
+const BlockedUsersSection = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: blockedData, isLoading } = useQuery({
+    queryKey: ['connections', 'blocked'],
+    queryFn: () => backendApi.connections.getConnections('blocked', 100, 0),
+  });
+
+  const unblockMutation = useMutation({
+    mutationFn: (userId: string) => backendApi.connections.unblockUser(userId),
+    onSuccess: () => {
+      toast({ title: "User unblocked" });
+      queryClient.invalidateQueries({ queryKey: ['connections', 'blocked'] });
+    },
+    onError: () => toast({ title: "Failed to unblock user", variant: "destructive" }),
+  });
+
+  const blocked = (blockedData?.connections || []).filter(
+    (c: Connection) => c.user && c.user.id
+  );
+
+  return (
+    <div>
+      <h3 className="font-semibold mb-4">Blocked Users</h3>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : blocked.length === 0 ? (
+        <p className="text-sm text-muted-foreground">You haven't blocked anyone.</p>
+      ) : (
+        <div className="space-y-3">
+          {blocked.map((conn: Connection) => (
+            <div key={conn.id} className="flex items-center justify-between p-3 rounded-lg border">
+              <Link to={`/profile/${conn.user?.id}`} className="flex items-center gap-3 min-w-0">
+                <UserAvatar
+                  src={conn.user?.avatar_url}
+                  name={`${conn.user?.first_name} ${conn.user?.last_name}`}
+                  size="sm"
+                />
+                <div className="min-w-0">
+                  <p className="font-medium text-sm truncate">
+                    {conn.user?.first_name} {conn.user?.last_name}
+                  </p>
+                  {conn.user?.username && (
+                    <p className="text-xs text-muted-foreground">@{conn.user.username}</p>
+                  )}
+                </div>
+              </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => unblockMutation.mutate(conn.user?.id || conn.id)}
+                disabled={unblockMutation.isPending}
+              >
+                Unblock
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Settings = () => {
   const { toast } = useToast();
@@ -748,6 +816,11 @@ const Settings = () => {
                   </div>
                 </div>
               </div>
+
+              <Separator />
+
+              {/* Blocked Users */}
+              <BlockedUsersSection />
 
               <Separator />
 
