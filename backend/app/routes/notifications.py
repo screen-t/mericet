@@ -81,6 +81,39 @@ def clear_all_notifications(
     return {"message": "Read notifications cleared"}
 
 
+# ==================== MUTE ====================
+
+@router.post("/mute/{target_user_id}")
+def mute_user_notifications(
+    target_user_id: str,
+    user_id: str = Depends(require_auth),
+    notif_repo: NotificationRepository = Depends(get_notification_repo),
+):
+    if notif_repo.is_muted(user_id, target_user_id):
+        return {"message": "Already muted"}
+    notif_repo.mute_user(user_id, target_user_id)
+    return {"message": "User muted"}
+
+
+@router.delete("/mute/{target_user_id}")
+def unmute_user_notifications(
+    target_user_id: str,
+    user_id: str = Depends(require_auth),
+    notif_repo: NotificationRepository = Depends(get_notification_repo),
+):
+    notif_repo.unmute_user(user_id, target_user_id)
+    return {"message": "User unmuted"}
+
+
+@router.get("/mute/status/{target_user_id}")
+def get_mute_status(
+    target_user_id: str,
+    user_id: str = Depends(require_auth),
+    notif_repo: NotificationRepository = Depends(get_notification_repo),
+):
+    return {"is_muted": notif_repo.is_muted(user_id, target_user_id)}
+
+
 def create_notification(
     user_id: str,
     notification_type: str,
@@ -96,6 +129,8 @@ def create_notification(
         return
     from app.deps import get_notification_repo
     repo = get_notification_repo()
+    if actor_id and repo.is_muted(user_id, actor_id):
+        return
     try:
         data = {
             "user_id": user_id,

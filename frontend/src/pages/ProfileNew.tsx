@@ -79,6 +79,24 @@ export const ProfilePage = () => {
   const profileUserId = userId || user?.id;
   const isOwnProfile = !userId || userId === user?.id;
 
+  const { data: muteStatus } = useQuery({
+    queryKey: ['muteStatus', profileUserId],
+    queryFn: () => backendApi.notifications.getMuteStatus(profileUserId!),
+    enabled: !isOwnProfile && !!profileUserId,
+  });
+
+  const muteMutation = useMutation({
+    mutationFn: () =>
+      muteStatus?.is_muted
+        ? backendApi.notifications.unmuteUser(profileUserId!)
+        : backendApi.notifications.muteUser(profileUserId!),
+    onSuccess: () => {
+      toast({ title: muteStatus?.is_muted ? "User unmuted" : "User muted" });
+      queryClient.invalidateQueries({ queryKey: ['muteStatus', profileUserId] });
+    },
+    onError: () => toast({ title: "Failed to update mute status", variant: "destructive" }),
+  });
+
   // Fetch profile data
   const { data: profile, isLoading, error } = useQuery<Profile>({
     queryKey: ['profile', profileUserId],
@@ -389,14 +407,28 @@ export const ProfilePage = () => {
                     {/* Stats */}
                     {(isOwnProfile || profile.connections_visible) && (
                       <div className="flex gap-6 mt-4 text-sm">
-                        <div>
-                          <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
-                          <span className="text-muted-foreground">Connections</span>
-                        </div>
-                        <div>
-                          <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
-                          <span className="text-muted-foreground">Followers</span>
-                        </div>
+                        {isOwnProfile ? (
+                          <Link to="/network?tab=connections" className="hover:text-primary transition-colors">
+                            <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
+                            <span className="text-muted-foreground">Connections</span>
+                          </Link>
+                        ) : (
+                          <div>
+                            <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
+                            <span className="text-muted-foreground">Connections</span>
+                          </div>
+                        )}
+                        {isOwnProfile ? (
+                          <Link to="/network?tab=followers" className="hover:text-primary transition-colors">
+                            <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
+                            <span className="text-muted-foreground">Followers</span>
+                          </Link>
+                        ) : (
+                          <div>
+                            <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
+                            <span className="text-muted-foreground">Followers</span>
+                          </div>
+                        )}
                       </div>
                     )}
                     {!isOwnProfile && followStatus?.is_following && (
@@ -545,6 +577,12 @@ export const ProfilePage = () => {
                                   Block
                                 </DropdownMenuItem>
                               )}
+                              <DropdownMenuItem
+                                onClick={() => muteMutation.mutate()}
+                                disabled={muteMutation.isPending}
+                              >
+                                {muteStatus?.is_muted ? "Unmute notifications" : "Mute notifications"}
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
                                 Report user
                               </DropdownMenuItem>

@@ -48,3 +48,24 @@ class SupabaseNotificationRepository:
     def clear_read(self, user_id: str) -> None:
         self._client.table("notifications") \
             .delete().eq("user_id", user_id).eq("is_read", True).execute()
+
+    # --- Mute ---
+
+    def mute_user(self, user_id: str, muted_user_id: str) -> None:
+        self._client.table("muted_users").insert({
+            "user_id": user_id, "muted_user_id": muted_user_id,
+        }).execute()
+
+    def unmute_user(self, user_id: str, muted_user_id: str) -> None:
+        self._client.table("muted_users").delete() \
+            .eq("user_id", user_id).eq("muted_user_id", muted_user_id).execute()
+
+    def is_muted(self, user_id: str, muted_user_id: str) -> bool:
+        result = self._client.table("muted_users").select("id") \
+            .eq("user_id", user_id).eq("muted_user_id", muted_user_id).execute()
+        return bool(result.data)
+
+    def get_muted_user_ids(self, user_id: str) -> set[str]:
+        result = self._client.table("muted_users").select("muted_user_id") \
+            .eq("user_id", user_id).execute()
+        return {r["muted_user_id"] for r in (result.data or [])}

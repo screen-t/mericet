@@ -27,6 +27,7 @@ export interface User {
   work_history_visible: boolean;
   connections_visible: boolean;
   activity_status_visible: boolean;
+  notification_preview?: boolean;
   account_type: 'personal' | 'business';
   created_at: string;
   updated_at: string;

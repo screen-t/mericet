@@ -484,6 +484,20 @@ const notifications = {
       method: "DELETE",
       headers: getAuthHeaders(),
     }).then(handleResponse),
+  muteUser: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/notifications/mute/${userId}`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  unmuteUser: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/notifications/mute/${userId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  getMuteStatus: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/notifications/mute/status/${userId}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ is_muted: boolean }>),
 };
 
 // --- Search ---
@@ -633,6 +647,14 @@ const follows = {
     fetchWithAuth(`${API_BASE_URL}/follows/status/${userId}`, {
       headers: getAuthHeaders(),
     }).then(handleResponse<{ is_following: boolean }>),
+  listFollowers: (limit = 50, offset = 0) =>
+    fetchWithAuth(`${API_BASE_URL}/follows/followers?limit=${limit}&offset=${offset}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<import('@/types/api').User[]>),
+  listFollowing: (limit = 50, offset = 0) =>
+    fetchWithAuth(`${API_BASE_URL}/follows/following?limit=${limit}&offset=${offset}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<import('@/types/api').User[]>),
 };
 
 // --- Reports ---

@@ -13,34 +13,55 @@ class SupabaseUserRepository:
         cached = user_cache.get(cache_key)
         if cached is not None:
             return cached
-        result = self._client.table("users").select(fields) \
-            .eq("id", user_id).single().execute()
-        data = result.data if result.data else None
-        if data:
-            user_cache.set(cache_key, data)
-        return data
+        import time
+        for attempt in range(3):
+            try:
+                result = self._client.table("users").select(fields) \
+                    .eq("id", user_id).maybe_single().execute()
+                data = result.data if result and result.data else None
+                if data:
+                    user_cache.set(cache_key, data)
+                return data
+            except Exception:
+                if attempt < 2:
+                    time.sleep(0.1 * (attempt + 1))
+        return None
 
     def get_by_username(self, username: str) -> Optional[dict]:
         cache_key = f"username:{username}"
         cached = user_cache.get(cache_key)
         if cached is not None:
             return cached
-        result = self._client.table("users").select("*") \
-            .eq("username", username).single().execute()
-        data = result.data if result.data else None
-        if data:
-            user_cache.set(cache_key, data)
-        return data
+        import time
+        for attempt in range(3):
+            try:
+                result = self._client.table("users").select("*") \
+                    .eq("username", username).maybe_single().execute()
+                data = result.data if result and result.data else None
+                if data:
+                    user_cache.set(cache_key, data)
+                return data
+            except Exception:
+                if attempt < 2:
+                    time.sleep(0.1 * (attempt + 1))
+        return None
 
     def get_many_by_ids(self, user_ids: list[str], fields: str = "*") -> list[dict]:
         if not user_ids:
             return []
-        result = self._client.table("users").select(fields) \
-            .in_("id", user_ids).execute()
-        users = result.data or []
-        for u in users:
-            user_cache.set(f"user:{u['id']}:{fields}", u)
-        return users
+        import time
+        for attempt in range(3):
+            try:
+                result = self._client.table("users").select(fields) \
+                    .in_("id", user_ids).execute()
+                users = result.data or []
+                for u in users:
+                    user_cache.set(f"user:{u['id']}:{fields}", u)
+                return users
+            except Exception:
+                if attempt < 2:
+                    time.sleep(0.1 * (attempt + 1))
+        return []
 
     def create(self, data: dict) -> dict:
         result = self._client.table("users").insert(data).execute()

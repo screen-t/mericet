@@ -76,6 +76,10 @@ const Settings = () => {
         showWorkHistory: !!profileData.work_history_visible,
         showActivityStatus: !!profileData.activity_status_visible,
       });
+      setNotifications(prev => ({
+        ...prev,
+        showPreview: profileData.notification_preview !== false,
+      }));
     }
   }, [profileData]);
 
@@ -111,6 +115,7 @@ const Settings = () => {
     mentions: true,
     newFollowers: true,
     postEngagement: false,
+    showPreview: true,
   });
 
   const [privacy, setPrivacy] = useState({
@@ -241,6 +246,7 @@ const Settings = () => {
       connections_visible: privacy.showConnections,
       work_history_visible: privacy.showWorkHistory,
       activity_status_visible: privacy.showActivityStatus,
+      notification_preview: notifications.showPreview,
     });
   };
   const handleLogout = async () => {
@@ -688,6 +694,28 @@ const Settings = () => {
                           ...notifications,
                           postEngagement: checked,
                         })
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold mb-4">Notification Display</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">Show Preview</p>
+                      <p className="text-sm text-muted-foreground">
+                        Show message content in notification banners
+                      </p>
+                    </div>
+                    <Switch
+                      checked={notifications.showPreview}
+                      onCheckedChange={(checked) =>
+                        setNotifications({ ...notifications, showPreview: checked })
                       }
                     />
                   </div>
