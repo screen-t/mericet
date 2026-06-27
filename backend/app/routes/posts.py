@@ -36,6 +36,7 @@ def enrich_post(post: dict, user_id: Optional[str], post_repo, user_repo):
                 post["poll"] = poll
 
         post["like_count"] = post_repo.count_likes(post_id)
+        post["comment_count"] = post_repo.count_comments(post_id)
 
         if user_id:
             post["is_liked"] = bool(post_repo.get_liked_post_ids(user_id, [post_id]))
@@ -82,6 +83,7 @@ def bulk_enrich_posts(posts: list, user_id: Optional[str] = None,
                     poll["user_vote"] = votes.get(poll.get("id"))
 
     like_counts = post_repo.get_like_counts(post_ids)
+    comment_counts = post_repo.get_comment_counts(post_ids)
 
     liked_set: set = set()
     reposted_set: set = set()
@@ -97,6 +99,7 @@ def bulk_enrich_posts(posts: list, user_id: Optional[str] = None,
         post["media"] = media_map.get(pid, [])
         post["poll"] = polls_map.get(pid)
         post["like_count"] = like_counts.get(pid, post.get("like_count", 0))
+        post["comment_count"] = comment_counts.get(pid, post.get("comment_count", 0))
         post["is_liked"] = pid in liked_set
         post["is_reposted"] = pid in reposted_set
         post["is_saved"] = pid in saved_set

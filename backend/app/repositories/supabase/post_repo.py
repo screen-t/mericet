@@ -169,6 +169,16 @@ class SupabasePostRepository:
                 counts[pid] += 1
         return counts
 
+    def get_comment_counts(self, post_ids: list[str]) -> dict[str, int]:
+        result = self._client.table("comments").select("post_id") \
+            .in_("post_id", post_ids).execute()
+        counts: dict[str, int] = {pid: 0 for pid in post_ids}
+        for row in (result.data or []):
+            pid = row.get("post_id")
+            if pid in counts:
+                counts[pid] += 1
+        return counts
+
     # --- Media ---
 
     def get_media(self, post_id: str) -> list[dict]:
@@ -302,11 +312,29 @@ class SupabasePostRepository:
         self._client.table("comments").delete() \
             .eq("id", comment_id).execute()
 
+    def count_comments(self, post_id: str) -> int:
+        result = self._client.table("comments") \
+            .select("id", count="exact") \
+            .eq("post_id", post_id).execute()
+        return result.count or 0
+
+    def sync_comment_count(self, post_id: str) -> int:
+        count = self.count_comments(post_id)
+        self._client.table("posts").update({"comment_count": count}) \
+            .eq("id", post_id).execute()
+        return count
+
     def increment_comments(self, post_id: str) -> None:
-        self._client.rpc("increment_post_comments", {"post_id": post_id}).execute()
+        try:
+            self._client.rpc("increment_post_comments", {"post_id": post_id}).execute()
+        except Exception:
+            self.sync_comment_count(post_id)
 
     def decrement_comments(self, post_id: str) -> None:
-        self._client.rpc("decrement_post_comments", {"post_id": post_id}).execute()
+        try:
+            self._client.rpc("decrement_post_comments", {"post_id": post_id}).execute()
+        except Exception:
+            self.sync_comment_count(post_id)
 
     def get_liked_comment_ids(self, user_id: str,
                               comment_ids: list[str]) -> set[str]:
