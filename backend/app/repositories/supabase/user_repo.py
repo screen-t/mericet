@@ -1,6 +1,7 @@
 from typing import Optional
 from datetime import datetime
 import logging
+from app.lib.cache import user_cache
 
 
 class SupabaseUserRepository:
@@ -8,21 +9,38 @@ class SupabaseUserRepository:
         self._client = client
 
     def get_by_id(self, user_id: str, fields: str = "*") -> Optional[dict]:
+        cache_key = f"user:{user_id}:{fields}"
+        cached = user_cache.get(cache_key)
+        if cached is not None:
+            return cached
         result = self._client.table("users").select(fields) \
             .eq("id", user_id).single().execute()
-        return result.data if result.data else None
+        data = result.data if result.data else None
+        if data:
+            user_cache.set(cache_key, data)
+        return data
 
     def get_by_username(self, username: str) -> Optional[dict]:
+        cache_key = f"username:{username}"
+        cached = user_cache.get(cache_key)
+        if cached is not None:
+            return cached
         result = self._client.table("users").select("*") \
             .eq("username", username).single().execute()
-        return result.data if result.data else None
+        data = result.data if result.data else None
+        if data:
+            user_cache.set(cache_key, data)
+        return data
 
     def get_many_by_ids(self, user_ids: list[str], fields: str = "*") -> list[dict]:
         if not user_ids:
             return []
         result = self._client.table("users").select(fields) \
             .in_("id", user_ids).execute()
-        return result.data or []
+        users = result.data or []
+        for u in users:
+            user_cache.set(f"user:{u['id']}:{fields}", u)
+        return users
 
     def create(self, data: dict) -> dict:
         result = self._client.table("users").insert(data).execute()
@@ -30,11 +48,16 @@ class SupabaseUserRepository:
 
     def upsert(self, data: dict) -> dict:
         result = self._client.table("users").upsert(data).execute()
-        return result.data[0]
+        row = result.data[0]
+        user_cache.invalidate_prefix(f"user:{row['id']}:")
+        user_cache.invalidate_prefix(f"username:")
+        return row
 
     def update(self, user_id: str, data: dict) -> Optional[dict]:
         result = self._client.table("users").update(data) \
             .eq("id", user_id).execute()
+        user_cache.invalidate_prefix(f"user:{user_id}:")
+        user_cache.invalidate_prefix(f"username:")
         return result.data[0] if result.data else None
 
     def check_username_available(self, username: str) -> bool:

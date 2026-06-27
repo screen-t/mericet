@@ -101,6 +101,20 @@ class SupabasePostRepository:
         self._client.table("posts").update({"like_count": count}) \
             .eq("id", post_id).execute()
 
+    def increment_likes(self, post_id: str) -> None:
+        try:
+            self._client.rpc("increment_post_likes", {"post_id": post_id}).execute()
+        except Exception:
+            count = self.count_likes(post_id)
+            self.update_like_count(post_id, count)
+
+    def decrement_likes(self, post_id: str) -> None:
+        try:
+            self._client.rpc("decrement_post_likes", {"post_id": post_id}).execute()
+        except Exception:
+            count = self.count_likes(post_id)
+            self.update_like_count(post_id, count)
+
     def add_repost(self, post_id: str, user_id: str) -> None:
         self._client.table("reposts").insert({
             "post_id": post_id, "user_id": user_id,
