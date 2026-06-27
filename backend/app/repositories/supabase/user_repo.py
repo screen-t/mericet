@@ -69,6 +69,23 @@ class SupabaseUserRepository:
         except Exception:
             return 0
 
+    def search_companies(self, query: str, limit: int = 20) -> list[str]:
+        search_term = f"%{query}%"
+        result = self._client.table("users").select("current_company") \
+            .ilike("current_company", search_term) \
+            .neq("current_company", None).limit(limit * 3).execute()
+        seen = set()
+        companies = []
+        for row in (result.data or []):
+            name = (row.get("current_company") or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            companies.append(name)
+            if len(companies) >= limit:
+                break
+        return companies
+
     def get_followers_count(self, user_id: str) -> int:
         try:
             result = self._client.table("follows") \

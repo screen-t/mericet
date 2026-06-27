@@ -95,15 +95,17 @@ def get_save_repo():
     return SupabaseSaveRepository(supabase)
 
 
-# --- Phase 6 continued (uncomment as implemented) ---
+from app.repositories.supabase.post_repo import SupabasePostRepository
 
-# from app.repositories.supabase.post_repo import SupabasePostRepository
-# from app.repositories.supabase.message_repo import SupabaseMessageRepository
 
-# @lru_cache(maxsize=1)
-# def get_post_repo():
-#     return SupabasePostRepository(supabase)
+@lru_cache(maxsize=1)
+def get_post_repo():
+    return SupabasePostRepository(supabase)
 
-# @lru_cache(maxsize=1)
-# def get_message_repo():
-#     return SupabaseMessageRepository(supabase)
+
+from app.repositories.supabase.message_repo import SupabaseMessageRepository
+
+
+@lru_cache(maxsize=1)
+def get_message_repo():
+    return SupabaseMessageRepository(supabase)

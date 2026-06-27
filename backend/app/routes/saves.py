@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from typing import Optional
 from app.middleware.auth import require_auth
-from app.deps import get_save_repo
+from app.deps import get_save_repo, get_post_repo, get_user_repo
 from app.models.saves import FolderCreate, FolderUpdate, SaveToFolder
 
 router = APIRouter(prefix="/saves", tags=["Saves"])
@@ -101,32 +101,34 @@ def unsave_post(
 def get_all_saved(
     user_id: str = Depends(require_auth),
     save_repo=Depends(get_save_repo),
+    post_repo=Depends(get_post_repo),
+    user_repo=Depends(get_user_repo),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
     from app.routes.posts import bulk_enrich_posts
-    from app.lib.supabase import supabase
     post_ids = save_repo.get_saved_post_ids(user_id, limit, offset)
     if not post_ids:
         return []
-    posts_resp = supabase.table("posts").select("*").in_("id", post_ids).limit(limit).execute()
-    return bulk_enrich_posts(posts_resp.data or [], user_id)
+    posts = post_repo.get_by_ids(post_ids)
+    return bulk_enrich_posts(posts, user_id, post_repo, user_repo)
 
 
 @router.get("/unsorted")
 def get_unsorted_saves(
     user_id: str = Depends(require_auth),
     save_repo=Depends(get_save_repo),
+    post_repo=Depends(get_post_repo),
+    user_repo=Depends(get_user_repo),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
     from app.routes.posts import bulk_enrich_posts
-    from app.lib.supabase import supabase
     post_ids = save_repo.get_unsorted_post_ids(user_id, limit, offset)
     if not post_ids:
         return []
-    posts_resp = supabase.table("posts").select("*").in_("id", post_ids).execute()
-    return bulk_enrich_posts(posts_resp.data or [], user_id)
+    posts = post_repo.get_by_ids(post_ids)
+    return bulk_enrich_posts(posts, user_id, post_repo, user_repo)
 
 
 @router.get("/folder/{folder_id}/posts")
@@ -134,19 +136,20 @@ def get_folder_posts(
     folder_id: str,
     user_id: str = Depends(require_auth),
     save_repo=Depends(get_save_repo),
+    post_repo=Depends(get_post_repo),
+    user_repo=Depends(get_user_repo),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
     from app.routes.posts import bulk_enrich_posts
-    from app.lib.supabase import supabase
     folder = save_repo.get_folder(folder_id, user_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
     post_ids = save_repo.get_folder_post_ids(folder_id, user_id, limit, offset)
     if not post_ids:
         return {"folder": folder, "posts": []}
-    posts_resp = supabase.table("posts").select("*").in_("id", post_ids).execute()
-    enriched = bulk_enrich_posts(posts_resp.data or [], user_id)
+    posts = post_repo.get_by_ids(post_ids)
+    enriched = bulk_enrich_posts(posts, user_id, post_repo, user_repo)
     return {"folder": folder, "posts": enriched}
 
 
@@ -156,12 +159,15 @@ def search_saved(
     folder_id: Optional[str] = None,
     user_id: str = Depends(require_auth),
     save_repo=Depends(get_save_repo),
+    post_repo=Depends(get_post_repo),
+    user_repo=Depends(get_user_repo),
     limit: int = Query(20, ge=1, le=100),
 ):
     from app.routes.posts import bulk_enrich_posts
-    from app.lib.supabase import supabase
     post_ids = save_repo.search_saved(user_id, q, limit, folder_id)
     if not post_ids:
         return []
-    posts_resp = supabase.table("posts").select("*").in_("id", post_ids).ilike("content", f"%{q}%").limit(limit).execute()
-    return bulk_enrich_posts(posts_resp.data or [], user_id)
+    posts = post_repo.search(q, limit)
+    saved_set = set(post_ids)
+    posts = [p for p in posts if p["id"] in saved_set]
+    return bulk_enrich_posts(posts, user_id, post_repo, user_repo)
