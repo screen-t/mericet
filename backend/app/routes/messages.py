@@ -172,8 +172,9 @@ def send_message(
 
         try:
             message = msg_repo.create_message(message_data)
-        except Exception:
+        except Exception as e:
             if payload.metadata:
+                print(f"Warning: message insert with metadata failed, retrying without: {e}")
                 message_data.pop("metadata", None)
                 message = msg_repo.create_message(message_data)
             else:
@@ -232,8 +233,9 @@ def send_message_to_conversation(
 
         try:
             message = msg_repo.create_message(message_data)
-        except Exception:
+        except Exception as e:
             if payload.metadata:
+                print(f"Warning: message insert with metadata failed, retrying without: {e}")
                 message_data.pop("metadata", None)
                 message = msg_repo.create_message(message_data)
             else:

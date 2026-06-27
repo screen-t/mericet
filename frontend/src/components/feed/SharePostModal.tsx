@@ -31,10 +31,10 @@ export const SharePostModal = ({ postId, post, open, onOpenChange }: SharePostMo
     mutationFn: (receiverId: string) => {
       const postUrl = `${window.location.origin}/posts/${postId}`;
       const contentSnippet = (post?.content || "").slice(0, 80);
-      const mediaUrls = (post as { media?: Array<{ url: string }> })?.media || [];
-      const firstImage = mediaUrls.find(
-        (m: { url: string }) => /\.(jpg|jpeg|png|webp|gif)/i.test(m.url)
-      );
+      const mediaItems = post?.media?.length
+        ? post.media
+        : (post?.media_urls ?? []).map((u: string) => ({ url: u }));
+      const firstImage = mediaItems.length > 0 ? mediaItems[0] : null;
       const hasImage = !!firstImage;
       const hasText = !!contentSnippet.trim();
 
