@@ -60,6 +60,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [showRepostDialog, setShowRepostDialog] = useState(false);
+  const [showUndoRepostDialog, setShowUndoRepostDialog] = useState(false);
   const [repostComment, setRepostComment] = useState("");
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
@@ -619,7 +620,14 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setShowRepostDialog(true)}
+          onClick={() => {
+            if (!user) { setShowAuthGate(true); return; }
+            if (post.is_reposted) {
+              setShowUndoRepostDialog(true);
+            } else {
+              setShowRepostDialog(true);
+            }
+          }}
           className={cn(
             "gap-2",
             post.is_reposted && "text-green-500 hover:text-green-600"
@@ -746,6 +754,33 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
                 {repostMutation.isPending ? "Reposting..." : "Repost"}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Undo Repost Dialog */}
+      <Dialog open={showUndoRepostDialog} onOpenChange={setShowUndoRepostDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove repost?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will remove your repost of this post.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowUndoRepostDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setShowUndoRepostDialog(false);
+                handleRepost();
+              }}
+              disabled={repostMutation.isPending}
+            >
+              {repostMutation.isPending ? "Removing..." : "Remove repost"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
