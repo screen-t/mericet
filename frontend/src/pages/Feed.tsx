@@ -157,7 +157,6 @@ const Feed = () => {
     };
   }) || [];
 
-  console.log('Feed Debug:', { postsData, posts, postsLength: posts.length, activeTab, isLoading, isError });
 
   // Filter posts based on tab
   const displayedPosts = activeTab === "for-you" 

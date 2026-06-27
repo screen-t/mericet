@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from app.middleware.auth import require_auth, optional_auth
 from app.deps import get_post_repo, get_user_repo, get_auth_service, get_follow_repo
+from app.middleware.rate_limit import limiter, WRITE_LIMIT
 from app.models.post import (
     PostCreate, PostUpdate, PostResponse,
     CommentCreate, CommentUpdate, CommentResponse,
@@ -106,7 +107,9 @@ def bulk_enrich_posts(posts: list, user_id: Optional[str] = None,
 # ==================== POST CRUD ====================
 
 @router.post("", status_code=201)
+@limiter.limit(WRITE_LIMIT)
 def create_post(
+    request: Request,
     payload: PostCreate,
     user_id: str = Depends(require_auth),
     post_repo=Depends(get_post_repo),
@@ -275,12 +278,8 @@ def like_post(
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
             raise HTTPException(status_code=409, detail="Already liked")
         raise HTTPException(status_code=400, detail=str(e))
-    try:
-        count = post_repo.count_likes(post_id)
-        post_repo.update_like_count(post_id, count)
-        return {"message": "Post liked", "like_count": count}
-    except Exception:
-        return {"message": "Post liked", "like_count": None}
+    post_repo.increment_likes(post_id)
+    return {"message": "Post liked"}
 
 
 @router.delete("/{post_id}/like")
@@ -290,12 +289,8 @@ def unlike_post(
     post_repo=Depends(get_post_repo),
 ):
     post_repo.remove_like(post_id, user_id)
-    try:
-        count = post_repo.count_likes(post_id)
-        post_repo.update_like_count(post_id, count)
-        return {"message": "Post unliked", "like_count": count}
-    except Exception:
-        return {"message": "Post unliked", "like_count": None}
+    post_repo.decrement_likes(post_id)
+    return {"message": "Post unliked"}
 
 
 @router.post("/{post_id}/repost")

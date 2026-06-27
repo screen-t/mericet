@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request
 from app.middleware.auth import require_auth
 from app.deps import get_storage_service
+from app.middleware.rate_limit import limiter, UPLOAD_LIMIT
 import uuid
 
 router = APIRouter(prefix="/media", tags=["Media"])
@@ -13,7 +14,9 @@ MAX_MEDIA_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
 @router.post("/upload")
+@limiter.limit(UPLOAD_LIMIT)
 async def upload_media(
+    request: Request,
     file: UploadFile = File(...),
     user_id: str = Depends(require_auth),
     storage=Depends(get_storage_service),

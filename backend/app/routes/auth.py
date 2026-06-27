@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from app.middleware.auth import require_auth
 from app.deps import get_auth_service, get_user_repo, get_login_activity_repo
+from app.middleware.rate_limit import limiter, AUTH_LIMIT
 from app.models.auth import (
     SignupRequest, LoginRequest, LogoutRequest,
     RefreshRequest, ForgotPasswordRequest, ResetPasswordRequest
@@ -32,6 +33,7 @@ def _parse_user_agent(user_agent: str):
 
 
 @router.post("/signup")
+@limiter.limit(AUTH_LIMIT)
 def signup(
     payload: SignupRequest,
     request: Request,
@@ -92,6 +94,7 @@ def signup(
 
 
 @router.post("/login")
+@limiter.limit(AUTH_LIMIT)
 def login(
     payload: LoginRequest,
     request: Request,
@@ -163,13 +166,15 @@ def refresh(payload: RefreshRequest, auth_service=Depends(get_auth_service)):
 
 
 @router.post("/forgot-password")
-def forgot_password(payload: ForgotPasswordRequest, auth_service=Depends(get_auth_service)):
+@limiter.limit("5/minute")
+def forgot_password(request: Request, payload: ForgotPasswordRequest, auth_service=Depends(get_auth_service)):
     auth_service.reset_password_email(payload.email)
     return {"success": True, "message": "If email exists, password reset link has been sent"}
 
 
 @router.post("/reset-password")
-def reset_password(payload: ResetPasswordRequest, auth_service=Depends(get_auth_service)):
+@limiter.limit("5/minute")
+def reset_password(request: Request, payload: ResetPasswordRequest, auth_service=Depends(get_auth_service)):
     auth_service.update_password(payload.access_token, payload.new_password)
     return {"success": True, "message": "Password updated successfully"}
 

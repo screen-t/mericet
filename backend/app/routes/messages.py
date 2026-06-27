@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from app.middleware.auth import require_auth
 from app.deps import get_message_repo, get_user_repo, get_connection_repo, get_auth_service
+from app.middleware.rate_limit import limiter, WRITE_LIMIT
 from app.routes.profile import _ensure_user_exists
 from app.models.message import MessageCreate, MessageSend, MessageUpdate, MessageResponse, ConversationResponse, ReactionCreate
 from typing import List
@@ -176,7 +177,9 @@ def send_message(
 
 
 @router.post("/send")
+@limiter.limit(WRITE_LIMIT)
 def send_message_to_conversation(
+    request: Request,
     payload: MessageSend,
     user_id: str = Depends(require_auth),
     msg_repo=Depends(get_message_repo),

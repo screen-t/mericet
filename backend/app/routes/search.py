@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from app.middleware.auth import require_auth
 from app.deps import get_user_repo, get_post_repo, get_message_repo, get_save_repo
+from app.middleware.rate_limit import limiter, SEARCH_LIMIT
 from typing import List, Optional
 
 router = APIRouter(prefix="/search", tags=["Search"])
@@ -20,7 +21,9 @@ def _enrich_posts_with_author(posts: List[dict], user_repo) -> List[dict]:
 
 
 @router.get("/users")
+@limiter.limit(SEARCH_LIMIT)
 def search_users(
+    request: Request,
     q: str = Query(..., min_length=1, max_length=100),
     user_id: Optional[str] = Depends(require_auth),
     user_repo=Depends(get_user_repo),
@@ -44,7 +47,9 @@ def search_posts(
 
 
 @router.get("/all")
+@limiter.limit(SEARCH_LIMIT)
 def search_all(
+    request: Request,
     q: str = Query(..., min_length=1, max_length=100),
     user_id: Optional[str] = Depends(require_auth),
     user_repo=Depends(get_user_repo),
