@@ -50,6 +50,15 @@ def _is_connected(conn_repo, user_id: str, other_user_id: str) -> bool:
         return False
 
 
+def _can_message(conn_repo, user_repo, sender_id: str, receiver_id: str) -> bool:
+    if _is_connected(conn_repo, sender_id, receiver_id):
+        return True
+    receiver = user_repo.get_by_id(receiver_id, "allow_messages_from_anyone")
+    if receiver and receiver.get("allow_messages_from_anyone"):
+        return True
+    return False
+
+
 def _get_other_participant(msg_repo, conversation_id: str, user_id: str) -> str | None:
     try:
         ids = msg_repo.get_other_participant_ids(conversation_id, user_id)
@@ -134,7 +143,7 @@ def send_message(
         block_detail = _blocked_message_detail(conn_repo, user_id, other_user_id)
         if block_detail:
             raise HTTPException(status_code=403, detail=block_detail)
-        if not _is_connected(conn_repo, user_id, other_user_id):
+        if not _can_message(conn_repo, user_repo, user_id, other_user_id):
             raise HTTPException(status_code=403, detail="Messaging is limited to connections")
 
         # Fast path: if the client already knows the conversation_id, skip the expensive
@@ -199,7 +208,7 @@ def send_message_to_conversation(
         block_detail = _blocked_message_detail(conn_repo, user_id, other_user_id)
         if block_detail:
             raise HTTPException(status_code=403, detail=block_detail)
-        if not _is_connected(conn_repo, user_id, other_user_id):
+        if not _can_message(conn_repo, user_repo, user_id, other_user_id):
             raise HTTPException(status_code=403, detail="Messaging is limited to connections")
 
         # Create message

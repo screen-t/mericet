@@ -114,6 +114,17 @@ def get_mute_status(
     return {"is_muted": notif_repo.is_muted(user_id, target_user_id)}
 
 
+_TYPE_TO_PREF = {
+    "like": "post_engagement",
+    "comment": "post_engagement",
+    "repost": "post_engagement",
+    "connection_request": "connection_requests",
+    "connection_accepted": "connection_requests",
+    "follow": "new_followers",
+    "mention": "mentions",
+}
+
+
 def create_notification(
     user_id: str,
     notification_type: str,
@@ -127,10 +138,20 @@ def create_notification(
 ):
     if actor_id == user_id:
         return
-    from app.deps import get_notification_repo
+    from app.deps import get_notification_repo, get_user_repo
     repo = get_notification_repo()
     if actor_id and repo.is_muted(user_id, actor_id):
         return
+    pref_key = _TYPE_TO_PREF.get(notification_type)
+    if pref_key:
+        try:
+            user_repo = get_user_repo()
+            receiver = user_repo.get_by_id(user_id, "notification_preferences")
+            prefs = (receiver or {}).get("notification_preferences") or {}
+            if prefs.get(pref_key) is False:
+                return
+        except Exception:
+            pass
     try:
         data = {
             "user_id": user_id,

@@ -28,6 +28,14 @@ export interface User {
   connections_visible: boolean;
   activity_status_visible: boolean;
   notification_preview?: boolean;
+  allow_messages_from_anyone?: boolean;
+  notification_preferences?: {
+    connection_requests?: boolean;
+    mentions?: boolean;
+    new_followers?: boolean;
+    post_engagement?: boolean;
+    show_preview?: boolean;
+  };
   account_type: 'personal' | 'business';
   created_at: string;
   updated_at: string;

@@ -72,14 +72,18 @@ const Settings = () => {
         profileVisibility: profileData.connections_visible === false ? "private" : "public",
         showEmail: !!profileData.email_visible,
         showConnections: !!profileData.connections_visible,
-        allowMessages: true,
+        allowMessages: !!profileData.allow_messages_from_anyone,
         showWorkHistory: !!profileData.work_history_visible,
         showActivityStatus: !!profileData.activity_status_visible,
       });
-      setNotifications(prev => ({
-        ...prev,
-        showPreview: profileData.notification_preview !== false,
-      }));
+      const prefs = profileData.notification_preferences || {};
+      setNotifications({
+        connectionRequests: prefs.connection_requests !== false,
+        mentions: prefs.mentions !== false,
+        newFollowers: prefs.new_followers !== false,
+        postEngagement: prefs.post_engagement !== false,
+        showPreview: prefs.show_preview !== false,
+      });
     }
   }, [profileData]);
 
@@ -109,12 +113,10 @@ const Settings = () => {
   }, [normalizedUsername, usernameChanged]);
 
   const [notifications, setNotifications] = useState({
-    emailDigest: true,
-    pushNotifications: true,
     connectionRequests: true,
     mentions: true,
     newFollowers: true,
-    postEngagement: false,
+    postEngagement: true,
     showPreview: true,
   });
 
@@ -246,7 +248,14 @@ const Settings = () => {
       connections_visible: privacy.showConnections,
       work_history_visible: privacy.showWorkHistory,
       activity_status_visible: privacy.showActivityStatus,
-      notification_preview: notifications.showPreview,
+      allow_messages_from_anyone: privacy.allowMessages,
+      notification_preferences: {
+        connection_requests: notifications.connectionRequests,
+        mentions: notifications.mentions,
+        new_followers: notifications.newFollowers,
+        post_engagement: notifications.postEngagement,
+        show_preview: notifications.showPreview,
+      },
     });
   };
   const handleLogout = async () => {
@@ -593,45 +602,6 @@ const Settings = () => {
               animate={{ opacity: 1, y: 0 }}
               className="bg-card rounded-xl border border-border p-6 space-y-6"
             >
-              <div>
-                <h3 className="font-semibold mb-4">Email Notifications</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Email Digest</p>
-                      <p className="text-sm text-muted-foreground">
-                        Receive a weekly summary of your activity
-                      </p>
-                    </div>
-                    <Switch
-                      checked={notifications.emailDigest}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, emailDigest: checked })
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Push Notifications</p>
-                      <p className="text-sm text-muted-foreground">
-                        Receive push notifications on your devices
-                      </p>
-                    </div>
-                    <Switch
-                      checked={notifications.pushNotifications}
-                      onCheckedChange={(checked) =>
-                        setNotifications({
-                          ...notifications,
-                          pushNotifications: checked,
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
               <div>
                 <h3 className="font-semibold mb-4">Activity Notifications</h3>
                 <div className="space-y-4">
