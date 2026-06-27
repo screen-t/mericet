@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,11 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
   const queryClient = useQueryClient();
 
   const isLandingPage = location.pathname === "/" && !isAuthenticated;
+
+  useEffect(() => {
+    document.body.style.overflow = isMobileMenuOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [isMobileMenuOpen]);
 
   // Fetch unread counts
   const { data: messageCount } = useQuery({
@@ -119,6 +124,7 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
   };
 
   return (
+    <>
     <nav className="sticky top-0 z-50 glass-strong">
       <div className="max-w-screen-xl mx-auto px-3 sm:px-4">
         <div className="flex h-16 items-center justify-between gap-4">
@@ -330,16 +336,18 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
         </div>
       </div>
 
+    </nav>
+
       {/* Mobile Menu */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="md:hidden border-t border-border"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="md:hidden border-t border-border fixed inset-x-0 top-16 bottom-0 z-40 bg-background overflow-y-auto overscroll-contain"
           >
-            <div className="container mx-auto px-4 py-4 space-y-4">
+            <div className="container mx-auto px-4 py-4 space-y-4 pb-20">
               {isAuthenticated ? (
                 <>
                   {/* User info */}
@@ -492,6 +500,6 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
           setIsCreatePostOpen(false);
         }}
       />
-    </nav>
+    </>
   );
 };
