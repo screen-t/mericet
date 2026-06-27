@@ -467,6 +467,38 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                     Create Post
                   </Button>
 
+                  {savedAccounts.filter(a => a.id !== user?.id).length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">Switch account</p>
+                      {savedAccounts
+                        .filter(a => a.id !== user?.id)
+                        .map(account => (
+                          <Button
+                            key={account.id}
+                            variant="outline"
+                            className="w-full gap-3 justify-start"
+                            onClick={() => { setIsMobileMenuOpen(false); switchAccount(account); }}
+                          >
+                            <UserAvatar
+                              src={account.avatar_url}
+                              name={`${account.first_name} ${account.last_name}`}
+                              size="sm"
+                            />
+                            <span className="truncate">{account.first_name} {account.last_name}</span>
+                          </Button>
+                        ))}
+                    </div>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2 justify-start"
+                    onClick={() => { setIsMobileMenuOpen(false); navigate('/login'); }}
+                  >
+                    <ArrowLeftRight className="h-4 w-4" />
+                    Add another account
+                  </Button>
+
                   <Button
                     variant="outline"
                     className="w-full gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
