@@ -56,27 +56,27 @@ backend/app/
 └── main.py                        — Router registration
 ```
 
-## Refactoring Phases (Part A)
+## Refactoring Phases (Part A — Complete)
 
-| Phase | What | Calls migrated |
-|-------|------|----------------|
-| 1 | Scaffolding: protocols, deps.py | 0 |
-| 2 | Auth service + middleware | 14 |
-| 3 | Follow, notification, report repos | 25 |
-| 4 | User domain (profile, auth, oauth) | 54 |
-| 5 | Storage + media endpoint + frontend fix | 6 |
-| 6 | Connection, save, post, message repos | 165 |
-| 7 | Search (composes existing repos) | 26 |
-| 8 | Cleanup: remove dead code, final test | — |
+| Phase | What | Calls migrated | Status |
+|-------|------|----------------|--------|
+| 1 | Scaffolding: protocols, deps.py | 0 | Done |
+| 2 | Auth service + middleware | 14 | Done |
+| 3 | Follow, notification, report repos | 25 | Done |
+| 4 | User domain (profile, auth, oauth) | 54 | Done |
+| 5 | Storage + media endpoint + frontend fix | 6 | Done |
+| 6 | Connection, save, post, message repos | 165 | Done |
+| 7 | Search (composes existing repos) | 26 | Done |
+| 8 | Cleanup: remove dead code, final test | — | Done |
 
-## Scalability Phases (Part B — after refactor)
+## Scalability Phases (Part B — Complete)
 
-| Phase | What | Impact |
-|-------|------|--------|
-| 9 | Rate limiting (slowapi) | Protects all endpoints from abuse |
-| 10 | Atomic counters | Fixes race conditions on like/comment/repost counts |
-| 11 | Async routes + async client | 10x concurrency (removes thread pool bottleneck) |
-| 12 | Caching layer (Redis/in-memory) | Cuts DB calls by 60-80% for hot data |
+| Phase | What | Impact | Status |
+|-------|------|--------|--------|
+| 9 | Rate limiting (slowapi) | Auth 10/min, writes 30/min, search 20/min, uploads 10/min | Done |
+| 10 | Atomic counters | Like/comment counts recalculated from source of truth | Done |
+| 11 | Async routes | Deferred — sync `def` routes run in FastAPI thread pool (correct for sync Supabase client). Convert when adopting async DB client (e.g., asyncpg with Neon) | Deferred |
+| 12 | Caching layer (in-memory TTL) | User profile lookups cached 120s with invalidation on writes | Done |
 
 ## Design Decisions
 

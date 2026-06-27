@@ -1,13 +1,17 @@
 # Backend Integration Guide
 
-This guide helps backend developers integrate their API with the stonet frontend application.
+This guide helps backend developers integrate their API with the Mericet frontend application.
+
+## Architecture Note
+
+The backend uses a **Repository Pattern** with dependency injection. All data access goes through repository classes in `backend/app/repositories/`, wired via `backend/app/deps.py`. Routes never call Supabase directly — they inject repositories via FastAPI's `Depends()`. See [ARCHITECTURE_PLAN.md](./ARCHITECTURE_PLAN.md) for details.
 
 ## Quick Start
 
 1. Review the [API Requirements](./API_REQUIREMENTS.md) for all endpoint specifications
 2. Review the [Database Schema](./DATABASE_SCHEMA.md) for data structure
-3. Set up Supabase authentication
-4. Implement API endpoints
+3. Review the [Architecture Plan](./ARCHITECTURE_PLAN.md) for repository pattern
+4. Set up Supabase authentication
 5. Test with the frontend
 
 ## Environment Setup
@@ -54,17 +58,6 @@ Backend should:
 2. Create or update user record
 3. Store OAuth connection in `connected_accounts` table
 4. Return session tokens
-
-### 3. Phone Login
-
-Frontend sends OTP request, then verification:
-```typescript
-POST /auth/phone/send-otp
-{ "phone": "+1234567890" }
-
-POST /auth/phone/verify
-{ "phone": "+1234567890", "otp": "123456" }
-```
 
 ## Critical Endpoints Implementation
 
@@ -219,24 +212,19 @@ CREATE POLICY "Own posts are visible" ON posts
 
 Frontend expects:
 ```typescript
-POST /posts/upload-media
+POST /media/upload
 Content-Type: multipart/form-data
 
 FormData:
 - file: File
-- type: 'image' | 'video'
 ```
 
-Backend should:
-1. Validate file type and size
-2. Upload to Supabase Storage
-3. Generate thumbnail for videos
-4. Return URLs:
+The backend validates file type and size, uploads via StorageService (abstracted from Supabase Storage), and returns:
 
 ```json
 {
-  "url": "https://storage.supabase.co/...",
-  "thumbnailUrl": "https://storage.supabase.co/..."
+  "url": "https://...",
+  "path": "post-media/..."
 }
 ```
 
@@ -263,12 +251,12 @@ Create test users with different roles:
 
 ```bash
 # Test email login
-curl -X POST http://localhost:3000/auth/login \
+curl -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"password123"}'
 
 # Test token refresh
-curl -X POST http://localhost:3000/auth/refresh \
+curl -X POST http://localhost:8000/auth/refresh \
   -H "Authorization: Bearer {refresh_token}"
 ```
 
@@ -276,11 +264,11 @@ curl -X POST http://localhost:3000/auth/refresh \
 
 ```bash
 # Test For You feed
-curl -X GET "http://localhost:3000/posts?feed=for-you&limit=20" \
+curl -X GET "http://localhost:8000/posts?feed=for-you&limit=20" \
   -H "Authorization: Bearer {access_token}"
 
 # Test Following feed
-curl -X GET "http://localhost:3000/posts?feed=following&limit=20" \
+curl -X GET "http://localhost:8000/posts?feed=following&limit=20" \
   -H "Authorization: Bearer {access_token}"
 ```
 
@@ -288,7 +276,7 @@ curl -X GET "http://localhost:3000/posts?feed=following&limit=20" \
 
 ```bash
 # Create text post
-curl -X POST http://localhost:3000/posts \
+curl -X POST http://localhost:8000/posts \
   -H "Authorization: Bearer {access_token}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -297,24 +285,16 @@ curl -X POST http://localhost:3000/posts \
   }'
 
 # Upload media
-curl -X POST http://localhost:3000/posts/upload-media \
+curl -X POST http://localhost:8000/media/upload \
   -H "Authorization: Bearer {access_token}" \
-  -F "file=@image.jpg" \
-  -F "type=image"
+  -F "file=@image.jpg"
 ```
 
 ## Common Issues & Solutions
 
 ### CORS Errors
 
-Configure CORS to allow frontend origin:
-```typescript
-// Express example
-app.use(cors({
-  origin: 'http://localhost:8080',
-  credentials: true
-}));
-```
+CORS is configured in `backend/app/main.py`. Allowed origins include localhost dev ports and production domains. Add new origins via the `FRONTEND_URL` or `ALLOWED_ORIGINS` environment variables.
 
 ### JWT Token Expiration
 

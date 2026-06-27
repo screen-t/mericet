@@ -1,4 +1,4 @@
-# stonet - Development Workflow and Git Strategy
+# Mericet - Development Workflow and Git Strategy
 
 ## Git Branching Strategy
 
@@ -28,16 +28,16 @@ We follow a **Git Flow** branching model with the following branch types:
 - Created from: `develop`
 - Merged back into: `develop`
 - Naming examples:
-  - `feature/STONET-123-user-authentication`
-  - `feature/STONET-124-post-creation-modal`
-  - `feature/STONET-125-message-notifications`
+  - `feature/MRC-123-user-authentication`
+  - `feature/MRC-124-post-creation-modal`
+  - `feature/MRC-125-message-notifications`
 
 **Bugfix Branches:** `bugfix/<ticket-id>-<short-description>`
 - Created from: `develop`
 - Merged back into: `develop`
 - Naming examples:
-  - `bugfix/STONET-234-fix-login-error`
-  - `bugfix/STONET-235-profile-image-upload`
+  - `bugfix/MRC-234-fix-login-error`
+  - `bugfix/MRC-235-profile-image-upload`
 
 **Hotfix Branches:** `hotfix/<version>-<short-description>`
 - Created from: `main`
@@ -82,7 +82,7 @@ git checkout develop
 git pull origin develop
 
 # Step 2: Create a new feature branch
-git checkout -b feature/STONET-123-user-authentication
+git checkout -b feature/MRC-123-user-authentication
 
 # Step 3: Start coding
 # Make your changes...
@@ -120,7 +120,7 @@ git commit -m "feat(auth): implement email login functionality
 - Add error handling for invalid credentials
 - Add loading states
 
-Resolves: STONET-123"
+Resolves: MRC-123"
 ```
 
 ```bash
@@ -130,24 +130,24 @@ git commit -m "fix(profile): resolve avatar upload issue
 - Add proper error messages
 - Update upload progress indicator
 
-Fixes: STONET-234"
+Fixes: MRC-234"
 ```
 
 ### 3. Pushing Changes
 
 ```bash
 # Push your feature branch to remote
-git push origin feature/STONET-123-user-authentication
+git push origin feature/MRC-123-user-authentication
 
 # For first push of new branch
-git push -u origin feature/STONET-123-user-authentication
+git push -u origin feature/MRC-123-user-authentication
 ```
 
 ### 4. Creating Pull Request
 
 **PR Title Format:**
 ```
-[STONET-123] Add user authentication functionality
+[MRC-123] Add user authentication functionality
 ```
 
 **PR Description Template:**
@@ -243,12 +243,12 @@ Any specific areas you want reviewers to focus on
 ```bash
 # After PR approval, merge using GitHub UI or:
 git checkout develop
-git merge --no-ff feature/STONET-123-user-authentication
+git merge --no-ff feature/MRC-123-user-authentication
 git push origin develop
 
 # Delete feature branch after merge
-git branch -d feature/STONET-123-user-authentication
-git push origin --delete feature/STONET-123-user-authentication
+git branch -d feature/MRC-123-user-authentication
+git push origin --delete feature/MRC-123-user-authentication
 ```
 
 ## Code Review Guidelines
@@ -352,7 +352,7 @@ git push origin --delete feature/STONET-123-user-authentication
 ## Repository Structure
 
 ```
-stonet/
+Mericet/
 ├── .github/
 │   ├── workflows/          # GitHub Actions CI/CD
 │   │   ├── frontend-ci.yml
@@ -410,7 +410,7 @@ stonet/
 # 1. Create feature branch from develop
 git checkout develop
 git pull origin develop
-git checkout -b feature/STONET-456-new-feature
+git checkout -b feature/MRC-456-new-feature
 
 # 2. Implement feature with regular commits
 git add .
@@ -421,7 +421,7 @@ git fetch origin
 git rebase origin/develop
 
 # 4. Push to remote
-git push origin feature/STONET-456-new-feature
+git push origin feature/MRC-456-new-feature
 
 # 5. Create PR via GitHub UI
 
@@ -431,7 +431,7 @@ git push origin feature/STONET-456-new-feature
 
 # 8. Delete local and remote branch
 git checkout develop
-git branch -d feature/STONET-456-new-feature
+git branch -d feature/MRC-456-new-feature
 git pull origin develop
 ```
 
@@ -504,7 +504,7 @@ git branch -d release/v1.1.0
 
 ```bash
 # 1. Update your branch with latest develop
-git checkout feature/STONET-123-my-feature
+git checkout feature/MRC-123-my-feature
 git fetch origin
 git rebase origin/develop
 
@@ -518,7 +518,7 @@ git add <resolved-files>
 git rebase --continue
 
 # 5. Force push (only for feature branches)
-git push --force-with-lease origin feature/STONET-123-my-feature
+git push --force-with-lease origin feature/MRC-123-my-feature
 ```
 
 ### When to Ask for Help

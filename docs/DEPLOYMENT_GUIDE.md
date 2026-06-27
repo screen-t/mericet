@@ -1,4 +1,4 @@
-# Deployment Guide for Stonet
+# Deployment Guide for Mericet
 
 ## Prerequisites
 - Supabase project created with database migrations applied
