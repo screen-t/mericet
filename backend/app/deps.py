@@ -81,20 +81,24 @@ def get_login_activity_repo():
     return SupabaseLoginActivityRepository(supabase)
 
 
-# --- Phase 6+ (uncomment as implemented) ---
+from app.repositories.supabase.connection_repo import SupabaseConnectionRepository
+from app.repositories.supabase.save_repo import SupabaseSaveRepository
 
-# from app.repositories.supabase.connection_repo import SupabaseConnectionRepository
-# from app.repositories.supabase.save_repo import SupabaseSaveRepository
+
+@lru_cache(maxsize=1)
+def get_connection_repo():
+    return SupabaseConnectionRepository(supabase)
+
+
+@lru_cache(maxsize=1)
+def get_save_repo():
+    return SupabaseSaveRepository(supabase)
+
+
+# --- Phase 6 continued (uncomment as implemented) ---
+
 # from app.repositories.supabase.post_repo import SupabasePostRepository
 # from app.repositories.supabase.message_repo import SupabaseMessageRepository
-
-# @lru_cache(maxsize=1)
-# def get_connection_repo():
-#     return SupabaseConnectionRepository(supabase)
-
-# @lru_cache(maxsize=1)
-# def get_save_repo():
-#     return SupabaseSaveRepository(supabase)
 
 # @lru_cache(maxsize=1)
 # def get_post_repo():
