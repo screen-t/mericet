@@ -27,16 +27,19 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/lib/theme";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
 import { Connection } from "@/types/api";
 
 const BlockedUsersSection = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
 
   const { data: blockedData, isLoading } = useQuery({
     queryKey: ['connections', 'blocked'],
     queryFn: () => backendApi.connections.getConnections('blocked', 100, 0),
+    enabled: open,
   });
 
   const unblockMutation = useMutation({
@@ -53,46 +56,70 @@ const BlockedUsersSection = () => {
   );
 
   return (
-    <div>
-      <h3 className="font-semibold mb-4">Blocked Users</h3>
-      {isLoading ? (
-        <div className="flex items-center justify-center py-6">
-          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+    <>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold">Blocked Users</h3>
+          <p className="text-sm text-muted-foreground">
+            Manage users you've blocked
+          </p>
         </div>
-      ) : blocked.length === 0 ? (
-        <p className="text-sm text-muted-foreground">You haven't blocked anyone.</p>
-      ) : (
-        <div className="space-y-3">
-          {blocked.map((conn: Connection) => (
-            <div key={conn.id} className="flex items-center justify-between p-3 rounded-lg border">
-              <Link to={`/profile/${conn.user?.id}`} className="flex items-center gap-3 min-w-0">
-                <UserAvatar
-                  src={conn.user?.avatar_url}
-                  name={`${conn.user?.first_name} ${conn.user?.last_name}`}
-                  size="sm"
-                />
-                <div className="min-w-0">
-                  <p className="font-medium text-sm truncate">
-                    {conn.user?.first_name} {conn.user?.last_name}
-                  </p>
-                  {conn.user?.username && (
-                    <p className="text-xs text-muted-foreground">@{conn.user.username}</p>
-                  )}
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          View
+        </Button>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Blocked Users</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto space-y-3">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : blocked.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                You haven't blocked anyone.
+              </p>
+            ) : (
+              blocked.map((conn: Connection) => (
+                <div key={conn.id} className="flex items-center justify-between p-3 rounded-lg border">
+                  <Link
+                    to={`/profile/${conn.user?.id}`}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-3 min-w-0 flex-1"
+                  >
+                    <UserAvatar
+                      src={conn.user?.avatar_url}
+                      name={`${conn.user?.first_name} ${conn.user?.last_name}`}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {conn.user?.first_name} {conn.user?.last_name}
+                      </p>
+                      {conn.user?.username && (
+                        <p className="text-xs text-muted-foreground">@{conn.user.username}</p>
+                      )}
+                    </div>
+                  </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => unblockMutation.mutate(conn.user?.id || conn.id)}
+                    disabled={unblockMutation.isPending}
+                  >
+                    Unblock
+                  </Button>
                 </div>
-              </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => unblockMutation.mutate(conn.user?.id || conn.id)}
-                disabled={unblockMutation.isPending}
-              >
-                Unblock
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
