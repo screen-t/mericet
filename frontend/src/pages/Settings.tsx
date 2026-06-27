@@ -22,6 +22,7 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  X,
   Sun,
   Moon,
 } from "lucide-react";
@@ -125,7 +126,7 @@ const BlockedUsersSection = () => {
 
 const Settings = () => {
   const { toast } = useToast();
-  const { logout, refreshUser } = useAuth();
+  const { logout, refreshUser, savedAccounts, switchAccount, removeAccount } = useAuth();
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -170,6 +171,7 @@ const Settings = () => {
         allowMessages: !!profileData.allow_messages_from_anyone,
         showWorkHistory: !!profileData.work_history_visible,
         showActivityStatus: !!profileData.activity_status_visible,
+        showTypingIndicator: profileData.show_typing_indicator !== false,
       });
       const prefs = profileData.notification_preferences || {};
       setNotifications({
@@ -222,6 +224,7 @@ const Settings = () => {
     allowMessages: true,
     showWorkHistory: true,
     showActivityStatus: true,
+    showTypingIndicator: true,
   });
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -344,6 +347,7 @@ const Settings = () => {
       work_history_visible: privacy.showWorkHistory,
       activity_status_visible: privacy.showActivityStatus,
       allow_messages_from_anyone: privacy.allowMessages,
+      show_typing_indicator: privacy.showTypingIndicator,
       notification_preferences: {
         connection_requests: notifications.connectionRequests,
         mentions: notifications.mentions,
@@ -841,6 +845,20 @@ const Settings = () => {
                       }
                     />
                   </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">Typing Indicator</p>
+                      <p className="text-sm text-muted-foreground">
+                        Show others when you're typing
+                      </p>
+                    </div>
+                    <Switch
+                      checked={privacy.showTypingIndicator}
+                      onCheckedChange={(checked) =>
+                        setPrivacy({ ...privacy, showTypingIndicator: checked })
+                      }
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -851,10 +869,59 @@ const Settings = () => {
 
               <Separator />
 
+              {/* Switch Account */}
+              {savedAccounts.filter(a => a.id !== profileData?.id).length > 0 && (
+                <>
+                  <div>
+                    <h3 className="font-semibold mb-4">Switch Account</h3>
+                    <div className="space-y-2">
+                      {savedAccounts
+                        .filter(a => a.id !== profileData?.id)
+                        .map(account => (
+                          <div key={account.id} className="flex items-center justify-between p-3 rounded-lg border">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <UserAvatar
+                                src={account.avatar_url}
+                                name={`${account.first_name} ${account.last_name}`}
+                                size="sm"
+                              />
+                              <div className="min-w-0">
+                                <p className="font-medium text-sm truncate">
+                                  {account.first_name} {account.last_name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">@{account.username}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => switchAccount(account)}
+                              >
+                                Switch
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removeAccount(account.id)}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Log in to another account to add it here.
+                    </p>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
               <div>
                 <h3 className="font-semibold mb-4">Session</h3>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="gap-2 text-destructive hover:text-destructive"
                   onClick={handleLogout}
                 >

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ import {
   ShieldAlert,
   Sun,
   Moon,
+  ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -49,11 +50,16 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
+  const { logout, user, savedAccounts, switchAccount } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
 
   const isLandingPage = location.pathname === "/" && !isAuthenticated;
+
+  useEffect(() => {
+    document.body.style.overflow = isMobileMenuOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [isMobileMenuOpen]);
 
   // Fetch unread counts
   const { data: messageCount } = useQuery({
@@ -118,6 +124,7 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
   };
 
   return (
+    <>
     <nav className="sticky top-0 z-50 glass-strong">
       <div className="max-w-screen-xl mx-auto px-3 sm:px-4">
         <div className="flex h-16 items-center justify-between gap-4">
@@ -225,7 +232,7 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                     />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent align="end" sideOffset={8} alignOffset={-200} className="w-56">
                   <div className="px-2 py-1.5">
                     <p className="font-semibold">{user?.first_name} {user?.last_name}</p>
                     <p className="text-sm text-muted-foreground">{user?.email}</p>
@@ -253,7 +260,39 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
+                  {savedAccounts.filter(a => a.id !== user?.id).length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">Switch account</p>
+                      </div>
+                      {savedAccounts
+                        .filter(a => a.id !== user?.id)
+                        .map(account => (
+                          <DropdownMenuItem
+                            key={account.id}
+                            className="cursor-pointer"
+                            onClick={() => switchAccount(account)}
+                          >
+                            <UserAvatar
+                              src={account.avatar_url}
+                              name={`${account.first_name} ${account.last_name}`}
+                              size="sm"
+                              className="mr-2 h-5 w-5"
+                            />
+                            <span className="truncate">{account.first_name} {account.last_name}</span>
+                          </DropdownMenuItem>
+                        ))}
+                    </>
+                  )}
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => navigate('/login')}
+                  >
+                    <ArrowLeftRight className="mr-2 h-4 w-4" />
+                    Add another account
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
                     className="text-destructive cursor-pointer"
                     onClick={handleLogout}
                   >
@@ -297,16 +336,18 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
         </div>
       </div>
 
+    </nav>
+
       {/* Mobile Menu */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="md:hidden border-t border-border"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="md:hidden border-t border-border fixed inset-x-0 top-16 bottom-0 z-40 bg-background overflow-y-auto overscroll-contain"
           >
-            <div className="container mx-auto px-4 py-4 space-y-4">
+            <div className="container mx-auto px-4 py-4 space-y-4 pb-20">
               {isAuthenticated ? (
                 <>
                   {/* User info */}
@@ -426,6 +467,38 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                     Create Post
                   </Button>
 
+                  {savedAccounts.filter(a => a.id !== user?.id).length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">Switch account</p>
+                      {savedAccounts
+                        .filter(a => a.id !== user?.id)
+                        .map(account => (
+                          <Button
+                            key={account.id}
+                            variant="outline"
+                            className="w-full gap-3 justify-start"
+                            onClick={() => { setIsMobileMenuOpen(false); switchAccount(account); }}
+                          >
+                            <UserAvatar
+                              src={account.avatar_url}
+                              name={`${account.first_name} ${account.last_name}`}
+                              size="sm"
+                            />
+                            <span className="truncate">{account.first_name} {account.last_name}</span>
+                          </Button>
+                        ))}
+                    </div>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2 justify-start"
+                    onClick={() => { setIsMobileMenuOpen(false); navigate('/login'); }}
+                  >
+                    <ArrowLeftRight className="h-4 w-4" />
+                    Add another account
+                  </Button>
+
                   <Button
                     variant="outline"
                     className="w-full gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
@@ -459,6 +532,6 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
           setIsCreatePostOpen(false);
         }}
       />
-    </nav>
+    </>
   );
 };

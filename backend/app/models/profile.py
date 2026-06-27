@@ -49,6 +49,7 @@ class PrivacySettingsUpdate(BaseModel):
     allow_messages_from_anyone: Optional[bool] = None
     notification_preview: Optional[bool] = None
     notification_preferences: Optional[dict] = None
+    show_typing_indicator: Optional[bool] = None
 
 class ProfileResponse(BaseModel):
     id: str

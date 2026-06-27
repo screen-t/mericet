@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { authApi } from './api'
 import type { SignupPayload } from './api'
 import { User } from '@/types/api'
-import { AuthContext, AuthContextValue } from './auth-context'
+import { AuthContext, AuthContextValue, SavedAccount } from './auth-context'
 
 type Session = {
   access_token?: string
@@ -13,6 +13,40 @@ type Session = {
 
 const ACCESS_TOKEN_KEY = 'access_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
+const SAVED_ACCOUNTS_KEY = 'saved_accounts'
+
+function getSavedAccounts(): SavedAccount[] {
+  try {
+    return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function setSavedAccounts(accounts: SavedAccount[]) {
+  localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(accounts))
+}
+
+function saveCurrentAccount(user: User, tokens: Session) {
+  if (!user?.id || !tokens.access_token) return
+  const accounts = getSavedAccounts()
+  const updated = accounts.filter(a => a.id !== user.id)
+  updated.unshift({
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    avatar_url: user.avatar_url,
+    access_token: tokens.access_token!,
+    refresh_token: tokens.refresh_token!,
+  })
+  setSavedAccounts(updated)
+}
+
+function removeSavedAccount(accountId: string) {
+  setSavedAccounts(getSavedAccounts().filter(a => a.id !== accountId))
+}
 
 function getStoredTokens(): Session {
   return {
@@ -34,6 +68,7 @@ function setStoredTokens(session?: Session) {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [savedAccounts, setSavedAccountsState] = useState<SavedAccount[]>(getSavedAccounts)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -74,9 +109,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await authApi.login({ email, password })
       if (res.session) {
         setStoredTokens(res.session)
-        // Fetch full user profile
         const profile = await authApi.me(res.session.access_token)
         setUser(profile)
+        if (profile) {
+          saveCurrentAccount(profile, res.session)
+          setSavedAccountsState(getSavedAccounts())
+        }
       }
     } finally {
       setLoading(false)
@@ -89,9 +127,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await authApi.signup(payload)
       if (res.session) {
         setStoredTokens(res.session)
-        // Fetch full user profile
         const profile = await authApi.me(res.session.access_token)
         setUser(profile)
+        if (profile) {
+          saveCurrentAccount(profile, res.session)
+          setSavedAccountsState(getSavedAccounts())
+        }
       }
     } finally {
       setLoading(false)
@@ -130,8 +171,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(profile)
   }
 
+  const switchAccount = async (account: SavedAccount) => {
+    setLoading(true)
+    try {
+      if (user) {
+        saveCurrentAccount(user, getStoredTokens())
+      }
+      queryClient.clear()
+      setStoredTokens({ access_token: account.access_token, refresh_token: account.refresh_token })
+      try {
+        const profile = await authApi.me(account.access_token)
+        setUser(profile)
+        if (profile) {
+          saveCurrentAccount(profile, { access_token: account.access_token, refresh_token: account.refresh_token })
+          setSavedAccountsState(getSavedAccounts())
+        }
+      } catch {
+        const refreshed = await authApi.refresh({ refresh_token: account.refresh_token })
+        if (refreshed.session) {
+          setStoredTokens(refreshed.session)
+          const profile = await authApi.me(refreshed.session.access_token)
+          setUser(profile)
+          if (profile) {
+            saveCurrentAccount(profile, refreshed.session)
+            setSavedAccountsState(getSavedAccounts())
+          }
+        }
+      }
+      navigate('/feed')
+    } catch {
+      removeSavedAccount(account.id)
+      setSavedAccountsState(getSavedAccounts())
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const removeAccountHandler = (accountId: string) => {
+    removeSavedAccount(accountId)
+    setSavedAccountsState(getSavedAccounts())
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshSession, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshSession, refreshUser, savedAccounts, switchAccount, removeAccount: removeAccountHandler }}>
       {children}
     </AuthContext.Provider>
   )
