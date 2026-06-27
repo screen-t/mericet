@@ -46,6 +46,10 @@ const Settings = () => {
     email: "",
     username: "",
     headline: "",
+    linkedinUrl: "",
+    twitterUrl: "",
+    instagramUrl: "",
+    githubUrl: "",
   });
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const [usernameError, setUsernameError] = useState("");
@@ -59,6 +63,10 @@ const Settings = () => {
         email: profileData.email || "",
         username: profileData.username || "",
         headline: profileData.headline || "",
+        linkedinUrl: profileData.linkedin_url || "",
+        twitterUrl: profileData.twitter_url || "",
+        instagramUrl: profileData.instagram_url || "",
+        githubUrl: profileData.github_url || "",
       });
       setPrivacy({
         profileVisibility: profileData.connections_visible === false ? "private" : "public",
@@ -222,6 +230,10 @@ const Settings = () => {
       last_name: profile.lastName,
       username: normalizedUsername,
       headline: profile.headline,
+      linkedin_url: profile.linkedinUrl.trim() || null,
+      twitter_url: profile.twitterUrl.trim() || null,
+      instagram_url: profile.instagramUrl.trim() || null,
+      github_url: profile.githubUrl.trim() || null,
     });
 
     updatePrivacyMutation.mutate({
@@ -288,6 +300,44 @@ const Settings = () => {
               animate={{ opacity: 1, y: 0 }}
               className="bg-card rounded-xl border border-border p-6 space-y-6"
             >
+              {/* Profile Completion */}
+              {(() => {
+                const fields = [
+                  !!profileData?.avatar_url,
+                  !!profileData?.cover_url,
+                  !!profileData?.headline,
+                  !!profileData?.bio,
+                  !!profileData?.location,
+                  !!profileData?.current_position,
+                  !!profileData?.current_company,
+                  !!profileData?.website || !!profileData?.linkedin_url || !!profileData?.twitter_url,
+                ];
+                const filled = fields.filter(Boolean).length;
+                const pct = Math.round((filled / fields.length) * 100);
+                if (pct >= 100) return null;
+                return (
+                  <div className="p-4 rounded-lg border border-border bg-muted/30 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">Profile completion</span>
+                      <span className="text-muted-foreground">{pct}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {pct < 50
+                        ? "Add a photo, headline, and bio to help others find you."
+                        : pct < 80
+                        ? "Almost there! Add your position or social links."
+                        : "Just a few more details to complete your profile."}
+                    </p>
+                  </div>
+                );
+              })()}
+
               {/* Avatar */}
               <div className="flex items-center gap-6">
                 <div className="relative">
@@ -442,6 +492,59 @@ const Settings = () => {
                       setProfile({ ...profile, headline: e.target.value })
                     }
                   />
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Social Media Links */}
+              <div>
+                <h3 className="font-semibold mb-4">Social Media Links</h3>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="linkedinUrl">LinkedIn</Label>
+                    <Input
+                      id="linkedinUrl"
+                      placeholder="https://linkedin.com/in/username"
+                      value={profile.linkedinUrl}
+                      onChange={(e) =>
+                        setProfile({ ...profile, linkedinUrl: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="twitterUrl">X</Label>
+                    <Input
+                      id="twitterUrl"
+                      placeholder="https://x.com/username"
+                      value={profile.twitterUrl}
+                      onChange={(e) =>
+                        setProfile({ ...profile, twitterUrl: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="instagramUrl">Instagram</Label>
+                    <Input
+                      id="instagramUrl"
+                      placeholder="https://instagram.com/username"
+                      value={profile.instagramUrl}
+                      onChange={(e) =>
+                        setProfile({ ...profile, instagramUrl: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="githubUrl">GitHub</Label>
+                    <Input
+                      id="githubUrl"
+                      placeholder="https://github.com/username"
+                      value={profile.githubUrl}
+                      onChange={(e) =>
+                        setProfile({ ...profile, githubUrl: e.target.value })
+                      }
+                    />
+                  </div>
                 </div>
               </div>
 

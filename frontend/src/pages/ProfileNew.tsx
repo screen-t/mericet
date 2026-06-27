@@ -33,6 +33,10 @@ import {
   X,
   Camera,
   MoreVertical,
+  Linkedin,
+  Twitter,
+  Instagram,
+  Github,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -325,6 +329,32 @@ export const ProfilePage = () => {
                         </div>
                       )}
                     </div>
+
+                    {/* Social Media Links */}
+                    {(profile.linkedin_url || profile.twitter_url || profile.instagram_url || profile.github_url) && (
+                      <div className="flex flex-wrap gap-3 mt-2">
+                        {profile.linkedin_url && (
+                          <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                            <Linkedin className="w-5 h-5" />
+                          </a>
+                        )}
+                        {profile.twitter_url && (
+                          <a href={profile.twitter_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                            <Twitter className="w-5 h-5" />
+                          </a>
+                        )}
+                        {profile.instagram_url && (
+                          <a href={profile.instagram_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                            <Instagram className="w-5 h-5" />
+                          </a>
+                        )}
+                        {profile.github_url && (
+                          <a href={profile.github_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                            <Github className="w-5 h-5" />
+                          </a>
+                        )}
+                      </div>
+                    )}
 
                     {/* Stats */}
                     {(isOwnProfile || profile.connections_visible) && (

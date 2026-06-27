@@ -13,6 +13,10 @@ export interface User {
   bio?: string;
   location?: string;
   website?: string;
+  linkedin_url?: string;
+  twitter_url?: string;
+  instagram_url?: string;
+  github_url?: string;
   pronouns?: string;
   current_position?: string;
   current_company?: string;
