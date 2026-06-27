@@ -282,6 +282,17 @@ def like_post(
             raise HTTPException(status_code=409, detail="Already liked")
         raise HTTPException(status_code=400, detail=str(e))
     post_repo.increment_likes(post_id)
+    post = post_repo.get_by_id(post_id)
+    if post:
+        from app.routes.notifications import create_notification
+        create_notification(
+            user_id=post["author_id"],
+            notification_type="like",
+            message="liked your post",
+            actor_id=user_id,
+            post_id=post_id,
+            post_preview=post.get("content"),
+        )
     return {"message": "Post liked"}
 
 
@@ -309,6 +320,17 @@ def repost(
     try:
         post_repo.add_repost(post_id, user_id)
         post_repo.increment_reposts(post_id)
+        post = post_repo.get_by_id(post_id)
+        if post:
+            from app.routes.notifications import create_notification
+            create_notification(
+                user_id=post["author_id"],
+                notification_type="repost",
+                message="reposted your post",
+                actor_id=user_id,
+                post_id=post_id,
+                post_preview=post.get("content"),
+            )
         return {"message": "Post reposted"}
     except Exception as e:
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
@@ -415,6 +437,18 @@ def create_comment(
     post_repo.increment_comments(post_id)
     author = user_repo.get_by_id(user_id, "id, username, first_name, last_name, avatar_url")
     comment["author"] = author
+    post = post_repo.get_by_id(post_id)
+    if post:
+        from app.routes.notifications import create_notification
+        create_notification(
+            user_id=post["author_id"],
+            notification_type="comment",
+            message="commented on your post",
+            actor_id=user_id,
+            post_id=post_id,
+            post_preview=post.get("content"),
+            comment_id=comment.get("id"),
+        )
     return {"message": "Comment added", "data": comment}
 
 

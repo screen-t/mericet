@@ -7,7 +7,8 @@ class SupabaseNotificationRepository:
 
     def get_for_user(self, user_id: str, unread_only: bool,
                      limit: int, offset: int) -> list[dict]:
-        query = self._client.table("notifications").select("*") \
+        query = self._client.table("notifications") \
+            .select("*, actor:actor_id(id, username, first_name, last_name, avatar_url)") \
             .eq("user_id", user_id)
         if unread_only:
             query = query.eq("is_read", False)

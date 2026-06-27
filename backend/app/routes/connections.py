@@ -37,6 +37,14 @@ def send_connection_request(
         raise HTTPException(status_code=409, detail="Connection request already exists")
     data = {"requester_id": user_id, "receiver_id": payload.receiver_id, "status": "pending"}
     created = conn_repo.create(data)
+    from app.routes.notifications import create_notification
+    create_notification(
+        user_id=payload.receiver_id,
+        notification_type="connection_request",
+        message="sent you a connection request",
+        actor_id=user_id,
+        connection_id=created.get("id"),
+    )
     return {"message": "Connection request sent", "data": _enrich_connection(created, user_repo)}
 
 
@@ -87,6 +95,15 @@ def update_connection(
     if connection["receiver_id"] != user_id:
         raise HTTPException(status_code=403, detail="Only the receiver can update this request")
     updated = conn_repo.update(connection_id, {"status": payload.status.value, "updated_at": "now()"})
+    if payload.status.value == "accepted":
+        from app.routes.notifications import create_notification
+        create_notification(
+            user_id=connection["requester_id"],
+            notification_type="connection_accepted",
+            message="accepted your connection request",
+            actor_id=user_id,
+            connection_id=connection_id,
+        )
     return {"message": f"Connection {payload.status.value}", "data": _enrich_connection(updated, user_repo)}
 
 

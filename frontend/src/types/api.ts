@@ -199,7 +199,7 @@ export interface Conversation {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'like' | 'comment' | 'connection_request' | 'connection_accepted' | 'repost' | 'mention';
+  type: 'like' | 'comment' | 'connection_request' | 'connection_accepted' | 'repost' | 'mention' | 'follow';
   content: string;
   message?: string;
   is_read: boolean;

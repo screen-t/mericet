@@ -81,19 +81,40 @@ def clear_all_notifications(
     return {"message": "Read notifications cleared"}
 
 
-def create_notification(user_id: str, notification_type: str,
-                        title: str, message: str, link: str = None):
-    """Helper function used by other routes to create notifications."""
+def create_notification(
+    user_id: str,
+    notification_type: str,
+    message: str,
+    actor_id: str = None,
+    post_id: str = None,
+    post_preview: str = None,
+    comment_id: str = None,
+    connection_id: str = None,
+    link: str = None,
+):
+    if actor_id == user_id:
+        return
     from app.deps import get_notification_repo
     repo = get_notification_repo()
     try:
-        repo.create({
+        data = {
             "user_id": user_id,
             "type": notification_type,
-            "title": title,
             "message": message,
-            "link": link,
             "is_read": False,
-        })
+        }
+        if actor_id:
+            data["actor_id"] = actor_id
+        if post_id:
+            data["post_id"] = post_id
+        if post_preview:
+            data["post_preview"] = post_preview[:100]
+        if comment_id:
+            data["comment_id"] = comment_id
+        if connection_id:
+            data["connection_id"] = connection_id
+        if link:
+            data["link"] = link
+        repo.create(data)
     except Exception as e:
         print(f"Error creating notification: {e}")

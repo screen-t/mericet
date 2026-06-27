@@ -18,6 +18,13 @@ def follow_user(
     if follow_repo.is_following(user_id, target_user_id):
         return {"message": "Already following"}
     follow_repo.follow(user_id, target_user_id)
+    from app.routes.notifications import create_notification
+    create_notification(
+        user_id=target_user_id,
+        notification_type="follow",
+        message="started following you",
+        actor_id=user_id,
+    )
     return {"message": "Followed"}
 
 
