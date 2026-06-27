@@ -6,18 +6,20 @@ import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { backendApi } from "@/lib/backend-api";
 import { useToast } from "@/hooks/use-toast";
-import { Connection } from "@/types/api";
+import { Connection, Post } from "@/types/api";
 import { Search, Loader2, Send } from "lucide-react";
 
 interface SharePostModalProps {
   postId: string;
+  post?: Post;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const SharePostModal = ({ postId, open, onOpenChange }: SharePostModalProps) => {
+export const SharePostModal = ({ postId, post, open, onOpenChange }: SharePostModalProps) => {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
 
   const { data: connectionsData, isLoading } = useQuery({
     queryKey: ['connections', 'accepted'],
@@ -28,13 +30,44 @@ export const SharePostModal = ({ postId, open, onOpenChange }: SharePostModalPro
   const sendMutation = useMutation({
     mutationFn: (receiverId: string) => {
       const postUrl = `${window.location.origin}/posts/${postId}`;
-      return backendApi.messages.sendMessage(receiverId, postUrl);
+      const contentSnippet = (post?.content || "").slice(0, 80);
+      const mediaUrls = (post as { media?: Array<{ url: string }> })?.media || [];
+      const firstImage = mediaUrls.find(
+        (m: { url: string }) => /\.(jpg|jpeg|png|webp|gif)/i.test(m.url)
+      );
+      const hasImage = !!firstImage;
+      const hasText = !!contentSnippet.trim();
+
+      let messageText = `Shared a post\n${postUrl}`;
+      if (hasText) {
+        const display = contentSnippet + (post!.content!.length > 80 ? "…" : "");
+        messageText = `Shared a post: "${display}"\n${postUrl}`;
+      } else if (hasImage) {
+        messageText = `Shared a photo\n${postUrl}`;
+      }
+
+      const metadata: Record<string, string> = {
+        type: "shared_post",
+        post_id: postId,
+      };
+      if (hasText) metadata.post_content = post!.content!.slice(0, 150);
+      if (firstImage) metadata.post_image = firstImage.url;
+      if (post?.author) {
+        metadata.author_name = `${post.author.first_name} ${post.author.last_name}`;
+        if (post.author.avatar_url) metadata.author_avatar = post.author.avatar_url;
+      }
+
+      return backendApi.messages.sendMessage(receiverId, messageText, undefined, metadata);
     },
     onSuccess: () => {
       toast({ title: "Post shared!" });
+      setSendingTo(null);
       onOpenChange(false);
     },
-    onError: () => toast({ title: "Failed to share post", variant: "destructive" }),
+    onError: () => {
+      setSendingTo(null);
+      toast({ title: "Failed to share post", variant: "destructive" });
+    },
   });
 
   const connections = (connectionsData?.connections || []).filter((c: Connection) => {
@@ -72,9 +105,12 @@ export const SharePostModal = ({ postId, open, onOpenChange }: SharePostModalPro
             connections.map((conn: Connection) => (
               <button
                 key={conn.id}
-                onClick={() => sendMutation.mutate(conn.user!.id)}
+                onClick={() => {
+                  setSendingTo(conn.user!.id);
+                  sendMutation.mutate(conn.user!.id);
+                }}
                 disabled={sendMutation.isPending}
-                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
+                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <UserAvatar
                   src={conn.user?.avatar_url}
@@ -89,7 +125,11 @@ export const SharePostModal = ({ postId, open, onOpenChange }: SharePostModalPro
                     <p className="text-xs text-muted-foreground">@{conn.user.username}</p>
                   )}
                 </div>
-                <Send className="w-4 h-4 text-muted-foreground" />
+                {sendingTo === conn.user?.id && sendMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                ) : (
+                  <Send className="w-4 h-4 text-muted-foreground" />
+                )}
               </button>
             ))
           )}

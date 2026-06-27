@@ -1100,6 +1100,104 @@ const MessagesNew = () => {
                                   </>
                                 );
                               }
+                              if (message.metadata?.type === "shared_post") {
+                                const meta = message.metadata;
+                                const hasImage = !!meta.post_image;
+                                const hasContent = !!meta.post_content?.trim();
+                                return (
+                                  <div
+                                    onClick={() => navigate(`/posts/${meta.post_id}`)}
+                                    className={cn(
+                                      "rounded-lg overflow-hidden border max-w-xs cursor-pointer transition-opacity hover:opacity-80",
+                                      isMyMessage ? "border-white/20" : "border-border"
+                                    )}
+                                  >
+                                    {hasImage && (
+                                      <img
+                                        src={meta.post_image}
+                                        alt=""
+                                        className="w-full h-32 object-cover"
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                      />
+                                    )}
+                                    <div className="p-2.5 space-y-1.5">
+                                      <p className={cn(
+                                        "text-[10px] uppercase font-semibold tracking-wide",
+                                        isMyMessage ? "text-white/50" : "text-muted-foreground/70"
+                                      )}>
+                                        Shared post
+                                      </p>
+                                      {meta.author_name && (
+                                        <div className="flex items-center gap-1.5">
+                                          {meta.author_avatar && (
+                                            <img src={meta.author_avatar} alt="" className="w-4 h-4 rounded-full" />
+                                          )}
+                                          <span className={cn(
+                                            "text-xs font-medium",
+                                            isMyMessage ? "text-white/80" : "text-foreground"
+                                          )}>
+                                            {meta.author_name}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {hasContent && (
+                                        <p className={cn(
+                                          "text-xs line-clamp-3",
+                                          isMyMessage ? "text-white/70" : "text-muted-foreground"
+                                        )}>
+                                          {meta.post_content}
+                                        </p>
+                                      )}
+                                      {!hasImage && !hasContent && (
+                                        <p className={cn(
+                                          "text-xs",
+                                          isMyMessage ? "text-white/50" : "text-muted-foreground"
+                                        )}>
+                                          Tap to view post
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              // Fallback: detect shared post from content text
+                              const sharedPostMatch = message.content.match(/^Shared a (?:post|photo)(?:: "(.+?)")?[\s\S]*?\/posts\/([0-9a-f-]{36})/);
+                              if (sharedPostMatch) {
+                                const [, snippet, postId] = sharedPostMatch;
+                                return (
+                                  <div
+                                    onClick={() => navigate(`/posts/${postId}`)}
+                                    className={cn(
+                                      "rounded-lg overflow-hidden border max-w-xs cursor-pointer transition-opacity hover:opacity-80",
+                                      isMyMessage ? "border-white/20" : "border-border"
+                                    )}
+                                  >
+                                    <div className="p-2.5 space-y-1.5">
+                                      <p className={cn(
+                                        "text-[10px] uppercase font-semibold tracking-wide",
+                                        isMyMessage ? "text-white/50" : "text-muted-foreground/70"
+                                      )}>
+                                        Shared post
+                                      </p>
+                                      {snippet ? (
+                                        <p className={cn(
+                                          "text-xs line-clamp-3",
+                                          isMyMessage ? "text-white/70" : "text-muted-foreground"
+                                        )}>
+                                          {snippet}
+                                        </p>
+                                      ) : (
+                                        <p className={cn(
+                                          "text-xs",
+                                          isMyMessage ? "text-white/50" : "text-muted-foreground"
+                                        )}>
+                                          Tap to view post
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              }
                               return <p className="text-sm">{message.content}</p>;
                             })()}
                             <p

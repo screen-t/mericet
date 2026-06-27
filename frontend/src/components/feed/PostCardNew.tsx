@@ -675,6 +675,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
 
       <SharePostModal
         postId={post.id}
+        post={post}
         open={showShareModal}
         onOpenChange={setShowShareModal}
       />

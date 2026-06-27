@@ -189,6 +189,14 @@ export interface Message {
   reactions?: MessageReaction[];
   is_deleted?: boolean;
   deleted_at?: string | null;
+  metadata?: {
+    type?: string;
+    post_id?: string;
+    post_content?: string;
+    post_image?: string;
+    author_name?: string;
+    author_avatar?: string;
+  };
 }
 
 export interface MessageSearchResult extends Message {

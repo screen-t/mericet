@@ -398,11 +398,11 @@ const messages = {
     ).then(handleResponse<import('@/types/api').Message[]>);
     return { messages: Array.isArray(list) ? list : [] } as import('@/types/api').MessagesResponse;
   },
-  sendMessage: (recipientId: string, content: string, conversationId?: string) =>
+  sendMessage: (recipientId: string, content: string, conversationId?: string, metadata?: Record<string, unknown>) =>
     fetchWithAuth(`${API_BASE_URL}/messages`, {
       method: "POST",
       headers: getAuthHeaders(),
-      body: JSON.stringify({ receiver_id: recipientId, content, ...(conversationId ? { conversation_id: conversationId } : {}) }),
+      body: JSON.stringify({ receiver_id: recipientId, content, ...(conversationId ? { conversation_id: conversationId } : {}), ...(metadata ? { metadata } : {}) }),
     }).then(handleResponse),
   editMessage: (messageId: string, content: string) =>
     fetchWithAuth(`${API_BASE_URL}/messages/messages/${messageId}`, {

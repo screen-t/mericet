@@ -167,8 +167,17 @@ def send_message(
             "content": payload.content,
             "is_read": False,
         }
+        if payload.metadata:
+            message_data["metadata"] = payload.metadata
 
-        message = msg_repo.create_message(message_data)
+        try:
+            message = msg_repo.create_message(message_data)
+        except Exception:
+            if payload.metadata:
+                message_data.pop("metadata", None)
+                message = msg_repo.create_message(message_data)
+            else:
+                raise
 
         # Best-effort sender enrichment; never fail send after successful insert.
         try:
@@ -218,8 +227,17 @@ def send_message_to_conversation(
             "content": payload.content,
             "is_read": False,
         }
+        if payload.metadata:
+            message_data["metadata"] = payload.metadata
 
-        message = msg_repo.create_message(message_data)
+        try:
+            message = msg_repo.create_message(message_data)
+        except Exception:
+            if payload.metadata:
+                message_data.pop("metadata", None)
+                message = msg_repo.create_message(message_data)
+            else:
+                raise
 
         # Best-effort sender enrichment; never fail send after successful insert.
         try:
