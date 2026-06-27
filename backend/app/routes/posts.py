@@ -166,10 +166,14 @@ def get_feed(
     offset: int = Query(0, ge=0),
 ):
     if feed_type == "following":
-        following_ids = follow_repo.get_following_ids(user_id, 1000, 0)
-        if not following_ids:
+        from app.deps import get_connection_repo
+        conn_repo = get_connection_repo()
+        following_ids = set(follow_repo.get_following_ids(user_id, 1000, 0))
+        connected_ids = set(conn_repo.get_connected_ids(user_id))
+        all_ids = list(following_ids | connected_ids)
+        if not all_ids:
             return []
-        posts = post_repo.get_by_author_ids(following_ids, limit, offset)
+        posts = post_repo.get_by_author_ids(all_ids, limit, offset)
     else:
         posts = post_repo.get_feed("public", limit, offset)
     return bulk_enrich_posts(posts, user_id, post_repo, user_repo)
