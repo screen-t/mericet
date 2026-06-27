@@ -4,13 +4,20 @@ This directory contains documentation for the Mericet professional networking pl
 
 ## Documentation Index
 
-### Architecture
+### Architecture & Standards
+
+**[ENGINEERING_STANDARDS.md](./ENGINEERING_STANDARDS.md)**
+- Tech stack choices and rationale
+- Provider portability principles
+- Code we accept vs reject
+- Caching, rate limiting, counter integrity
+- How to add new features
 
 **[ARCHITECTURE_PLAN.md](./ARCHITECTURE_PLAN.md)**
 - Repository pattern and service layer design
 - Dependency injection via `deps.py`
 - How to swap database/storage/auth providers
-- Scalability hardening (rate limiting, caching, atomic counters)
+- Scalability hardening phases and status
 
 ### Technical Reference
 
