@@ -1,8 +1,8 @@
-# stonet - Security Audit and Best Practices
+# Mericet - Security Audit and Best Practices
 
 ## Overview
 
-This document outlines the security strategy, audit procedures, and best practices for the stonet platform to ensure data protection, privacy, and security compliance.
+This document outlines the security strategy, audit procedures, and best practices for the Mericet platform to ensure data protection, privacy, and security compliance.
 
 ## Security Objectives
 
@@ -398,8 +398,8 @@ const authAttemptsLimiter = rateLimit({
 ```typescript
 const corsOptions = {
   origin: [
-    'https://stonet.example.com',
-    'https://staging.stonet.example.com',
+    'https://Mericet.example.com',
+    'https://staging.Mericet.example.com',
     process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : ''
   ].filter(Boolean),
   credentials: true,

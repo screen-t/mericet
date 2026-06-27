@@ -46,6 +46,9 @@ class PrivacySettingsUpdate(BaseModel):
     work_history_visible: Optional[bool] = None
     connections_visible: Optional[bool] = None
     activity_status_visible: Optional[bool] = None
+    allow_messages_from_anyone: Optional[bool] = None
+    notification_preview: Optional[bool] = None
+    notification_preferences: Optional[dict] = None
 
 class ProfileResponse(BaseModel):
     id: str

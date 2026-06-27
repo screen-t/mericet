@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.middleware.rate_limit import limiter
 from app.routes.auth import router as auth_router
 from app.routes.oauth import router as oauth_router
 from app.routes.profile import router as profile_router
@@ -11,9 +14,12 @@ from app.routes.search import router as search_router
 from app.routes.saves import router as saves_router
 from app.routes.follows import router as follows_router
 from app.routes.reports import router as reports_router
+from app.routes.media import router as media_router
 
 # FastAPI application
 app = FastAPI(title="Mericet Backend API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS settings - allow frontend development and production hosts
 import os
@@ -74,4 +80,5 @@ app.include_router(search_router)
 app.include_router(saves_router)
 app.include_router(follows_router)
 app.include_router(reports_router)
+app.include_router(media_router)
 

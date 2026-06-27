@@ -13,6 +13,10 @@ export interface User {
   bio?: string;
   location?: string;
   website?: string;
+  linkedin_url?: string;
+  twitter_url?: string;
+  instagram_url?: string;
+  github_url?: string;
   pronouns?: string;
   current_position?: string;
   current_company?: string;
@@ -23,11 +27,21 @@ export interface User {
   work_history_visible: boolean;
   connections_visible: boolean;
   activity_status_visible: boolean;
+  notification_preview?: boolean;
+  allow_messages_from_anyone?: boolean;
+  notification_preferences?: {
+    connection_requests?: boolean;
+    mentions?: boolean;
+    new_followers?: boolean;
+    post_engagement?: boolean;
+    show_preview?: boolean;
+  };
   account_type: 'personal' | 'business';
   created_at: string;
   updated_at: string;
   connections_count?: number;
   followers_count?: number;
+  last_active_at?: string;
 }
 
 export interface Profile extends User {
@@ -175,6 +189,14 @@ export interface Message {
   reactions?: MessageReaction[];
   is_deleted?: boolean;
   deleted_at?: string | null;
+  metadata?: {
+    type?: string;
+    post_id?: string;
+    post_content?: string;
+    post_image?: string;
+    author_name?: string;
+    author_avatar?: string;
+  };
 }
 
 export interface MessageSearchResult extends Message {
@@ -194,7 +216,7 @@ export interface Conversation {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'like' | 'comment' | 'connection_request' | 'connection_accepted' | 'repost' | 'mention';
+  type: 'like' | 'comment' | 'connection_request' | 'connection_accepted' | 'repost' | 'mention' | 'follow';
   content: string;
   message?: string;
   is_read: boolean;

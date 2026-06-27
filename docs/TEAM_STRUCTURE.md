@@ -1,4 +1,4 @@
-# stonet - Team Structure and Roles
+# Mericet - Team Structure and Roles
 
 ## Organization Chart
 

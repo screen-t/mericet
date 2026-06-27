@@ -1,8 +1,8 @@
-# stonet - Testing Strategy
+# Mericet - Testing Strategy
 
 ## Overview
 
-This document defines the comprehensive testing strategy for the stonet platform, including testing types, tools, processes, and quality standards.
+This document defines the comprehensive testing strategy for the Mericet platform, including testing types, tools, processes, and quality standards.
 
 ## Testing Philosophy
 
@@ -624,15 +624,15 @@ snyk monitor
 **Test Users:**
 ```
 Admin User:
-Email: admin@stonet.test
+Email: admin@Mericet.test
 Password: TestAdmin123!
 
 Regular User:
-Email: user@stonet.test
+Email: user@Mericet.test
 Password: TestUser123!
 
 Test User with Connections:
-Email: connected@stonet.test
+Email: connected@Mericet.test
 Password: TestConnected123!
 ```
 

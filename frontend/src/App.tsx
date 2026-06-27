@@ -13,7 +13,6 @@ import  Onboarding from "./pages/Onboarding";
 import { AuthProvider, RequireAuth } from "@/lib/auth";
 import Feed from "./pages/Feed";
 import FeedNew from "./pages/FeedNew";
-import Profile from "./pages/Profile";
 import ProfileNew from "./pages/ProfileNew";
 import Network from "./pages/Network";
 import NetworkNew from "./pages/NetworkNew";

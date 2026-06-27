@@ -17,7 +17,7 @@ const FeedNew = () => {
   const queryClient = useQueryClient();
 
   // Fetch feed based on active tab
-  const { data: feedData, isLoading, error, refetch } = useQuery<Post[]>({
+  const { data: feedData, isLoading, isFetching, error, refetch } = useQuery<Post[]>({
     queryKey: ['feed', activeTab],
     queryFn: async () => {
       const result = await backendApi.posts.getFeed(activeTab as 'for_you' | 'following', 20, 0);
@@ -62,9 +62,9 @@ const FeedNew = () => {
               variant="ghost"
               size="icon"
               onClick={() => refetch()}
-              disabled={isLoading}
+              disabled={isFetching}
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 transition-transform ${isFetching ? 'animate-spin' : ''}`} />
             </Button>
           </div>
 

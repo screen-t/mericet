@@ -21,7 +21,12 @@ import {
 const SearchPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get('q')?.trim() || '';
-  const [activeTab, setActiveTab] = useState("all");
+  const activeTab = searchParams.get('tab') || 'all';
+  const setActiveTab = (tab: string) => {
+    const params: Record<string, string> = { tab };
+    if (searchQuery) params.q = searchQuery;
+    setSearchParams(params);
+  };
   const debouncedQuery = searchQuery;
 
   // Search all
