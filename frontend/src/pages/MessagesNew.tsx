@@ -44,6 +44,7 @@ import {
   Reply,
   CornerUpLeft,
   UserPlus,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -138,7 +139,7 @@ const MessagesNew = () => {
   };
 
   // Fetch conversations list
-  const { data: conversationsData, isLoading: loadingConversations } = useQuery<ConversationsResponse>({
+  const { data: conversationsData, isLoading: loadingConversations, isFetching: fetchingConversations } = useQuery<ConversationsResponse>({
     queryKey: ['conversations'],
     queryFn: () => backendApi.messages.getConversations(100, 0),
     refetchInterval: 10000,
@@ -705,7 +706,22 @@ const MessagesNew = () => {
           {/* Header */}
           <div className="p-4 border-b">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xl font-bold">Messages</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold">Messages</h2>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="Refresh conversations"
+                  onClick={() => {
+                    queryClient.invalidateQueries({ queryKey: ['conversations'] });
+                    if (userId) queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+                  }}
+                  disabled={fetchingConversations}
+                >
+                  <RefreshCw className={cn("w-4 h-4 transition-transform", fetchingConversations && "animate-spin")} />
+                </Button>
+              </div>
               {!hasConnections && (
                 <span className="text-xs text-muted-foreground">No connections yet</span>
               )}
