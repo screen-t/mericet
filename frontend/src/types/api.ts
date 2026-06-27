@@ -29,6 +29,7 @@ export interface User {
   activity_status_visible: boolean;
   notification_preview?: boolean;
   allow_messages_from_anyone?: boolean;
+  show_typing_indicator?: boolean;
   notification_preferences?: {
     connection_requests?: boolean;
     mentions?: boolean;

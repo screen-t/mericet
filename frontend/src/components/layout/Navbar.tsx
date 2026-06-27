@@ -32,6 +32,7 @@ import {
   ShieldAlert,
   Sun,
   Moon,
+  ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -49,7 +50,7 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
+  const { logout, user, savedAccounts, switchAccount } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -253,7 +254,39 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
+                  {savedAccounts.filter(a => a.id !== user?.id).length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">Switch account</p>
+                      </div>
+                      {savedAccounts
+                        .filter(a => a.id !== user?.id)
+                        .map(account => (
+                          <DropdownMenuItem
+                            key={account.id}
+                            className="cursor-pointer"
+                            onClick={() => switchAccount(account)}
+                          >
+                            <UserAvatar
+                              src={account.avatar_url}
+                              name={`${account.first_name} ${account.last_name}`}
+                              size="sm"
+                              className="mr-2 h-5 w-5"
+                            />
+                            <span className="truncate">{account.first_name} {account.last_name}</span>
+                          </DropdownMenuItem>
+                        ))}
+                    </>
+                  )}
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => navigate('/login')}
+                  >
+                    <ArrowLeftRight className="mr-2 h-4 w-4" />
+                    Add another account
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
                     className="text-destructive cursor-pointer"
                     onClick={handleLogout}
                   >
