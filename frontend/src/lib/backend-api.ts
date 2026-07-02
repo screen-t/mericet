@@ -182,6 +182,28 @@ const profile = {
       method: "DELETE",
       headers: getAuthHeaders(),
     }).then(handleResponse),
+
+    getConnectionNotes: (userId: string) =>
+  fetchWithAuth(`${API_BASE_URL}/profile/${userId}/connection-notes`, {
+    headers: getAuthHeaders(),
+  }).then(handleResponse),
+
+saveConnectionNotes: (
+  userId: string,
+  notes: string,
+) =>
+  fetchWithAuth(`${API_BASE_URL}/profile/${userId}/connection-notes`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      notes,
+    }),
+  }).then(handleResponse),
+
+getActivityStatus: (userId: string) =>
+  fetchWithAuth(`${API_BASE_URL}/profile/${userId}/activity-status`, {
+    headers: getAuthHeaders(),
+  }).then(handleResponse),
 };
 
 // --- Posts ---

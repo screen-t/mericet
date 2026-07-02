@@ -10,12 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { backendApi } from "@/lib/backend-api";
-
+import ConnectionNotes from "@/components/profile/ConnectionNotes";
+import ActivityStatus from "@/components/profile/ActivityStatus";
 import { WorkExperienceSection } from "@/components/profile/WorkExperienceSection";
 import { EducationSection } from "@/components/profile/EducationSection";
 import { SkillsSection } from "@/components/profile/SkillsSection";
 import { ProfilePosts } from "@/components/profile/ProfilePosts";
-import { Profile } from '@/types/api';
+import { Profile } from "@/types/api";
 import {
   MapPin,
   Link as LinkIcon,
@@ -56,19 +57,21 @@ export const ProfilePage = () => {
   const uploadAvatarMutation = useMutation({
     mutationFn: (file: File) => backendApi.profile.uploadAvatar(file),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ["profile", profileUserId] });
       toast({ title: "Profile photo updated!" });
     },
-    onError: () => toast({ title: "Failed to upload photo", variant: "destructive" }),
+    onError: () =>
+      toast({ title: "Failed to upload photo", variant: "destructive" }),
   });
 
   const uploadCoverMutation = useMutation({
     mutationFn: (file: File) => backendApi.profile.uploadCover(file),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ["profile", profileUserId] });
       toast({ title: "Cover image updated!" });
     },
-    onError: () => toast({ title: "Failed to upload cover", variant: "destructive" }),
+    onError: () =>
+      toast({ title: "Failed to upload cover", variant: "destructive" }),
   });
 
   // Determine which user profile to show
@@ -76,8 +79,12 @@ export const ProfilePage = () => {
   const isOwnProfile = !userId || userId === user?.id;
 
   // Fetch profile data
-  const { data: profile, isLoading, error } = useQuery<Profile>({
-    queryKey: ['profile', profileUserId],
+  const {
+    data: profile,
+    isLoading,
+    error,
+  } = useQuery<Profile>({
+    queryKey: ["profile", profileUserId],
     queryFn: async () => {
       if (isOwnProfile) {
         return backendApi.profile.getMyProfile() as Promise<Profile>;
@@ -89,13 +96,13 @@ export const ProfilePage = () => {
 
   // Fetch connection status if viewing another user's profile
   const { data: connectionStatus } = useQuery({
-    queryKey: ['connectionStatus', profileUserId],
+    queryKey: ["connectionStatus", profileUserId],
     queryFn: () => backendApi.connections.getConnectionStatus(profileUserId!),
     enabled: !isOwnProfile && !!profileUserId,
   });
 
   const { data: followStatus } = useQuery({
-    queryKey: ['followStatus', profileUserId],
+    queryKey: ["followStatus", profileUserId],
     queryFn: () => backendApi.follows.status(profileUserId!),
     enabled: !isOwnProfile && !!profileUserId,
   });
@@ -105,7 +112,9 @@ export const ProfilePage = () => {
     mutationFn: () => backendApi.connections.sendRequest(profileUserId!),
     onSuccess: () => {
       toast({ title: "Connection request sent!" });
-      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
+      queryClient.invalidateQueries({
+        queryKey: ["connectionStatus", profileUserId],
+      });
     },
     onError: () => {
       toast({ title: "Failed to send request", variant: "destructive" });
@@ -113,10 +122,15 @@ export const ProfilePage = () => {
   });
 
   const removeConnection = useMutation({
-    mutationFn: () => backendApi.connections.removeConnection(connectionStatus?.connection_id || profileUserId!),
+    mutationFn: () =>
+      backendApi.connections.removeConnection(
+        connectionStatus?.connection_id || profileUserId!,
+      ),
     onSuccess: () => {
       toast({ title: "Connection removed" });
-      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
+      queryClient.invalidateQueries({
+        queryKey: ["connectionStatus", profileUserId],
+      });
     },
     onError: () => {
       toast({ title: "Failed to remove connection", variant: "destructive" });
@@ -125,11 +139,16 @@ export const ProfilePage = () => {
 
   const respondToRequest = useMutation({
     mutationFn: (accept: boolean) =>
-      backendApi.connections.respondToRequest(connectionStatus?.connection_id ?? "", accept),
+      backendApi.connections.respondToRequest(
+        connectionStatus?.connection_id ?? "",
+        accept,
+      ),
     onSuccess: (_, accept) => {
       toast({ title: accept ? "Connection accepted!" : "Request declined" });
-      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
-      queryClient.invalidateQueries({ queryKey: ['connections'] });
+      queryClient.invalidateQueries({
+        queryKey: ["connectionStatus", profileUserId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["connections"] });
     },
     onError: () => {
       toast({ title: "Failed to respond to request", variant: "destructive" });
@@ -139,16 +158,20 @@ export const ProfilePage = () => {
   const followMutation = useMutation({
     mutationFn: () => backendApi.follows.follow(profileUserId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
-      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      queryClient.invalidateQueries({
+        queryKey: ["followStatus", profileUserId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["profile", profileUserId] });
     },
   });
 
   const unfollowMutation = useMutation({
     mutationFn: () => backendApi.follows.unfollow(profileUserId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
-      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      queryClient.invalidateQueries({
+        queryKey: ["followStatus", profileUserId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["profile", profileUserId] });
     },
   });
 
@@ -156,22 +179,28 @@ export const ProfilePage = () => {
     mutationFn: () => backendApi.connections.blockUser(profileUserId!),
     onSuccess: () => {
       toast({ title: "User blocked" });
-      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
-      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
-      queryClient.invalidateQueries({ queryKey: ['connections'] });
+      queryClient.invalidateQueries({
+        queryKey: ["connectionStatus", profileUserId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["profile", profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ["connections"] });
     },
-    onError: () => toast({ title: "Failed to block user", variant: "destructive" }),
+    onError: () =>
+      toast({ title: "Failed to block user", variant: "destructive" }),
   });
 
   const unblockMutation = useMutation({
     mutationFn: () => backendApi.connections.unblockUser(profileUserId!),
     onSuccess: () => {
       toast({ title: "User unblocked" });
-      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
-      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
-      queryClient.invalidateQueries({ queryKey: ['connections'] });
+      queryClient.invalidateQueries({
+        queryKey: ["connectionStatus", profileUserId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["profile", profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ["connections"] });
     },
-    onError: () => toast({ title: "Failed to unblock user", variant: "destructive" }),
+    onError: () =>
+      toast({ title: "Failed to unblock user", variant: "destructive" }),
   });
 
   if (isLoading) {
@@ -293,12 +322,16 @@ export const ProfilePage = () => {
                       {profile.first_name} {profile.last_name}
                     </h1>
                     {profile.pronouns && (
-                      <p className="text-sm text-muted-foreground">({profile.pronouns})</p>
+                      <p className="text-sm text-muted-foreground">
+                        ({profile.pronouns})
+                      </p>
                     )}
                     {profile.headline && (
-                      <p className="text-lg text-muted-foreground mt-1">{profile.headline}</p>
+                      <p className="text-lg text-muted-foreground mt-1">
+                        {profile.headline}
+                      </p>
                     )}
-                    
+
                     {/* Location & Website */}
                     <div className="flex flex-wrap gap-4 mt-3 text-sm text-muted-foreground">
                       {profile.location && (
@@ -330,12 +363,20 @@ export const ProfilePage = () => {
                     {(isOwnProfile || profile.connections_visible) && (
                       <div className="flex gap-6 mt-4 text-sm">
                         <div>
-                          <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
-                          <span className="text-muted-foreground">Connections</span>
+                          <span className="font-semibold">
+                            {profile.connections_count || 0}
+                          </span>{" "}
+                          <span className="text-muted-foreground">
+                            Connections
+                          </span>
                         </div>
                         <div>
-                          <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
-                          <span className="text-muted-foreground">Followers</span>
+                          <span className="font-semibold">
+                            {profile.followers_count || 0}
+                          </span>{" "}
+                          <span className="text-muted-foreground">
+                            Followers
+                          </span>
                         </div>
                       </div>
                     )}
@@ -349,7 +390,11 @@ export const ProfilePage = () => {
                   {/* Action Buttons */}
                   <div className="flex flex-wrap gap-2 md:justify-end">
                     {isOwnProfile ? (
-                      <Button variant="outline" asChild className="w-full sm:w-auto">
+                      <Button
+                        variant="outline"
+                        asChild
+                        className="w-full sm:w-auto"
+                      >
                         <Link to="/settings">
                           <Edit3 className="w-4 h-4 mr-2" />
                           Edit Profile
@@ -357,11 +402,13 @@ export const ProfilePage = () => {
                       </Button>
                     ) : (
                       <>
-                        {connectionStatus?.status === 'accepted' ? (
+                        {connectionStatus?.status === "accepted" ? (
                           <>
                             <Button
                               variant="default"
-                              onClick={() => navigate(`/messages/${profileUserId}`)}
+                              onClick={() =>
+                                navigate(`/messages/${profileUserId}`)
+                              }
                               className="w-full sm:w-auto"
                             >
                               <MessageSquare className="w-4 h-4 mr-2" />
@@ -394,7 +441,7 @@ export const ProfilePage = () => {
                               Connected
                             </Button>
                           </>
-                        ) : connectionStatus?.status === 'pending_from_them' ? (
+                        ) : connectionStatus?.status === "pending_from_them" ? (
                           <>
                             <Button
                               onClick={() => respondToRequest.mutate(true)}
@@ -414,8 +461,12 @@ export const ProfilePage = () => {
                               Decline
                             </Button>
                           </>
-                        ) : connectionStatus?.status === 'pending' ? (
-                          <Button variant="outline" disabled className="w-full sm:w-auto">
+                        ) : connectionStatus?.status === "pending" ? (
+                          <Button
+                            variant="outline"
+                            disabled
+                            className="w-full sm:w-auto"
+                          >
                             Request Pending
                           </Button>
                         ) : (
@@ -456,13 +507,16 @@ export const ProfilePage = () => {
                                 variant="outline"
                                 size="icon"
                                 className="w-10 h-10"
-                                disabled={blockMutation.isPending || unblockMutation.isPending}
+                                disabled={
+                                  blockMutation.isPending ||
+                                  unblockMutation.isPending
+                                }
                               >
                                 <MoreVertical className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              {connectionStatus?.status === 'blocked' ? (
+                              {connectionStatus?.status === "blocked" ? (
                                 connectionStatus.is_requester ? (
                                   <DropdownMenuItem
                                     className="text-destructive focus:text-destructive"
@@ -485,7 +539,9 @@ export const ProfilePage = () => {
                                   Block
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
+                              <DropdownMenuItem
+                                onClick={() => setShowReportDialog(true)}
+                              >
                                 Report user
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -518,10 +574,42 @@ export const ProfilePage = () => {
         {/* Profile Tabs */}
         <Tabs defaultValue="about" className="w-full">
           <TabsList className="grid w-full grid-cols-4 h-auto gap-0">
-            <TabsTrigger value="about" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">About</TabsTrigger>
-            <TabsTrigger value="posts" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Posts</TabsTrigger>
-            <TabsTrigger value="experience" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Experience</TabsTrigger>
-            <TabsTrigger value="education" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Education</TabsTrigger>
+            <TabsTrigger
+              value="about"
+              className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4"
+            >
+              About
+            </TabsTrigger>
+            <SkillsSection
+              userId={profileUserId!}
+              isOwnProfile={isOwnProfile}
+            />
+
+            {!isOwnProfile && connectionStatus?.status === "accepted" && (
+              <ConnectionNotes userId={profileUserId!} />
+            )}
+
+            {profile.activity_status_visible && (
+              <ActivityStatus lastActive={profile.last_active_at} />
+            )}
+            <TabsTrigger
+              value="posts"
+              className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4"
+            >
+              Posts
+            </TabsTrigger>
+            <TabsTrigger
+              value="experience"
+              className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4"
+            >
+              Experience
+            </TabsTrigger>
+            <TabsTrigger
+              value="education"
+              className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4"
+            >
+              Education
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="about" className="space-y-6">
@@ -529,22 +617,28 @@ export const ProfilePage = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <SkillsSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
-              
-              {(isOwnProfile || profile.work_history_visible) && profile.current_position && (
-                <Card className="p-6 mt-6">
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <Briefcase className="w-5 h-5" />
-                    Current Position
-                  </h3>
-                  <div>
-                    <p className="font-medium">{profile.current_position}</p>
-                    {profile.current_company && (
-                      <p className="text-sm text-muted-foreground">{profile.current_company}</p>
-                    )}
-                  </div>
-                </Card>
-              )}
+              <SkillsSection
+                userId={profileUserId!}
+                isOwnProfile={isOwnProfile}
+              />
+
+              {(isOwnProfile || profile.work_history_visible) &&
+                profile.current_position && (
+                  <Card className="p-6 mt-6">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Briefcase className="w-5 h-5" />
+                      Current Position
+                    </h3>
+                    <div>
+                      <p className="font-medium">{profile.current_position}</p>
+                      {profile.current_company && (
+                        <p className="text-sm text-muted-foreground">
+                          {profile.current_company}
+                        </p>
+                      )}
+                    </div>
+                  </Card>
+                )}
             </motion.div>
           </TabsContent>
 
@@ -553,16 +647,20 @@ export const ProfilePage = () => {
           </TabsContent>
 
           <TabsContent value="experience">
-            <WorkExperienceSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
+            <WorkExperienceSection
+              userId={profileUserId!}
+              isOwnProfile={isOwnProfile}
+            />
           </TabsContent>
 
           <TabsContent value="education">
-            <EducationSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
+            <EducationSection
+              userId={profileUserId!}
+              isOwnProfile={isOwnProfile}
+            />
           </TabsContent>
         </Tabs>
       </div>
-
-
     </AppLayout>
   );
 };
