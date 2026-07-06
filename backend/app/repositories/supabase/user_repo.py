@@ -82,14 +82,11 @@ class SupabaseUserRepository:
         return result.data[0] if result.data else None
 
     def check_username_available(self, username: str) -> bool:
-        try:
-            result = self._client.table("users").select("id") \
-                .eq("username", username.lower()).execute()
-            if hasattr(result, 'data') and result.data is not None:
-                return len(result.data) == 0
-            return False
-        except Exception:
-            return False
+        result = self._client.table("users").select("id") \
+            .eq("username", username.lower()).execute()
+        if hasattr(result, 'data') and result.data is not None:
+            return len(result.data) == 0
+        return True
 
     def check_email_available(self, email: str) -> bool:
         result = self._client.table("users").select("id") \

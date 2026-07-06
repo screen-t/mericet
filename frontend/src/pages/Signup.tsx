@@ -195,6 +195,8 @@ const Signup = () => {
             Start building your professional network today
           </p>
 
+          <p className="text-xs text-muted-foreground mb-4"><span className="text-destructive">*</span> Required fields</p>
+
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
@@ -207,7 +209,7 @@ const Signup = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
+                <Label htmlFor="firstName">First Name <span className="text-destructive">*</span></Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -223,9 +225,9 @@ const Signup = () => {
                   />
                 </div>
               </div>
-              
+
               <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
+                <Label htmlFor="lastName">Last Name <span className="text-destructive">*</span></Label>
                 <Input
                   id="lastName"
                   type="text"
@@ -240,7 +242,7 @@ const Signup = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Work Email</Label>
+              <Label htmlFor="email">Work Email <span className="text-destructive">*</span></Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -258,7 +260,7 @@ const Signup = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">Username <span className="text-destructive">*</span></Label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -284,7 +286,7 @@ const Signup = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -314,7 +316,7 @@ const Signup = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword">Confirm Password <span className="text-destructive">*</span></Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -388,8 +390,7 @@ const Signup = () => {
                 !formData.password ||
                 formData.password.length < 8 ||
                 formData.password !== formData.confirmPassword ||
-                usernameAvailable === false ||
-                usernameLoading
+                usernameAvailable === false
               }
             >
               {loading ? 'Creating Account...' : 'Create Account'}
