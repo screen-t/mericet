@@ -9,7 +9,7 @@ class SupabasePostRepository:
 
     def get_by_id(self, post_id: str) -> Optional[dict]:
         result = self._client.table("posts").select("*") \
-            .eq("id", post_id).single().execute()
+            .eq("id", post_id).maybe_single().execute()
         return result.data if result.data else None
 
     def get_feed(self, visibility: str, limit: int, offset: int) -> list[dict]:

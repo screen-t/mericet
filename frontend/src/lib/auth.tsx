@@ -180,8 +180,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (user) {
         saveCurrentAccount(user, getStoredTokens())
       }
-      queryClient.clear()
       setStoredTokens({ access_token: account.access_token, refresh_token: account.refresh_token })
+      queryClient.clear()
       try {
         const profile = await authApi.me(account.access_token)
         setUser(profile)
