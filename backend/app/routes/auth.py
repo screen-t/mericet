@@ -145,15 +145,20 @@ def login(
 @router.post("/logout")
 def logout(
     payload: LogoutRequest,
-    user=Depends(require_auth),
     request: Request = None,
     auth_service=Depends(get_auth_service),
     login_repo=Depends(get_login_activity_repo),
 ):
-    auth_service.sign_out(payload.refresh_token)
+    try:
+        auth_service.sign_out(payload.refresh_token)
+    except Exception:
+        pass
     session_token = request.headers.get("Authorization", "").replace("Bearer ", "") if request else ""
     if session_token:
-        login_repo.deactivate_session(session_token)
+        try:
+            login_repo.deactivate_session(session_token)
+        except Exception:
+            pass
     return {"success": True}
 
 

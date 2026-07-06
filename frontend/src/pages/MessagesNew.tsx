@@ -643,7 +643,7 @@ const MessagesNew = () => {
 
   const { data: connectionsData, isFetching: loadingConnections } = useQuery<import('@/types/api').ConnectionsResponse>({
     queryKey: ['connections', 'accepted'],
-    queryFn: () => backendApi.connections.getConnections('accepted', 200, 0),
+    queryFn: () => backendApi.connections.getConnections('accepted', 100, 0),
     enabled: true,
     staleTime: 30000,
   });

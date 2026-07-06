@@ -143,13 +143,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const tokens = getStoredTokens()
     try {
       await authApi.logout({ refresh_token: tokens.refresh_token })
-    } catch (e) {
+    } catch {
       // ignore
+    }
+    // Remove this account from the saved list — its session is now invalid
+    if (user) {
+      removeSavedAccount(user.id)
+      setSavedAccountsState(getSavedAccounts())
     }
     setStoredTokens(undefined)
     setUser(null)
-    // Wipe the entire React Query cache so the next user starts with a clean slate.
-    // Without this, User B would see User A's cached messages/profiles on login.
     queryClient.clear()
     navigate('/login')
   }
