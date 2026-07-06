@@ -93,7 +93,7 @@ const Signup = () => {
       setError('Username must be at least 3 characters')
       return
     }
-    if (!usernameAvailable) {
+    if (usernameAvailable === false) {
       setError('Username is not available')
       return
     }

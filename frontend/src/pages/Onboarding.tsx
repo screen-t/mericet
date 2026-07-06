@@ -5,20 +5,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  User,
   ArrowRight,
   ArrowLeft,
   Check,
   SkipForward,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
 
 const Onboarding = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
     headline: "",
     currentPosition: "",
     currentCompany: "",
@@ -94,36 +93,11 @@ const Onboarding = () => {
               >
                 <div>
                   <h2 className="text-2xl font-semibold mb-2">
-                    Tell us about yourself
+                    Hi {user?.first_name}, tell us about yourself
                   </h2>
                   <p className="text-muted-foreground text-sm">
                     This information will be visible on your profile
                   </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">
-                      First Name <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="firstName"
-                      placeholder="John"
-                      value={formData.firstName}
-                      onChange={(e) => updateField("firstName", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">
-                      Last Name <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="lastName"
-                      placeholder="Doe"
-                      value={formData.lastName}
-                      onChange={(e) => updateField("lastName", e.target.value)}
-                    />
-                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -236,7 +210,7 @@ const Onboarding = () => {
               )}
               <Button
                 onClick={handleNext}
-                disabled={!formData.firstName || !formData.lastName}
+                disabled={false}
                 className="gap-2"
               >
                 {currentStep === 2 ? (
