@@ -46,7 +46,7 @@ export interface User {
 }
 
 export interface Profile extends User {
-  [key: string]: any;
+  [key: string]: unknown;
   work_experience?: WorkExperience[];
   education?: Education[];
   skills?: Skill[];

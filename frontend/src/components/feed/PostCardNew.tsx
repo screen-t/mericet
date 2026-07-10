@@ -86,6 +86,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     // This avoids stale prop refreshes overwriting the local toggle state mid-interaction.
     setOptimisticLiked(post.is_liked ?? false);
     setOptimisticLikeCount(post.like_count ?? post.likes_count ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [post.id]);
 
   // Like mutation — currentlyLiked is passed explicitly at click time to avoid stale closure bugs

@@ -502,7 +502,7 @@ const MessagesNew = () => {
             .catch(() => {});
         }, 2000);
       });
-  }, [resolvedConversationId, messagesData?.messages?.length]);
+  }, [resolvedConversationId, messagesData?.messages?.length, queryClient]);
 
   // Guard against malformed URLs like /messages/undefined
   useEffect(() => {
