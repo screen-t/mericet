@@ -287,6 +287,9 @@ const Settings = () => {
       connections_visible?: boolean;
       work_history_visible?: boolean;
       activity_status_visible?: boolean;
+      allow_messages_from_anyone?: boolean;
+      show_typing_indicator?: boolean;
+      notification_preferences?: Record<string, boolean>;
     }) => backendApi.profile.updatePrivacy(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
@@ -419,12 +422,12 @@ const Settings = () => {
                 const fields = [
                   !!profileData?.avatar_url,
                   !!profileData?.cover_url,
-                  !!profileData?.headline,
+                  !!profile.headline,
                   !!profileData?.bio,
                   !!profileData?.location,
                   !!profileData?.current_position,
                   !!profileData?.current_company,
-                  !!profileData?.website || !!profileData?.linkedin_url || !!profileData?.twitter_url,
+                  !!(profileData?.website || profile.linkedinUrl || profile.twitterUrl || profile.instagramUrl || profile.githubUrl),
                 ];
                 const filled = fields.filter(Boolean).length;
                 const pct = Math.round((filled / fields.length) * 100);
@@ -713,12 +716,11 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={notifications.connectionRequests}
-                      onCheckedChange={(checked) =>
-                        setNotifications({
-                          ...notifications,
-                          connectionRequests: checked,
-                        })
-                      }
+                      onCheckedChange={(checked) => {
+                        const updated = { ...notifications, connectionRequests: checked };
+                        setNotifications(updated);
+                        updatePrivacyMutation.mutate({ notification_preferences: { connection_requests: updated.connectionRequests, mentions: updated.mentions, new_followers: updated.newFollowers, post_engagement: updated.postEngagement, show_preview: updated.showPreview } });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -730,9 +732,11 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={notifications.mentions}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, mentions: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        const updated = { ...notifications, mentions: checked };
+                        setNotifications(updated);
+                        updatePrivacyMutation.mutate({ notification_preferences: { connection_requests: updated.connectionRequests, mentions: updated.mentions, new_followers: updated.newFollowers, post_engagement: updated.postEngagement, show_preview: updated.showPreview } });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -744,9 +748,11 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={notifications.newFollowers}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, newFollowers: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        const updated = { ...notifications, newFollowers: checked };
+                        setNotifications(updated);
+                        updatePrivacyMutation.mutate({ notification_preferences: { connection_requests: updated.connectionRequests, mentions: updated.mentions, new_followers: updated.newFollowers, post_engagement: updated.postEngagement, show_preview: updated.showPreview } });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -758,12 +764,11 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={notifications.postEngagement}
-                      onCheckedChange={(checked) =>
-                        setNotifications({
-                          ...notifications,
-                          postEngagement: checked,
-                        })
-                      }
+                      onCheckedChange={(checked) => {
+                        const updated = { ...notifications, postEngagement: checked };
+                        setNotifications(updated);
+                        updatePrivacyMutation.mutate({ notification_preferences: { connection_requests: updated.connectionRequests, mentions: updated.mentions, new_followers: updated.newFollowers, post_engagement: updated.postEngagement, show_preview: updated.showPreview } });
+                      }}
                     />
                   </div>
                 </div>
@@ -783,9 +788,11 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={notifications.showPreview}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, showPreview: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        const updated = { ...notifications, showPreview: checked };
+                        setNotifications(updated);
+                        updatePrivacyMutation.mutate({ notification_preferences: { connection_requests: updated.connectionRequests, mentions: updated.mentions, new_followers: updated.newFollowers, post_engagement: updated.postEngagement, show_preview: updated.showPreview } });
+                      }}
                     />
                   </div>
                 </div>
@@ -812,9 +819,10 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={privacy.showEmail}
-                      onCheckedChange={(checked) =>
-                        setPrivacy({ ...privacy, showEmail: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        setPrivacy({ ...privacy, showEmail: checked });
+                        updatePrivacyMutation.mutate({ email_visible: checked });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -826,9 +834,10 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={privacy.showConnections}
-                      onCheckedChange={(checked) =>
-                        setPrivacy({ ...privacy, showConnections: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        setPrivacy({ ...privacy, showConnections: checked });
+                        updatePrivacyMutation.mutate({ connections_visible: checked });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -840,9 +849,10 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={privacy.allowMessages}
-                      onCheckedChange={(checked) =>
-                        setPrivacy({ ...privacy, allowMessages: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        setPrivacy({ ...privacy, allowMessages: checked });
+                        updatePrivacyMutation.mutate({ allow_messages_from_anyone: checked });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -854,9 +864,10 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={privacy.showTypingIndicator}
-                      onCheckedChange={(checked) =>
-                        setPrivacy({ ...privacy, showTypingIndicator: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        setPrivacy({ ...privacy, showTypingIndicator: checked });
+                        updatePrivacyMutation.mutate({ show_typing_indicator: checked });
+                      }}
                     />
                   </div>
                 </div>

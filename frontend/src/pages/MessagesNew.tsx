@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -467,26 +467,41 @@ const MessagesNew = () => {
     },
   });
 
-  // Also mark the whole conversation as read when opening it, then refresh unread badge
+  // Mark the whole conversation as read when opening it or when new messages arrive.
+  // Retries once on failure so a transient Supabase error doesn't leave stale badges.
   useEffect(() => {
-    if (resolvedConversationId && messagesData?.messages?.length) {
-      backendApi.messages.markConversationAsReadById(resolvedConversationId)
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
-          // Optimistically clear unread count in the conversations cache
-          queryClient.setQueryData<ConversationsResponse>(['conversations'], (old) => {
-            if (!old?.conversations) return old;
-            return {
-              conversations: old.conversations.map((c) =>
-                c.id === resolvedConversationId ? { ...c, unread_count: 0 } : c
-              ),
-            };
-          });
-        })
-        .catch(() => {
-          // Read-marking is best-effort and should not interrupt chat flow.
-        });
-    }
+    if (!resolvedConversationId || !messagesData?.messages?.length) return;
+
+    const convId = resolvedConversationId;
+
+    const applyRead = () => {
+      // Refresh the navbar badge immediately — simple count query, no race risk
+      queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
+      // Optimistic patch on the conversations list for instant badge clear.
+      // Do NOT invalidate ['conversations'] here: an immediate refetch races with
+      // any in-flight 10s-interval refetch and can overwrite this patch with
+      // stale data from before the mark_read DB write, causing the badge to flicker.
+      // The 10s poll will sync the correct server state naturally.
+      queryClient.setQueryData<ConversationsResponse>(['conversations'], (old) => {
+        if (!old?.conversations) return old;
+        return {
+          conversations: old.conversations.map((c) =>
+            c.id === convId ? { ...c, unread_count: 0 } : c
+          ),
+        };
+      });
+    };
+
+    backendApi.messages.markConversationAsReadById(convId)
+      .then(applyRead)
+      .catch(() => {
+        // Retry once after 2 s — covers transient Supabase errors
+        setTimeout(() => {
+          backendApi.messages.markConversationAsReadById(convId)
+            .then(applyRead)
+            .catch(() => {});
+        }, 2000);
+      });
   }, [resolvedConversationId, messagesData?.messages?.length]);
 
   // Guard against malformed URLs like /messages/undefined
@@ -680,6 +695,7 @@ const MessagesNew = () => {
     queryFn: () => backendApi.profile.getProfile(userId!) as Promise<User>,
     enabled: !!userId,
     staleTime: 60000,
+    refetchInterval: 60000,
   });
 
   // A placeholder is what the backend injects when the real profile lookup times out.
@@ -925,21 +941,45 @@ const MessagesNew = () => {
                   >
                     <ArrowLeft className="w-5 h-5" />
                   </Button>
-                  <UserAvatar
-                    src={otherUser.avatar_url}
-                    name={`${otherUser.first_name} ${otherUser.last_name}`}
-                    size="md"
-                  />
-                  <div>
-                    <h3 className="font-semibold">
-                      {otherUser.first_name} {otherUser.last_name}
-                    </h3>
-                    {otherUser.headline && (
-                      <p className="text-sm text-muted-foreground">
-                        {otherUser.headline}
-                      </p>
-                    )}
-                  </div>
+                  <Link
+                    to={`/profile/${otherUser.username || otherUser.id}`}
+                    className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                  >
+                    <UserAvatar
+                      src={otherUser.avatar_url}
+                      name={`${otherUser.first_name} ${otherUser.last_name}`}
+                      size="md"
+                    />
+                    <div>
+                      <h3 className="font-semibold">
+                        {otherUser.first_name} {otherUser.last_name}
+                      </h3>
+                      {(() => {
+                        const lastActive = otherUser.last_active_at ? new Date(otherUser.last_active_at) : null;
+                        if (lastActive) {
+                          const diffMin = Math.floor((Date.now() - lastActive.getTime()) / 60000);
+                          if (diffMin < 5) {
+                            return (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                Active now
+                              </span>
+                            );
+                          }
+                          const timeAgo = diffMin < 60
+                            ? `${diffMin}m ago`
+                            : diffMin < 1440
+                            ? `${Math.floor(diffMin / 60)}h ago`
+                            : `${Math.floor(diffMin / 1440)}d ago`;
+                          return <p className="text-xs text-muted-foreground">Last seen {timeAgo}</p>;
+                        }
+                        if (otherUser.headline) {
+                          return <p className="text-sm text-muted-foreground">{otherUser.headline}</p>;
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </Link>
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

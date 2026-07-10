@@ -497,9 +497,8 @@ def mark_conversation_as_read(
 
         return {"message": "Messages marked as read"}
     except Exception as e:
-        # Non-critical path: do not break chat UX if read-marking fails intermittently.
-        print(f"Warning: mark_conversation_as_read failed for {conversation_id}, user {user_id}: {e}")
-        return {"message": "Messages marked as read"}
+        print(f"Error: mark_conversation_as_read failed for {conversation_id}, user {user_id}: {e}")
+        raise HTTPException(status_code=503, detail="Could not mark messages as read")
 
 
 @router.put("/messages/{message_id}/read")

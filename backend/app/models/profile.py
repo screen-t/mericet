@@ -22,6 +22,10 @@ class ProfileUpdateRequest(BaseModel):
     industry: Optional[str] = None
     account_type: Optional[str] = None
     username: Optional[str] = Field(None, min_length=3, max_length=30)
+    linkedin_url: Optional[str] = None
+    twitter_url: Optional[str] = None
+    instagram_url: Optional[str] = None
+    github_url: Optional[str] = None
 
     @validator('username')
     def validate_username(cls, v):
@@ -80,6 +84,10 @@ class ProfileResponse(BaseModel):
     work_history_visible: bool
     connections_visible: bool
     activity_status_visible: bool
+    linkedin_url: Optional[str]
+    twitter_url: Optional[str]
+    instagram_url: Optional[str]
+    github_url: Optional[str]
     is_verified: bool
     is_active: bool
     created_at: datetime

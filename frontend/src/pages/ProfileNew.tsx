@@ -61,6 +61,9 @@ export const ProfilePage = () => {
   const [noteText, setNoteText] = useState("");
   const [noteEditing, setNoteEditing] = useState(false);
 
+  const toAbsoluteUrl = (url: string) =>
+    /^https?:\/\//i.test(url) ? url : `https://${url}`;
+
   const uploadAvatarMutation = useMutation({
     mutationFn: (file: File) => backendApi.profile.uploadAvatar(file),
     onSuccess: () => {
@@ -355,7 +358,7 @@ export const ProfilePage = () => {
                       )}
                       {profile.website && (
                         <a
-                          href={profile.website}
+                          href={toAbsoluteUrl(profile.website)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 hover:text-primary"
@@ -376,22 +379,22 @@ export const ProfilePage = () => {
                     {(profile.linkedin_url || profile.twitter_url || profile.instagram_url || profile.github_url) && (
                       <div className="flex flex-wrap gap-3 mt-2">
                         {profile.linkedin_url && (
-                          <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                          <a href={toAbsoluteUrl(profile.linkedin_url)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
                             <Linkedin className="w-5 h-5" />
                           </a>
                         )}
                         {profile.twitter_url && (
-                          <a href={profile.twitter_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                          <a href={toAbsoluteUrl(profile.twitter_url)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
                             <Twitter className="w-5 h-5" />
                           </a>
                         )}
                         {profile.instagram_url && (
-                          <a href={profile.instagram_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                          <a href={toAbsoluteUrl(profile.instagram_url)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
                             <Instagram className="w-5 h-5" />
                           </a>
                         )}
                         {profile.github_url && (
-                          <a href={profile.github_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                          <a href={toAbsoluteUrl(profile.github_url)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
                             <Github className="w-5 h-5" />
                           </a>
                         )}
