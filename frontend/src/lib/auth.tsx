@@ -83,8 +83,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Try with stored access token
             me = await authApi.me(tokens.access_token)
           } catch {
-            // Token may be expired — try refreshing via backend
-            if (tokens.refresh_token) {
+            // Token may be expired. For OAuth users, Supabase rotates refresh tokens
+            // internally — using the stored one via backend refresh will fail with
+            // "Already Used". Try Supabase's own session first to get the current token.
+            try {
+              const { supabase } = await import('./supabase')
+              const { data } = await supabase.auth.getSession()
+              if (data.session?.access_token) {
+                setStoredTokens({
+                  access_token: data.session.access_token,
+                  refresh_token: data.session.refresh_token ?? undefined,
+                })
+                me = await authApi.me(data.session.access_token)
+              }
+            } catch { /* fall through to backend refresh */ }
+
+            // If Supabase session didn't recover us, try backend refresh as last resort
+            if (!me && tokens.refresh_token) {
               const refreshed = await authApi.refresh({ refresh_token: tokens.refresh_token })
               if (refreshed.session) {
                 setStoredTokens(refreshed.session)
