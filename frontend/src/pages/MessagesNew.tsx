@@ -467,26 +467,41 @@ const MessagesNew = () => {
     },
   });
 
-  // Also mark the whole conversation as read when opening it, then refresh unread badge
+  // Mark the whole conversation as read when opening it or when new messages arrive.
+  // Retries once on failure so a transient Supabase error doesn't leave stale badges.
   useEffect(() => {
-    if (resolvedConversationId && messagesData?.messages?.length) {
-      backendApi.messages.markConversationAsReadById(resolvedConversationId)
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
-          // Optimistically clear unread count in the conversations cache
-          queryClient.setQueryData<ConversationsResponse>(['conversations'], (old) => {
-            if (!old?.conversations) return old;
-            return {
-              conversations: old.conversations.map((c) =>
-                c.id === resolvedConversationId ? { ...c, unread_count: 0 } : c
-              ),
-            };
-          });
-        })
-        .catch(() => {
-          // Read-marking is best-effort and should not interrupt chat flow.
-        });
-    }
+    if (!resolvedConversationId || !messagesData?.messages?.length) return;
+
+    const convId = resolvedConversationId;
+
+    const applyRead = () => {
+      // Refresh the navbar badge immediately — simple count query, no race risk
+      queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
+      // Optimistic patch on the conversations list for instant badge clear.
+      // Do NOT invalidate ['conversations'] here: an immediate refetch races with
+      // any in-flight 10s-interval refetch and can overwrite this patch with
+      // stale data from before the mark_read DB write, causing the badge to flicker.
+      // The 10s poll will sync the correct server state naturally.
+      queryClient.setQueryData<ConversationsResponse>(['conversations'], (old) => {
+        if (!old?.conversations) return old;
+        return {
+          conversations: old.conversations.map((c) =>
+            c.id === convId ? { ...c, unread_count: 0 } : c
+          ),
+        };
+      });
+    };
+
+    backendApi.messages.markConversationAsReadById(convId)
+      .then(applyRead)
+      .catch(() => {
+        // Retry once after 2 s — covers transient Supabase errors
+        setTimeout(() => {
+          backendApi.messages.markConversationAsReadById(convId)
+            .then(applyRead)
+            .catch(() => {});
+        }, 2000);
+      });
   }, [resolvedConversationId, messagesData?.messages?.length]);
 
   // Guard against malformed URLs like /messages/undefined
