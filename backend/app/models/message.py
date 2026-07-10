@@ -8,11 +8,13 @@ class ReactionCreate(BaseModel):
 class MessageCreate(BaseModel):
     receiver_id: str
     content: str = Field(..., min_length=1, max_length=2000)
-    conversation_id: Optional[str] = None  # Skip conversation lookup when already known
+    conversation_id: Optional[str] = None
+    metadata: Optional[dict] = None
 
 class MessageSend(BaseModel):
     conversation_id: str
     content: str = Field(..., min_length=1, max_length=2000)
+    metadata: Optional[dict] = None
 
 class MessageUpdate(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)

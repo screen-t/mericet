@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { SharedPostCard } from "@/components/messages/SharedPostCard";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,7 @@ import {
   Reply,
   CornerUpLeft,
   UserPlus,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -137,7 +139,7 @@ const MessagesNew = () => {
   };
 
   // Fetch conversations list
-  const { data: conversationsData, isLoading: loadingConversations } = useQuery<ConversationsResponse>({
+  const { data: conversationsData, isLoading: loadingConversations, isFetching: fetchingConversations } = useQuery<ConversationsResponse>({
     queryKey: ['conversations'],
     queryFn: () => backendApi.messages.getConversations(100, 0),
     refetchInterval: 10000,
@@ -641,7 +643,7 @@ const MessagesNew = () => {
 
   const { data: connectionsData, isFetching: loadingConnections } = useQuery<import('@/types/api').ConnectionsResponse>({
     queryKey: ['connections', 'accepted'],
-    queryFn: () => backendApi.connections.getConnections('accepted', 200, 0),
+    queryFn: () => backendApi.connections.getConnections('accepted', 100, 0),
     enabled: true,
     staleTime: 30000,
   });
@@ -704,7 +706,22 @@ const MessagesNew = () => {
           {/* Header */}
           <div className="p-4 border-b">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xl font-bold">Messages</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold">Messages</h2>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="Refresh conversations"
+                  onClick={() => {
+                    queryClient.invalidateQueries({ queryKey: ['conversations'] });
+                    if (userId) queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+                  }}
+                  disabled={fetchingConversations}
+                >
+                  <RefreshCw className={cn("w-4 h-4 transition-transform", fetchingConversations && "animate-spin")} />
+                </Button>
+              </div>
               {!hasConnections && (
                 <span className="text-xs text-muted-foreground">No connections yet</span>
               )}
@@ -1098,6 +1115,26 @@ const MessagesNew = () => {
                                     </div>
                                     <p className="text-sm">{actualContent}</p>
                                   </>
+                                );
+                              }
+                              if (message.metadata?.type === "shared_post") {
+                                return (
+                                  <SharedPostCard
+                                    postId={message.metadata.post_id!}
+                                    isMyMessage={isMyMessage}
+                                    metadata={message.metadata}
+                                  />
+                                );
+                              }
+                              const sharedPostMatch = message.content.match(/^Shared a (?:post|photo)(?:: "(.+?)")?[\s\S]*?\/posts\/([0-9a-f-]{36})/);
+                              if (sharedPostMatch) {
+                                const [, snippet, postId] = sharedPostMatch;
+                                return (
+                                  <SharedPostCard
+                                    postId={postId}
+                                    isMyMessage={isMyMessage}
+                                    snippet={snippet}
+                                  />
                                 );
                               }
                               return <p className="text-sm">{message.content}</p>;

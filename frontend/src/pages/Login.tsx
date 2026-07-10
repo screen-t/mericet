@@ -12,11 +12,10 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { Eye, EyeOff, Mail, Lock, ArrowRight, Phone, Shield } from "lucide-react";
+import { Eye, EyeOff, Mail, ArrowRight, Phone, Shield, ChevronRight, Plus } from "lucide-react";
 import { authApi } from "@/lib/api";
-
-
 import { useAuth } from "@/lib/auth";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -24,22 +23,35 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [loginMethod, setLoginMethod] = useState("email");
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
 
-  const { login } = useAuth()
+  const { login, savedAccounts, switchAccount } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || '/feed'
+
+  const hasSavedAccounts = savedAccounts.length > 0
+
+  const handleSwitchAccount = async (account: typeof savedAccounts[0]) => {
+    setSwitchingId(account.id)
+    try {
+      await switchAccount(account)
+    } catch {
+      setError('Failed to switch account. Please log in again.')
+    } finally {
+      setSwitchingId(null)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setError('')
       setLoading(true)
-      // use login from context
       await login(email, password)
-      // navigate back to original path or /feed
       navigate(from, { replace: true })
     } catch (err: unknown) {
       console.error("Login error:", err)
@@ -101,9 +113,66 @@ const Login = () => {
           </Link>
 
           <h1 className="text-3xl font-bold mb-2">Welcome back</h1>
-          <p className="text-muted-foreground mb-8">
+          <p className="text-muted-foreground mb-6">
             Sign in to continue building your professional network
           </p>
+
+          {/* Saved accounts panel */}
+          {hasSavedAccounts && !showForm && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 space-y-3"
+            >
+              <p className="text-sm font-medium text-muted-foreground">Choose an account</p>
+              <div className="space-y-2">
+                {savedAccounts.map(account => (
+                  <button
+                    key={account.id}
+                    onClick={() => handleSwitchAccount(account)}
+                    disabled={switchingId === account.id}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors text-left disabled:opacity-60"
+                  >
+                    <UserAvatar
+                      src={account.avatar_url}
+                      name={`${account.first_name} ${account.last_name}`}
+                      size="sm"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{account.first_name} {account.last_name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{account.email}</p>
+                    </div>
+                    {switchingId === account.id ? (
+                      <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowForm(true)}
+                className="w-full flex items-center gap-3 p-3 rounded-lg border border-dashed border-border hover:bg-muted/50 transition-colors text-left"
+              >
+                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                  <Plus className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <span className="text-sm text-muted-foreground">Use another account</span>
+              </button>
+            </motion.div>
+          )}
+
+          {/* Email/Password form — always shown when no saved accounts, toggled otherwise */}
+          {(!hasSavedAccounts || showForm) && (
+          <>
+          {error && (
+            <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+              <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <span>{error}</span>
+            </div>
+          )}
 
           {/* Social Login Options — hidden until OAuth is fully implemented */}
           {/* <div className="space-y-3 mb-6">
@@ -165,14 +234,6 @@ const Login = () => {
             </TabsList>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-            {error ? (
-              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
-                <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                <span>{error}</span>
-              </div>
-            ) : null}
 
             <TabsContent value="email" className="space-y-4 mt-0">
                 <div className="space-y-2">
@@ -283,6 +344,17 @@ const Login = () => {
             </Button>
           </form>
           </Tabs>
+
+          {hasSavedAccounts && showForm && (
+            <button
+              onClick={() => setShowForm(false)}
+              className="w-full text-sm text-muted-foreground hover:text-foreground mt-2 text-center"
+            >
+              ← Back to accounts
+            </button>
+          )}
+          </>
+          )}
 
           <p className="text-center text-sm text-muted-foreground mt-6 mb-4">
             Don't have an account?{" "}

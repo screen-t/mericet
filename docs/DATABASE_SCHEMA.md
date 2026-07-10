@@ -1,6 +1,6 @@
 # Database Schema Requirements
 
-This document outlines the database schema required to support the stonet frontend application.
+This document outlines the database schema required to support the Mericet frontend application.
 
 ## Overview
 

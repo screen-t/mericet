@@ -6,3 +6,4 @@ pydantic[email]
 pytest
 pytest-mock
 python-multipart
+slowapi

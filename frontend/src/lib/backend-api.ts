@@ -349,6 +349,16 @@ const connections = {
       method: "POST",
       headers: getAuthHeaders(),
     }).then(handleResponse),
+  getConnectionNote: (targetUserId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/connections/notes/${targetUserId}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ note: string | null }>),
+  saveConnectionNote: (targetUserId: string, note: string) =>
+    fetchWithAuth(`${API_BASE_URL}/connections/notes/${targetUserId}`, {
+      method: "PUT",
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    }).then(handleResponse),
 };
 
 // --- Messages ---
@@ -388,11 +398,11 @@ const messages = {
     ).then(handleResponse<import('@/types/api').Message[]>);
     return { messages: Array.isArray(list) ? list : [] } as import('@/types/api').MessagesResponse;
   },
-  sendMessage: (recipientId: string, content: string, conversationId?: string) =>
+  sendMessage: (recipientId: string, content: string, conversationId?: string, metadata?: Record<string, unknown>) =>
     fetchWithAuth(`${API_BASE_URL}/messages`, {
       method: "POST",
       headers: getAuthHeaders(),
-      body: JSON.stringify({ receiver_id: recipientId, content, ...(conversationId ? { conversation_id: conversationId } : {}) }),
+      body: JSON.stringify({ receiver_id: recipientId, content, ...(conversationId ? { conversation_id: conversationId } : {}), ...(metadata ? { metadata } : {}) }),
     }).then(handleResponse),
   editMessage: (messageId: string, content: string) =>
     fetchWithAuth(`${API_BASE_URL}/messages/messages/${messageId}`, {
@@ -484,6 +494,20 @@ const notifications = {
       method: "DELETE",
       headers: getAuthHeaders(),
     }).then(handleResponse),
+  muteUser: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/notifications/mute/${userId}`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  unmuteUser: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/notifications/mute/${userId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  getMuteStatus: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/notifications/mute/status/${userId}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ is_muted: boolean }>),
 };
 
 // --- Search ---
@@ -633,6 +657,14 @@ const follows = {
     fetchWithAuth(`${API_BASE_URL}/follows/status/${userId}`, {
       headers: getAuthHeaders(),
     }).then(handleResponse<{ is_following: boolean }>),
+  listFollowers: (limit = 50, offset = 0) =>
+    fetchWithAuth(`${API_BASE_URL}/follows/followers?limit=${limit}&offset=${offset}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<import('@/types/api').User[]>),
+  listFollowing: (limit = 50, offset = 0) =>
+    fetchWithAuth(`${API_BASE_URL}/follows/following?limit=${limit}&offset=${offset}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<import('@/types/api').User[]>),
 };
 
 // --- Reports ---
@@ -668,6 +700,20 @@ const reports = {
     }).then(handleResponse),
 };
 
+const media = {
+  upload: async (file: File): Promise<{ url: string }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem(ACCESS_TOKEN_KEY) : null;
+    const res = await fetchWithAuth(`${API_BASE_URL}/media/upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    return handleResponse<{ url: string }>(res);
+  },
+};
+
 export const backendApi = {
   auth,
   profile,
@@ -679,4 +725,5 @@ export const backendApi = {
   saves,
   follows,
   reports,
+  media,
 };

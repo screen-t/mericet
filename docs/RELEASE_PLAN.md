@@ -1,8 +1,8 @@
-# stonet - Release Plan and Version Management
+# Mericet - Release Plan and Version Management
 
 ## Overview
 
-This document defines the release strategy, versioning scheme, deployment procedures, and future roadmap for the stonet platform.
+This document defines the release strategy, versioning scheme, deployment procedures, and future roadmap for the Mericet platform.
 
 ## Versioning Strategy
 
@@ -208,7 +208,7 @@ psql production_db -c "SELECT version FROM schema_migrations ORDER BY version DE
 supabase functions deploy
 
 # Verify deployment
-curl https://api.stonet.com/health
+curl https://api.Mericet.com/health
 ```
 
 **Step 3: Deploy Frontend**
@@ -217,7 +217,7 @@ curl https://api.stonet.com/health
 vercel --prod
 
 # Verify deployment
-curl https://stonet.com
+curl https://Mericet.com
 ```
 
 **Step 4: Smoke Testing**
@@ -389,7 +389,7 @@ Thank you to all team members who contributed to this release!
 ## Upgrade Instructions
 No action required. Updates will be applied automatically.
 
-For questions or issues, contact support@stonet.com
+For questions or issues, contact support@Mericet.com
 ```
 
 ### Release Notes Distribution

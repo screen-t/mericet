@@ -2,6 +2,17 @@ import { createContext } from 'react'
 import { User } from '@/types/api'
 import type { SignupPayload } from './api'
 
+export type SavedAccount = {
+  id: string
+  email: string
+  username: string
+  first_name: string
+  last_name: string
+  avatar_url?: string
+  access_token: string
+  refresh_token: string
+}
+
 export type AuthContextValue = {
   user: User | null
   loading: boolean
@@ -10,6 +21,9 @@ export type AuthContextValue = {
   logout: () => Promise<void>
   refreshSession: () => Promise<void>
   refreshUser: () => Promise<void>
+  savedAccounts: SavedAccount[]
+  switchAccount: (account: SavedAccount) => Promise<void>
+  removeAccount: (accountId: string) => void
 }
 
 // Kept in its own file so HMR updates to auth.tsx never recreate this object.
