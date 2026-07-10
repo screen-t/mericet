@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowRight,
   ArrowLeft,
@@ -12,9 +11,11 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { backendApi } from "@/lib/backend-api";
 
 const Onboarding = () => {
   const [currentStep, setCurrentStep] = useState(1);
+  const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
   const [formData, setFormData] = useState({
@@ -23,11 +24,29 @@ const Onboarding = () => {
     currentCompany: "",
   });
 
+  const saveAndFinish = async () => {
+    setSaving(true);
+    try {
+      const payload: Record<string, string> = {};
+      if (formData.headline.trim()) payload.headline = formData.headline.trim();
+      if (formData.currentPosition.trim()) payload.current_position = formData.currentPosition.trim();
+      if (formData.currentCompany.trim()) payload.current_company = formData.currentCompany.trim();
+      if (Object.keys(payload).length > 0) {
+        await backendApi.profile.updateProfile(payload);
+      }
+    } catch {
+      // non-fatal — user can fill in profile later
+    } finally {
+      setSaving(false);
+      navigate("/feed");
+    }
+  };
+
   const handleNext = () => {
     if (currentStep < 2) {
       setCurrentStep(currentStep + 1);
     } else {
-      navigate("/feed");
+      saveAndFinish();
     }
   };
 
@@ -210,14 +229,16 @@ const Onboarding = () => {
               )}
               <Button
                 onClick={handleNext}
-                disabled={false}
+                disabled={saving}
                 className="gap-2"
               >
                 {currentStep === 2 ? (
-                  <>
-                    <Check className="h-4 w-4" />
-                    Complete Setup
-                  </>
+                  saving ? "Saving…" : (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Complete Setup
+                    </>
+                  )
                 ) : (
                   <>
                     Next
