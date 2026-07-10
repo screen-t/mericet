@@ -22,15 +22,111 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  X,
   Sun,
   Moon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/lib/theme";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Link } from "react-router-dom";
+import { Connection } from "@/types/api";
+
+const BlockedUsersSection = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+
+  const { data: blockedData, isLoading } = useQuery({
+    queryKey: ['connections', 'blocked'],
+    queryFn: () => backendApi.connections.getConnections('blocked', 100, 0),
+    enabled: open,
+  });
+
+  const unblockMutation = useMutation({
+    mutationFn: (userId: string) => backendApi.connections.unblockUser(userId),
+    onSuccess: () => {
+      toast({ title: "User unblocked" });
+      queryClient.invalidateQueries({ queryKey: ['connections', 'blocked'] });
+    },
+    onError: () => toast({ title: "Failed to unblock user", variant: "destructive" }),
+  });
+
+  const blocked = (blockedData?.connections || []).filter(
+    (c: Connection) => c.user && c.user.id
+  );
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold">Blocked Users</h3>
+          <p className="text-sm text-muted-foreground">
+            Manage users you've blocked
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          View
+        </Button>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Blocked Users</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto space-y-3">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : blocked.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                You haven't blocked anyone.
+              </p>
+            ) : (
+              blocked.map((conn: Connection) => (
+                <div key={conn.id} className="flex items-center justify-between p-3 rounded-lg border">
+                  <Link
+                    to={`/profile/${conn.user?.id}`}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-3 min-w-0 flex-1"
+                  >
+                    <UserAvatar
+                      src={conn.user?.avatar_url}
+                      name={`${conn.user?.first_name} ${conn.user?.last_name}`}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {conn.user?.first_name} {conn.user?.last_name}
+                      </p>
+                      {conn.user?.username && (
+                        <p className="text-xs text-muted-foreground">@{conn.user.username}</p>
+                      )}
+                    </div>
+                  </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => unblockMutation.mutate(conn.user?.id || conn.id)}
+                    disabled={unblockMutation.isPending}
+                  >
+                    Unblock
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
 
 const Settings = () => {
   const { toast } = useToast();
-  const { logout, refreshUser } = useAuth();
+  const { logout, refreshUser, savedAccounts, switchAccount, removeAccount } = useAuth();
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -46,6 +142,10 @@ const Settings = () => {
     email: "",
     username: "",
     headline: "",
+    linkedinUrl: "",
+    twitterUrl: "",
+    instagramUrl: "",
+    githubUrl: "",
   });
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const [usernameError, setUsernameError] = useState("");
@@ -59,14 +159,27 @@ const Settings = () => {
         email: profileData.email || "",
         username: profileData.username || "",
         headline: profileData.headline || "",
+        linkedinUrl: profileData.linkedin_url || "",
+        twitterUrl: profileData.twitter_url || "",
+        instagramUrl: profileData.instagram_url || "",
+        githubUrl: profileData.github_url || "",
       });
       setPrivacy({
         profileVisibility: profileData.connections_visible === false ? "private" : "public",
         showEmail: !!profileData.email_visible,
         showConnections: !!profileData.connections_visible,
-        allowMessages: true,
+        allowMessages: !!profileData.allow_messages_from_anyone,
         showWorkHistory: !!profileData.work_history_visible,
         showActivityStatus: !!profileData.activity_status_visible,
+        showTypingIndicator: profileData.show_typing_indicator !== false,
+      });
+      const prefs = profileData.notification_preferences || {};
+      setNotifications({
+        connectionRequests: prefs.connection_requests !== false,
+        mentions: prefs.mentions !== false,
+        newFollowers: prefs.new_followers !== false,
+        postEngagement: prefs.post_engagement !== false,
+        showPreview: prefs.show_preview !== false,
       });
     }
   }, [profileData]);
@@ -97,12 +210,11 @@ const Settings = () => {
   }, [normalizedUsername, usernameChanged]);
 
   const [notifications, setNotifications] = useState({
-    emailDigest: true,
-    pushNotifications: true,
     connectionRequests: true,
     mentions: true,
     newFollowers: true,
-    postEngagement: false,
+    postEngagement: true,
+    showPreview: true,
   });
 
   const [privacy, setPrivacy] = useState({
@@ -112,6 +224,7 @@ const Settings = () => {
     allowMessages: true,
     showWorkHistory: true,
     showActivityStatus: true,
+    showTypingIndicator: true,
   });
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -222,6 +335,10 @@ const Settings = () => {
       last_name: profile.lastName,
       username: normalizedUsername,
       headline: profile.headline,
+      linkedin_url: profile.linkedinUrl.trim() || null,
+      twitter_url: profile.twitterUrl.trim() || null,
+      instagram_url: profile.instagramUrl.trim() || null,
+      github_url: profile.githubUrl.trim() || null,
     });
 
     updatePrivacyMutation.mutate({
@@ -229,6 +346,15 @@ const Settings = () => {
       connections_visible: privacy.showConnections,
       work_history_visible: privacy.showWorkHistory,
       activity_status_visible: privacy.showActivityStatus,
+      allow_messages_from_anyone: privacy.allowMessages,
+      show_typing_indicator: privacy.showTypingIndicator,
+      notification_preferences: {
+        connection_requests: notifications.connectionRequests,
+        mentions: notifications.mentions,
+        new_followers: notifications.newFollowers,
+        post_engagement: notifications.postEngagement,
+        show_preview: notifications.showPreview,
+      },
     });
   };
   const handleLogout = async () => {
@@ -288,6 +414,44 @@ const Settings = () => {
               animate={{ opacity: 1, y: 0 }}
               className="bg-card rounded-xl border border-border p-6 space-y-6"
             >
+              {/* Profile Completion */}
+              {(() => {
+                const fields = [
+                  !!profileData?.avatar_url,
+                  !!profileData?.cover_url,
+                  !!profileData?.headline,
+                  !!profileData?.bio,
+                  !!profileData?.location,
+                  !!profileData?.current_position,
+                  !!profileData?.current_company,
+                  !!profileData?.website || !!profileData?.linkedin_url || !!profileData?.twitter_url,
+                ];
+                const filled = fields.filter(Boolean).length;
+                const pct = Math.round((filled / fields.length) * 100);
+                if (pct >= 100) return null;
+                return (
+                  <div className="p-4 rounded-lg border border-border bg-muted/30 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">Profile completion</span>
+                      <span className="text-muted-foreground">{pct}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {pct < 50
+                        ? "Add a photo, headline, and bio to help others find you."
+                        : pct < 80
+                        ? "Almost there! Add your position or social links."
+                        : "Just a few more details to complete your profile."}
+                    </p>
+                  </div>
+                );
+              })()}
+
               {/* Avatar */}
               <div className="flex items-center gap-6">
                 <div className="relative">
@@ -445,6 +609,59 @@ const Settings = () => {
                 </div>
               </div>
 
+              <Separator />
+
+              {/* Social Media Links */}
+              <div>
+                <h3 className="font-semibold mb-4">Social Media Links</h3>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="linkedinUrl">LinkedIn</Label>
+                    <Input
+                      id="linkedinUrl"
+                      placeholder="https://linkedin.com/in/username"
+                      value={profile.linkedinUrl}
+                      onChange={(e) =>
+                        setProfile({ ...profile, linkedinUrl: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="twitterUrl">X</Label>
+                    <Input
+                      id="twitterUrl"
+                      placeholder="https://x.com/username"
+                      value={profile.twitterUrl}
+                      onChange={(e) =>
+                        setProfile({ ...profile, twitterUrl: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="instagramUrl">Instagram</Label>
+                    <Input
+                      id="instagramUrl"
+                      placeholder="https://instagram.com/username"
+                      value={profile.instagramUrl}
+                      onChange={(e) =>
+                        setProfile({ ...profile, instagramUrl: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="githubUrl">GitHub</Label>
+                    <Input
+                      id="githubUrl"
+                      placeholder="https://github.com/username"
+                      value={profile.githubUrl}
+                      onChange={(e) =>
+                        setProfile({ ...profile, githubUrl: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="flex justify-end">
                 <Button 
                   onClick={handleSaveProfile} 
@@ -484,45 +701,6 @@ const Settings = () => {
               animate={{ opacity: 1, y: 0 }}
               className="bg-card rounded-xl border border-border p-6 space-y-6"
             >
-              <div>
-                <h3 className="font-semibold mb-4">Email Notifications</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Email Digest</p>
-                      <p className="text-sm text-muted-foreground">
-                        Receive a weekly summary of your activity
-                      </p>
-                    </div>
-                    <Switch
-                      checked={notifications.emailDigest}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, emailDigest: checked })
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Push Notifications</p>
-                      <p className="text-sm text-muted-foreground">
-                        Receive push notifications on your devices
-                      </p>
-                    </div>
-                    <Switch
-                      checked={notifications.pushNotifications}
-                      onCheckedChange={(checked) =>
-                        setNotifications({
-                          ...notifications,
-                          pushNotifications: checked,
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
               <div>
                 <h3 className="font-semibold mb-4">Activity Notifications</h3>
                 <div className="space-y-4">
@@ -590,6 +768,28 @@ const Settings = () => {
                   </div>
                 </div>
               </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold mb-4">Notification Display</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">Show Preview</p>
+                      <p className="text-sm text-muted-foreground">
+                        Show message content in notification banners
+                      </p>
+                    </div>
+                    <Switch
+                      checked={notifications.showPreview}
+                      onCheckedChange={(checked) =>
+                        setNotifications({ ...notifications, showPreview: checked })
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
             </motion.div>
           </TabsContent>
 
@@ -645,15 +845,83 @@ const Settings = () => {
                       }
                     />
                   </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">Typing Indicator</p>
+                      <p className="text-sm text-muted-foreground">
+                        Show others when you're typing
+                      </p>
+                    </div>
+                    <Switch
+                      checked={privacy.showTypingIndicator}
+                      onCheckedChange={(checked) =>
+                        setPrivacy({ ...privacy, showTypingIndicator: checked })
+                      }
+                    />
+                  </div>
                 </div>
               </div>
 
               <Separator />
 
+              {/* Blocked Users */}
+              <BlockedUsersSection />
+
+              <Separator />
+
+              {/* Switch Account */}
+              {savedAccounts.filter(a => a.id !== profileData?.id).length > 0 && (
+                <>
+                  <div>
+                    <h3 className="font-semibold mb-4">Switch Account</h3>
+                    <div className="space-y-2">
+                      {savedAccounts
+                        .filter(a => a.id !== profileData?.id)
+                        .map(account => (
+                          <div key={account.id} className="flex items-center justify-between p-3 rounded-lg border">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <UserAvatar
+                                src={account.avatar_url}
+                                name={`${account.first_name} ${account.last_name}`}
+                                size="sm"
+                              />
+                              <div className="min-w-0">
+                                <p className="font-medium text-sm truncate">
+                                  {account.first_name} {account.last_name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">@{account.username}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => switchAccount(account)}
+                              >
+                                Switch
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removeAccount(account.id)}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Log in to another account to add it here.
+                    </p>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
               <div>
                 <h3 className="font-semibold mb-4">Session</h3>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="gap-2 text-destructive hover:text-destructive"
                   onClick={handleLogout}
                 >

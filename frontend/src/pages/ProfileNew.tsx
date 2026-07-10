@@ -33,7 +33,13 @@ import {
   X,
   Camera,
   MoreVertical,
+  Linkedin,
+  Twitter,
+  Instagram,
+  Github,
+  StickyNote,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   DropdownMenu,
@@ -52,6 +58,8 @@ export const ProfilePage = () => {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [showReportDialog, setShowReportDialog] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [noteEditing, setNoteEditing] = useState(false);
 
   const uploadAvatarMutation = useMutation({
     mutationFn: (file: File) => backendApi.profile.uploadAvatar(file),
@@ -74,6 +82,44 @@ export const ProfilePage = () => {
   // Determine which user profile to show
   const profileUserId = userId || user?.id;
   const isOwnProfile = !userId || userId === user?.id;
+
+  const { data: muteStatus } = useQuery({
+    queryKey: ['muteStatus', profileUserId],
+    queryFn: () => backendApi.notifications.getMuteStatus(profileUserId!),
+    enabled: !isOwnProfile && !!profileUserId,
+  });
+
+  const muteMutation = useMutation({
+    mutationFn: () =>
+      muteStatus?.is_muted
+        ? backendApi.notifications.unmuteUser(profileUserId!)
+        : backendApi.notifications.muteUser(profileUserId!),
+    onSuccess: () => {
+      toast({ title: muteStatus?.is_muted ? "User unmuted" : "User muted" });
+      queryClient.invalidateQueries({ queryKey: ['muteStatus', profileUserId] });
+    },
+    onError: () => toast({ title: "Failed to update mute status", variant: "destructive" }),
+  });
+
+  const { data: noteData } = useQuery({
+    queryKey: ['connectionNote', profileUserId],
+    queryFn: () => backendApi.connections.getConnectionNote(profileUserId!),
+    enabled: !isOwnProfile && !!profileUserId,
+  });
+
+  useEffect(() => {
+    if (noteData?.note !== undefined) setNoteText(noteData.note || "");
+  }, [noteData]);
+
+  const saveNoteMutation = useMutation({
+    mutationFn: (note: string) => backendApi.connections.saveConnectionNote(profileUserId!, note),
+    onSuccess: () => {
+      toast({ title: noteText.trim() ? "Note saved" : "Note removed" });
+      setNoteEditing(false);
+      queryClient.invalidateQueries({ queryKey: ['connectionNote', profileUserId] });
+    },
+    onError: () => toast({ title: "Failed to save note", variant: "destructive" }),
+  });
 
   // Fetch profile data
   const { data: profile, isLoading, error } = useQuery<Profile>({
@@ -326,17 +372,87 @@ export const ProfilePage = () => {
                       )}
                     </div>
 
+                    {/* Social Media Links */}
+                    {(profile.linkedin_url || profile.twitter_url || profile.instagram_url || profile.github_url) && (
+                      <div className="flex flex-wrap gap-3 mt-2">
+                        {profile.linkedin_url && (
+                          <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                            <Linkedin className="w-5 h-5" />
+                          </a>
+                        )}
+                        {profile.twitter_url && (
+                          <a href={profile.twitter_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                            <Twitter className="w-5 h-5" />
+                          </a>
+                        )}
+                        {profile.instagram_url && (
+                          <a href={profile.instagram_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                            <Instagram className="w-5 h-5" />
+                          </a>
+                        )}
+                        {profile.github_url && (
+                          <a href={profile.github_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                            <Github className="w-5 h-5" />
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Activity Status */}
+                    {!isOwnProfile && profile.last_active_at && (
+                      <div className="mt-2">
+                        {(() => {
+                          const lastActive = new Date(profile.last_active_at);
+                          const now = new Date();
+                          const diffMs = now.getTime() - lastActive.getTime();
+                          const diffMin = Math.floor(diffMs / 60000);
+                          const isOnline = diffMin < 5;
+                          if (isOnline) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-green-600">
+                                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                Active now
+                              </span>
+                            );
+                          }
+                          let timeAgo: string;
+                          if (diffMin < 60) timeAgo = `${diffMin}m ago`;
+                          else if (diffMin < 1440) timeAgo = `${Math.floor(diffMin / 60)}h ago`;
+                          else timeAgo = `${Math.floor(diffMin / 1440)}d ago`;
+                          return (
+                            <span className="text-xs text-muted-foreground">
+                              Last seen {timeAgo}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     {/* Stats */}
                     {(isOwnProfile || profile.connections_visible) && (
                       <div className="flex gap-6 mt-4 text-sm">
-                        <div>
-                          <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
-                          <span className="text-muted-foreground">Connections</span>
-                        </div>
-                        <div>
-                          <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
-                          <span className="text-muted-foreground">Followers</span>
-                        </div>
+                        {isOwnProfile ? (
+                          <Link to="/network?tab=connections" className="hover:text-primary transition-colors">
+                            <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
+                            <span className="text-muted-foreground">Connections</span>
+                          </Link>
+                        ) : (
+                          <div>
+                            <span className="font-semibold">{profile.connections_count || 0}</span>{" "}
+                            <span className="text-muted-foreground">Connections</span>
+                          </div>
+                        )}
+                        {isOwnProfile ? (
+                          <Link to="/network?tab=followers" className="hover:text-primary transition-colors">
+                            <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
+                            <span className="text-muted-foreground">Followers</span>
+                          </Link>
+                        ) : (
+                          <div>
+                            <span className="font-semibold">{profile.followers_count || 0}</span>{" "}
+                            <span className="text-muted-foreground">Followers</span>
+                          </div>
+                        )}
                       </div>
                     )}
                     {!isOwnProfile && followStatus?.is_following && (
@@ -485,6 +601,12 @@ export const ProfilePage = () => {
                                   Block
                                 </DropdownMenuItem>
                               )}
+                              <DropdownMenuItem
+                                onClick={() => muteMutation.mutate()}
+                                disabled={muteMutation.isPending}
+                              >
+                                {muteStatus?.is_muted ? "Unmute notifications" : "Mute notifications"}
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
                                 Report user
                               </DropdownMenuItem>
@@ -529,6 +651,56 @@ export const ProfilePage = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
+              {/* Private Note (only on other profiles) */}
+              {!isOwnProfile && connectionStatus?.status === 'accepted' && (
+                <Card className="p-4 mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <StickyNote className="w-4 h-4" />
+                      Private Note
+                    </h3>
+                    {!noteEditing && (
+                      <Button variant="ghost" size="sm" onClick={() => setNoteEditing(true)}>
+                        {noteText ? "Edit" : "Add note"}
+                      </Button>
+                    )}
+                  </div>
+                  {noteEditing ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        placeholder="e.g. Met at conference, interested in AI..."
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        rows={3}
+                        maxLength={500}
+                      />
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">{noteText.length}/500</span>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setNoteText(noteData?.note || "");
+                            setNoteEditing(false);
+                          }}>
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => saveNoteMutation.mutate(noteText)}
+                            disabled={saveNoteMutation.isPending}
+                          >
+                            {saveNoteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : noteText ? (
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{noteText}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Only you can see this note.</p>
+                  )}
+                </Card>
+              )}
+
               <SkillsSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
               
               {(isOwnProfile || profile.work_history_visible) && profile.current_position && (

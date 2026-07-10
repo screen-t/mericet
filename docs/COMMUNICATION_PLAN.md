@@ -1,4 +1,4 @@
-# stonet - Communication and Reporting Plan
+# Mericet - Communication and Reporting Plan
 
 ## Overview
 
@@ -363,7 +363,7 @@ Blockers:
 
 **Template:**
 ```
-stonet Weekly Status Report
+Mericet Weekly Status Report
 Week of: [Date Range]
 
 EXECUTIVE SUMMARY

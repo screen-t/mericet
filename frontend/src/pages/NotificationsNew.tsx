@@ -25,7 +25,8 @@ import { cn } from "@/lib/utils";
 const notificationIcons = {
   like: Heart,
   comment: MessageCircle,
-  connection: UserPlus,
+  connection_request: UserPlus,
+  connection_accepted: UserPlus,
   repost: Share2,
   mention: Bell,
   follow: UserPlus,
@@ -116,9 +117,10 @@ const NotificationsNew = () => {
         return notification.post_id ? `/post/${notification.post_id}` : '#';
       case 'connection_request':
       case 'connection_accepted':
+      case 'follow':
         return notification.actor_id ? `/profile/${notification.actor_id}` : '#';
       default:
-        return '#';
+        return notification.link || '#';
     }
   };
 

@@ -1,8 +1,8 @@
-# stonet - Tools and Technology Stack
+# Mericet - Tools and Technology Stack
 
 ## Overview
 
-This document catalogs all tools, technologies, and services used in the stonet project, including who uses them, when, and how.
+This document catalogs all tools, technologies, and services used in the Mericet project, including who uses them, when, and how.
 
 ## Development Tools
 
@@ -558,7 +558,7 @@ This document catalogs all tools, technologies, and services used in the stonet 
 ```env
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-VITE_API_URL=http://localhost:3000/api (dev only)
+VITE_API_BASE_URL=http://localhost:8000 (dev only)
 ```
 
 **Backend/Database:**

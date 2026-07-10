@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { backendApi } from "@/lib/backend-api";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { Post, Comment, CommentsResponse } from '@/types/api';
@@ -42,6 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { SaveToFolderModal } from "@/components/feed/SaveToFolderModal";
+import { SharePostModal } from "@/components/feed/SharePostModal";
 import { ReportDialog } from "@/components/modals/ReportDialog";
 
 interface PostCardNewProps {
@@ -61,6 +61,8 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [showRepostDialog, setShowRepostDialog] = useState(false);
+  const [showUndoRepostDialog, setShowUndoRepostDialog] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [repostComment, setRepostComment] = useState("");
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
@@ -361,16 +363,8 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     try {
       const uploaded: string[] = [];
       for (const file of files) {
-        const ext = file.name.split(".").pop();
-        const path = `posts/${user?.id ?? "anon"}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error } = await supabase.storage
-          .from("post-media")
-          .upload(path, file, { upsert: false });
-        if (error) throw error;
-        const { data: urlData } = supabase.storage
-          .from("post-media")
-          .getPublicUrl(path);
-        uploaded.push(urlData.publicUrl);
+        const result = await backendApi.media.upload(file);
+        uploaded.push(result.url);
       }
 
       setEditMediaUrls((prev) => [...prev, ...uploaded]);
@@ -628,7 +622,14 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setShowRepostDialog(true)}
+          onClick={() => {
+            if (!user) { setShowAuthGate(true); return; }
+            if (post.is_reposted) {
+              setShowUndoRepostDialog(true);
+            } else {
+              setShowRepostDialog(true);
+            }
+          }}
           className={cn(
             "gap-2",
             post.is_reposted && "text-green-500 hover:text-green-600"
@@ -638,9 +639,22 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           <span>{post.repost_count ?? post.reposts_count ?? 0}</span>
         </Button>
 
-        <Button variant="ghost" size="sm" onClick={handleCopyLink} className="gap-2">
-          <Share2 className="h-4 w-4" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="gap-2">
+              <Share2 className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleCopyLink}>Copy link</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              if (!user) { setShowAuthGate(true); return; }
+              setShowShareModal(true);
+            }}>
+              Send in message
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <Button
           variant="ghost"
@@ -658,6 +672,13 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           <Bookmark className={cn("h-4 w-4 transition-all", post.is_saved && "fill-current")} />
         </Button>
       </div>
+
+      <SharePostModal
+        postId={post.id}
+        post={post}
+        open={showShareModal}
+        onOpenChange={setShowShareModal}
+      />
 
       <SaveToFolderModal
         postId={post.id}
@@ -755,6 +776,33 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
                 {repostMutation.isPending ? "Reposting..." : "Repost"}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Undo Repost Dialog */}
+      <Dialog open={showUndoRepostDialog} onOpenChange={setShowUndoRepostDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove repost?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will remove your repost of this post.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowUndoRepostDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setShowUndoRepostDialog(false);
+                handleRepost();
+              }}
+              disabled={repostMutation.isPending}
+            >
+              {repostMutation.isPending ? "Removing..." : "Remove repost"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -1,324 +1,196 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
-from app.lib.supabase import supabase
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from app.middleware.auth import require_auth
+from app.deps import get_user_repo, get_post_repo, get_message_repo, get_save_repo
+from app.middleware.rate_limit import limiter, SEARCH_LIMIT
 from typing import List, Optional
 
 router = APIRouter(prefix="/search", tags=["Search"])
 
 
-def _enrich_posts_with_author(posts: List[dict]) -> List[dict]:
+def _enrich_posts_with_author(posts: List[dict], user_repo) -> List[dict]:
     if not posts:
         return []
-    author_ids = {p.get("author_id") for p in posts if p.get("author_id")}
+    author_ids = list({p.get("author_id") for p in posts if p.get("author_id")})
     if not author_ids:
         return posts
-    authors = supabase.table("users").select(
-        "id, username, first_name, last_name, avatar_url"
-    ).in_("id", list(author_ids)).execute()
-    author_map = {a["id"]: a for a in (authors.data or [])}
+    authors = user_repo.get_many_by_ids(author_ids, "id, username, first_name, last_name, avatar_url")
+    author_map = {a["id"]: a for a in authors}
     for post in posts:
         post["author"] = author_map.get(post.get("author_id"))
     return posts
 
 
-def _get_other_user_by_conversation(conversation_ids: List[str], user_id: str) -> dict:
-    if not conversation_ids:
-        return {}
-    participants = supabase.table("conversation_participants").select(
-        "conversation_id, user_id"
-    ).in_("conversation_id", conversation_ids).execute()
-    other_by_conv: dict = {}
-    other_ids = set()
-    for row in (participants.data or []):
-        cid = row.get("conversation_id")
-        uid = row.get("user_id")
-        if not cid or not uid or uid == user_id:
-            continue
-        other_by_conv[cid] = uid
-        other_ids.add(uid)
-    if not other_ids:
-        return {}
-    users = supabase.table("users").select(
-        "id, username, first_name, last_name, avatar_url, headline"
-    ).in_("id", list(other_ids)).execute()
-    user_map = {u["id"]: u for u in (users.data or [])}
-    return {cid: user_map.get(uid) for cid, uid in other_by_conv.items()}
-
 @router.get("/users")
+@limiter.limit(SEARCH_LIMIT)
 def search_users(
+    request: Request,
     q: str = Query(..., min_length=1, max_length=100),
     user_id: Optional[str] = Depends(require_auth),
-    limit: int = Query(20, ge=1, le=50)
+    user_repo=Depends(get_user_repo),
+    limit: int = Query(20, ge=1, le=50),
 ):
-    """Search for users by name, username, or headline"""
-    try:
-        # Search in multiple fields
-        search_term = f"%{q}%"
-        
-        # Use ilike for case-insensitive search
-        results = supabase.table("users").select(
-            "id, username, first_name, last_name, avatar_url, headline, current_position, current_company, industry"
-        ).or_(
-            f"username.ilike.{search_term},first_name.ilike.{search_term},last_name.ilike.{search_term},headline.ilike.{search_term}"
-        ).eq("is_active", True).limit(limit).execute()
-        
-        return {"results": results.data, "count": len(results.data)}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    results = user_repo.search(q, limit)
+    return {"results": results, "count": len(results)}
+
 
 @router.get("/posts")
 def search_posts(
     q: str = Query(..., min_length=1, max_length=100),
     user_id: Optional[str] = Depends(require_auth),
-    limit: int = Query(20, ge=1, le=50)
+    post_repo=Depends(get_post_repo),
+    user_repo=Depends(get_user_repo),
+    limit: int = Query(20, ge=1, le=50),
 ):
-    """Search for posts by content"""
-    try:
-        search_term = f"%{q}%"
-        
-        results = supabase.table("posts").select("*").ilike("content", search_term).eq("is_published", True).eq("is_draft", False).eq("visibility", "public").order("created_at", desc=True).limit(limit).execute()
-        
-        enriched = _enrich_posts_with_author(results.data or [])
-        return {"results": enriched, "count": len(enriched)}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    results = post_repo.search(q, limit)
+    enriched = _enrich_posts_with_author(results, user_repo)
+    return {"results": enriched, "count": len(enriched)}
+
 
 @router.get("/all")
+@limiter.limit(SEARCH_LIMIT)
 def search_all(
+    request: Request,
     q: str = Query(..., min_length=1, max_length=100),
     user_id: Optional[str] = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+    post_repo=Depends(get_post_repo),
+    message_repo=Depends(get_message_repo),
+    save_repo=Depends(get_save_repo),
     users_limit: int = Query(10, ge=1, le=50),
-    posts_limit: int = Query(10, ge=1, le=50)
+    posts_limit: int = Query(10, ge=1, le=50),
 ):
-    """Search across users, posts, and (if authed) messages/saved"""
-    try:
-        search_term = f"%{q}%"
-        
-        # Search users
-        users = supabase.table("users").select(
-            "id, username, first_name, last_name, avatar_url, headline, current_position, current_company"
-        ).or_(
-            f"username.ilike.{search_term},first_name.ilike.{search_term},last_name.ilike.{search_term},headline.ilike.{search_term}"
-        ).eq("is_active", True).limit(users_limit).execute()
-        
-        # Search posts
-        posts = supabase.table("posts").select("*").ilike("content", search_term).eq("is_published", True).eq("is_draft", False).eq("visibility", "public").order("created_at", desc=True).limit(posts_limit).execute()
+    users = user_repo.search(q, users_limit)
+    posts = post_repo.search(q, posts_limit)
+    enriched_posts = _enrich_posts_with_author(posts, user_repo)
 
-        enriched_posts = _enrich_posts_with_author(posts.data or [])
+    messages_results = []
+    saved_results = []
+    if user_id:
+        conversation_ids = message_repo.get_user_conversation_ids(user_id)
+        if conversation_ids:
+            msgs = message_repo.search_messages(conversation_ids, q, 10)
+            sender_ids = list({m.get("sender_id") for m in msgs if m.get("sender_id")})
+            senders = user_repo.get_many_by_ids(sender_ids, "id, username, first_name, last_name, avatar_url, headline")
+            sender_map = {u["id"]: u for u in senders}
+            other_ids = set()
+            for cid in conversation_ids:
+                pids = message_repo.get_participant_ids(cid)
+                for pid in pids:
+                    if pid != user_id:
+                        other_ids.add(pid)
+            other_users = user_repo.get_many_by_ids(list(other_ids), "id, username, first_name, last_name, avatar_url, headline")
+            other_map = {u["id"]: u for u in other_users}
+            for m in msgs:
+                m["sender"] = sender_map.get(m.get("sender_id"))
+                cid = m.get("conversation_id")
+                pids = message_repo.get_participant_ids(cid) if cid else []
+                other_uid = next((p for p in pids if p != user_id), None)
+                m["other_user"] = other_map.get(other_uid) if other_uid else None
+            messages_results = msgs
 
-        # If authenticated, also search messages + saved posts
-        messages_results = []
-        saved_results = []
-        if user_id:
-            # Messages
-            convs = supabase.table("conversation_participants").select("conversation_id").eq("user_id", user_id).execute()
-            conversation_ids = list({c["conversation_id"] for c in (convs.data or []) if c.get("conversation_id")})
-            if conversation_ids:
-                msgs = supabase.table("messages").select(
-                    "id, conversation_id, sender_id, content, created_at, edited_at"
-                ).in_("conversation_id", conversation_ids).ilike("content", search_term).eq("is_deleted", False).order("created_at", desc=True).limit(10).execute()
-                sender_ids = {m.get("sender_id") for m in (msgs.data or []) if m.get("sender_id")}
-                senders = supabase.table("users").select(
-                    "id, username, first_name, last_name, avatar_url, headline"
-                ).in_("id", list(sender_ids)).execute() if sender_ids else None
-                sender_map = {u["id"]: u for u in (senders.data or [])} if senders else {}
-                other_by_conv = _get_other_user_by_conversation(conversation_ids, user_id)
-                for m in (msgs.data or []):
-                    m["sender"] = sender_map.get(m.get("sender_id"))
-                    m["other_user"] = other_by_conv.get(m.get("conversation_id"))
-                messages_results = msgs.data or []
+        saved_post_ids = save_repo.get_saved_post_ids(user_id, 100, 0)
+        if saved_post_ids:
+            saved_posts = post_repo.search(q, 10)
+            saved_set = set(saved_post_ids)
+            saved_posts = [p for p in saved_posts if p["id"] in saved_set]
+            saved_results = _enrich_posts_with_author(saved_posts, user_repo)
 
-            # Saved
-            saved = supabase.table("saved_posts").select("post_id").eq("user_id", user_id).execute()
-            post_ids = [s["post_id"] for s in (saved.data or []) if s.get("post_id")]
-            if post_ids:
-                saved_posts = supabase.table("posts").select("*").in_("id", post_ids).ilike("content", search_term).limit(10).execute()
-                saved_results = _enrich_posts_with_author(saved_posts.data or [])
-
-        return {
-            "users": {"results": users.data, "count": len(users.data)},
-            "posts": {"results": enriched_posts, "count": len(enriched_posts)},
-            "messages": {"results": messages_results, "count": len(messages_results)},
-            "saved": {"results": saved_results, "count": len(saved_results)}
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return {
+        "users": {"results": users, "count": len(users)},
+        "posts": {"results": enriched_posts, "count": len(enriched_posts)},
+        "messages": {"results": messages_results, "count": len(messages_results)},
+        "saved": {"results": saved_results, "count": len(saved_results)},
+    }
 
 
 @router.get("/messages")
 def search_messages(
     q: str = Query(..., min_length=1, max_length=100),
     user_id: str = Depends(require_auth),
-    limit: int = Query(20, ge=1, le=50)
+    message_repo=Depends(get_message_repo),
+    user_repo=Depends(get_user_repo),
+    limit: int = Query(20, ge=1, le=50),
 ):
-    """Search messages for the current user"""
-    try:
-        search_term = f"%{q}%"
-
-        convs = supabase.table("conversation_participants").select("conversation_id").eq("user_id", user_id).execute()
-        conversation_ids = list({c["conversation_id"] for c in (convs.data or []) if c.get("conversation_id")})
-        if not conversation_ids:
-            return {"results": [], "count": 0}
-
-        msgs = supabase.table("messages").select(
-            "id, conversation_id, sender_id, content, created_at, edited_at"
-        ).in_("conversation_id", conversation_ids).ilike("content", search_term).eq("is_deleted", False).order("created_at", desc=True).limit(limit).execute()
-
-        sender_ids = {m.get("sender_id") for m in (msgs.data or []) if m.get("sender_id")}
-        senders = supabase.table("users").select(
-            "id, username, first_name, last_name, avatar_url, headline"
-        ).in_("id", list(sender_ids)).execute() if sender_ids else None
-        sender_map = {u["id"]: u for u in (senders.data or [])} if senders else {}
-
-        other_by_conv = _get_other_user_by_conversation(conversation_ids, user_id)
-
-        for m in (msgs.data or []):
-            m["sender"] = sender_map.get(m.get("sender_id"))
-            m["other_user"] = other_by_conv.get(m.get("conversation_id"))
-
-        return {"results": msgs.data or [], "count": len(msgs.data or [])}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    conversation_ids = message_repo.get_user_conversation_ids(user_id)
+    if not conversation_ids:
+        return {"results": [], "count": 0}
+    msgs = message_repo.search_messages(conversation_ids, q, limit)
+    sender_ids = list({m.get("sender_id") for m in msgs if m.get("sender_id")})
+    senders = user_repo.get_many_by_ids(sender_ids, "id, username, first_name, last_name, avatar_url, headline")
+    sender_map = {u["id"]: u for u in senders}
+    for m in msgs:
+        m["sender"] = sender_map.get(m.get("sender_id"))
+    return {"results": msgs, "count": len(msgs)}
 
 
 @router.get("/saved")
 def search_saved(
     q: str = Query(..., min_length=1, max_length=100),
     user_id: str = Depends(require_auth),
-    limit: int = Query(20, ge=1, le=50)
+    save_repo=Depends(get_save_repo),
+    post_repo=Depends(get_post_repo),
+    user_repo=Depends(get_user_repo),
+    limit: int = Query(20, ge=1, le=50),
 ):
-    """Search saved posts for the current user"""
-    try:
-        search_term = f"%{q}%"
-        saved = supabase.table("saved_posts").select("post_id").eq("user_id", user_id).execute()
-        post_ids = [s["post_id"] for s in (saved.data or []) if s.get("post_id")]
-        if not post_ids:
-            return {"results": [], "count": 0}
-        posts = supabase.table("posts").select("*").in_("id", post_ids).ilike("content", search_term).limit(limit).execute()
-        enriched = _enrich_posts_with_author(posts.data or [])
-        return {"results": enriched, "count": len(enriched)}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    saved_post_ids = save_repo.get_saved_post_ids(user_id, 1000, 0)
+    if not saved_post_ids:
+        return {"results": [], "count": 0}
+    posts = post_repo.search(q, limit)
+    saved_set = set(saved_post_ids)
+    posts = [p for p in posts if p["id"] in saved_set]
+    enriched = _enrich_posts_with_author(posts, user_repo)
+    return {"results": enriched, "count": len(enriched)}
+
 
 @router.get("/suggestions")
 def get_search_suggestions(
     q: str = Query(..., min_length=1, max_length=100),
-    limit: int = Query(5, ge=1, le=10)
+    user_repo=Depends(get_user_repo),
+    post_repo=Depends(get_post_repo),
+    limit: int = Query(5, ge=1, le=10),
 ):
-    """Get search suggestions (autocomplete)"""
-    try:
-        search_term = f"{q}%"  # Prefix search for autocomplete
-
-        # Get username and name suggestions
-        users = supabase.table("users").select(
-            "id, username, first_name, last_name, avatar_url"
-        ).or_(
-            f"username.ilike.{search_term},first_name.ilike.{search_term},last_name.ilike.{search_term}"
-        ).eq("is_active", True).limit(limit).execute()
-
-        suggestions = []
-        for user in (users.data or []):
-            full_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
-            text = full_name or user.get("username") or ""
-            if not text:
-                continue
-            suggestions.append({
-                "type": "user",
-                "text": text,
-                "username": user.get("username"),
-                "user_id": user.get("id"),
-                "avatar_url": user.get("avatar_url"),
-            })
-
-        # Company suggestions (derived from users.current_company)
-        company_rows = supabase.table("users").select(
-            "current_company"
-        ).ilike("current_company", search_term).neq("current_company", None).limit(limit * 3).execute()
-        seen_companies = set()
-        for row in (company_rows.data or []):
-            name = (row.get("current_company") or "").strip()
-            if not name or name in seen_companies:
-                continue
-            seen_companies.add(name)
-            suggestions.append({
-                "type": "company",
-                "text": name,
-            })
-
-        # Post suggestions
-        post_rows = supabase.table("posts").select(
-            "id, content"
-        ).ilike("content", f"%{q}%").eq("is_published", True).eq("is_draft", False).eq("visibility", "public").order("created_at", desc=True).limit(limit).execute()
-        for post in (post_rows.data or []):
-            content = (post.get("content") or "").strip()
-            if not content:
-                continue
-            snippet = content[:80] + ("…" if len(content) > 80 else "")
-            suggestions.append({
-                "type": "post",
-                "text": snippet,
-                "post_id": post.get("id"),
-            })
-
-        return {"suggestions": suggestions}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    users = user_repo.search(q, limit)
+    suggestions = []
+    for user in users:
+        full_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+        text = full_name or user.get("username") or ""
+        if not text:
+            continue
+        suggestions.append({
+            "type": "user", "text": text,
+            "username": user.get("username"),
+            "user_id": user.get("id"),
+            "avatar_url": user.get("avatar_url"),
+        })
+    posts = post_repo.search(q, limit)
+    for post in posts:
+        content = (post.get("content") or "").strip()
+        if not content:
+            continue
+        snippet = content[:80] + ("…" if len(content) > 80 else "")
+        suggestions.append({"type": "post", "text": snippet, "post_id": post.get("id")})
+    return {"suggestions": suggestions}
 
 
 @router.get("/companies")
 def search_companies(
     q: str = Query(..., min_length=1, max_length=100),
-    limit: int = Query(20, ge=1, le=50)
+    user_repo=Depends(get_user_repo),
+    limit: int = Query(20, ge=1, le=50),
 ):
-    """Search companies by name (derived from users.current_company)."""
-    try:
-        search_term = f"%{q}%"
-        company_rows = supabase.table("users").select(
-            "current_company"
-        ).ilike("current_company", search_term).neq("current_company", None).limit(limit * 3).execute()
+    companies = user_repo.search_companies(q, limit)
+    results = [{"name": name} for name in companies]
+    return {"results": results, "count": len(results)}
 
-        seen = set()
-        results = []
-        for row in (company_rows.data or []):
-            name = (row.get("current_company") or "").strip()
-            if not name or name in seen:
-                continue
-            seen.add(name)
-            results.append({"name": name})
-            if len(results) >= limit:
-                break
-
-        return {"results": results, "count": len(results)}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/trending")
-def get_trending(limit: int = Query(10, ge=1, le=20)):
-    """Get trending topics/posts (simplified version)"""
-    try:
-        # Get posts with most engagement in last 7 days
-        # Simple version: most likes + comments + reposts
-        posts = supabase.rpc("get_trending_posts", {"days_ago": 7, "result_limit": limit}).execute()
-        
-        # If RPC doesn't exist, fallback to simple query
-        if not posts.data:
-            posts = supabase.table("posts").select("*").eq("is_published", True).eq("is_draft", False).eq("visibility", "public").order("like_count", desc=True).order("comment_count", desc=True).limit(limit).execute()
-        
-        # Enrich with author info
-        for post in posts.data:
-            author = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", post["author_id"]).single().execute()
-            post["author"] = author.data if author.data else None
-        
-        return {"trending": posts.data}
-    except Exception as e:
-        # Fallback if RPC doesn't exist
-        try:
-            posts = supabase.table("posts").select("*").eq("is_published", True).eq("is_draft", False).eq("visibility", "public").order("like_count", desc=True).limit(limit).execute()
-            
-            for post in posts.data:
-                author = supabase.table("users").select("id, username, first_name, last_name, avatar_url").eq("id", post["author_id"]).single().execute()
-                post["author"] = author.data if author.data else None
-            
-            return {"trending": posts.data}
-        except:
-            raise HTTPException(status_code=400, detail="Error fetching trending posts")
+def get_trending(
+    post_repo=Depends(get_post_repo),
+    user_repo=Depends(get_user_repo),
+    limit: int = Query(10, ge=1, le=20),
+):
+    posts = post_repo.get_trending(7, limit)
+    if not posts:
+        posts = post_repo.get_feed("public", limit, 0)
+    enriched = _enrich_posts_with_author(posts, user_repo)
+    return {"trending": enriched}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { backendApi } from "@/lib/backend-api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { Connection, ConnectionsResponse, SuggestionsResponse } from '@/types/api';
+import { Connection, ConnectionsResponse, SuggestionsResponse, User } from '@/types/api';
 import {
   Search,
   UserPlus,
@@ -22,6 +22,7 @@ import {
   Check,
   Loader2,
   MessageSquare,
+  Heart,
 } from "lucide-react";
 
 const NetworkNew = () => {
@@ -29,7 +30,9 @@ const NetworkNew = () => {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("connections");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "connections";
+  const setActiveTab = (tab: string) => setSearchParams({ tab });
 
   // Fetch connections
   const { data: connectionsData, isLoading: loadingConnections } = useQuery<ConnectionsResponse>({
@@ -48,6 +51,20 @@ const NetworkNew = () => {
     queryKey: ['connectionSuggestions'],
     queryFn: () => backendApi.connections.getSuggestions(20),
   });
+
+  // Fetch followers & following
+  const { data: followersData, isLoading: loadingFollowers } = useQuery<User[]>({
+    queryKey: ['followers'],
+    queryFn: () => backendApi.follows.listFollowers(100, 0),
+  });
+
+  const { data: followingData, isLoading: loadingFollowing } = useQuery<User[]>({
+    queryKey: ['following'],
+    queryFn: () => backendApi.follows.listFollowing(100, 0),
+  });
+
+  const followers = Array.isArray(followersData) ? followersData : [];
+  const following = Array.isArray(followingData) ? followingData : [];
 
   const connections = connectionsData?.connections || [];
   const allPendingRequests = requestsData?.connections || [];
@@ -141,17 +158,25 @@ const NetworkNew = () => {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full max-w-2xl grid-cols-3">
-            <TabsTrigger value="connections" className="flex items-center gap-2">
-              <UserCheck className="w-4 h-4" />
+          <TabsList className="grid w-full max-w-3xl grid-cols-5">
+            <TabsTrigger value="connections" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+              <UserCheck className="w-4 h-4 hidden sm:block" />
               Connections ({connections.length})
             </TabsTrigger>
-            <TabsTrigger value="requests" className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
+            <TabsTrigger value="followers" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+              <Heart className="w-4 h-4 hidden sm:block" />
+              Followers ({followers.length})
+            </TabsTrigger>
+            <TabsTrigger value="following" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+              <Users className="w-4 h-4 hidden sm:block" />
+              Following ({following.length})
+            </TabsTrigger>
+            <TabsTrigger value="requests" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+              <Clock className="w-4 h-4 hidden sm:block" />
               Requests ({allPendingRequests.length})
             </TabsTrigger>
-            <TabsTrigger value="suggestions" className="flex items-center gap-2">
-              <Users className="w-4 h-4" />
+            <TabsTrigger value="suggestions" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+              <UserPlus className="w-4 h-4 hidden sm:block" />
               Suggestions
             </TabsTrigger>
           </TabsList>
@@ -219,6 +244,116 @@ const NetworkNew = () => {
                               Remove
                             </Button>
                           </div>
+                        </div>
+                      </div>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Followers Tab */}
+          <TabsContent value="followers" className="mt-6">
+            {loadingFollowers ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : followers.length === 0 ? (
+              <div className="text-center py-12">
+                <Heart className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-lg font-semibold">No followers yet</p>
+                <p className="text-muted-foreground mt-2">
+                  When people follow you, they'll appear here
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {followers.map((follower, index) => (
+                  <motion.div
+                    key={follower.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                  >
+                    <Card className="p-4">
+                      <div className="flex items-start gap-3">
+                        <Link to={`/profile/${follower.id}`}>
+                          <UserAvatar
+                            src={follower.avatar_url}
+                            name={`${follower.first_name} ${follower.last_name}`}
+                            size="md"
+                          />
+                        </Link>
+                        <div className="flex-1 min-w-0">
+                          <Link to={`/profile/${follower.id}`}>
+                            <h4 className="font-semibold hover:text-primary truncate">
+                              {follower.first_name} {follower.last_name}
+                            </h4>
+                          </Link>
+                          {follower.username && (
+                            <p className="text-sm text-muted-foreground">@{follower.username}</p>
+                          )}
+                          {follower.headline && (
+                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                              {follower.headline}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Following Tab */}
+          <TabsContent value="following" className="mt-6">
+            {loadingFollowing ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : following.length === 0 ? (
+              <div className="text-center py-12">
+                <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-lg font-semibold">Not following anyone</p>
+                <p className="text-muted-foreground mt-2">
+                  Follow people to see their content in your feed
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {following.map((person, index) => (
+                  <motion.div
+                    key={person.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                  >
+                    <Card className="p-4">
+                      <div className="flex items-start gap-3">
+                        <Link to={`/profile/${person.id}`}>
+                          <UserAvatar
+                            src={person.avatar_url}
+                            name={`${person.first_name} ${person.last_name}`}
+                            size="md"
+                          />
+                        </Link>
+                        <div className="flex-1 min-w-0">
+                          <Link to={`/profile/${person.id}`}>
+                            <h4 className="font-semibold hover:text-primary truncate">
+                              {person.first_name} {person.last_name}
+                            </h4>
+                          </Link>
+                          {person.username && (
+                            <p className="text-sm text-muted-foreground">@{person.username}</p>
+                          )}
+                          {person.headline && (
+                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                              {person.headline}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </Card>

@@ -1,6 +1,6 @@
 # Frontend Data Models & State Management
 
-This document describes the data structures and state management patterns used in the stonet frontend application.
+This document describes the data structures and state management patterns used in the Mericet frontend application.
 
 ## State Management
 

@@ -1,4 +1,4 @@
-# Stonet - Professional Networking Platform
+# Mericet - Professional Networking Platform
 
 A modern professional networking platform built for entrepreneurs, innovators, and business leaders to connect, collaborate, and grow.
 
@@ -13,133 +13,177 @@ A modern professional networking platform built for entrepreneurs, innovators, a
 - **React Router v6** - Client-side routing
 - **Framer Motion** - Smooth animations
 - **React Hook Form + Zod** - Form validation
-- **date-fns** - Date utilities
-- **Lucide React** - Icon system
 
 ### Backend
 - **FastAPI** - Modern Python web framework
-- **Python 3.9+** - Programming language
-- **Uvicorn** - ASGI server for FastAPI
+- **Python 3.9+** with type hints
+- **Uvicorn** - ASGI server
 - **Supabase Client** - Database and auth integration
 - **Pydantic** - Data validation and serialization
+- **slowapi** - Rate limiting
+- **Repository Pattern** - Database abstraction layer for provider portability
 - **pytest** - Testing framework
-- **Python-dotenv** - Environment variable management
 
 ### Database & Infrastructure
-- **Supabase** - Backend-as-a-Service
-- **PostgreSQL** - Database
+- **PostgreSQL** (via Supabase) - Database
 - **Row Level Security** - Data protection
+- **Supabase Auth** - Authentication (OAuth, email/password)
+- **Supabase Storage** - File uploads (abstracted behind StorageService)
 
 ## Project Structure
 
 ```
-stonet/
-├── frontend/               # React frontend application
+mericet/
+├── frontend/                   # React frontend application
 │   ├── src/
-│   │   ├── components/    # Reusable UI components
-│   │   │   ├── feed/      # Feed-related components
-│   │   │   ├── layout/    # Layout components (Navbar, Sidebar)
-│   │   │   ├── profile/   # Profile components
-│   │   │   └── ui/        # shadcn/ui components
-│   │   ├── hooks/         # Custom React hooks
-│   │   ├── lib/           # Utility functions
-│   │   └── pages/         # Page components
-│   ├── package.json
-│   └── vite.config.ts
-├── backend/               # FastAPI backend application
+│   │   ├── components/         # Reusable UI components
+│   │   │   ├── feed/           # Feed, PostCard, CreatePost, SaveToFolder
+│   │   │   ├── layout/         # AppLayout, Navbar, Sidebar
+│   │   │   ├── profile/        # Profile components
+│   │   │   └── ui/             # shadcn/ui components
+│   │   ├── hooks/              # Custom React hooks
+│   │   ├── lib/                # Utilities (api, auth, supabase, backend-api)
+│   │   ├── pages/              # Page components
+│   │   └── types/              # TypeScript type definitions
+│   └── package.json
+├── backend/                    # FastAPI backend application
 │   ├── app/
-│   │   ├── main.py        # FastAPI application entry point
-│   │   ├── lib/           # Utility functions and helpers
-│   │   │   ├── auth_helpers.py  # Authentication utilities
-│   │   │   └── supabase.py      # Supabase client configuration
-│   │   ├── middleware/    # FastAPI middleware
-│   │   │   └── auth.py    # Authentication middleware
-│   │   ├── models/        # Pydantic data models
-│   │   │   └── auth.py    # Authentication models
-│   │   └── routes/        # API route handlers
-│   │       └── auth.py    # Authentication endpoints
-│   ├── tests/             # Backend tests
-│   │   ├── conftest.py    # pytest configuration
-│   │   └── unit/          # Unit tests
-│   │       └── test_auth_unit.py
-│   └── requirements.txt   # Python dependencies
-├── supabase/              # Supabase configuration
+│   │   ├── main.py             # FastAPI app entry point
+│   │   ├── deps.py             # Dependency injection wiring (single swap point)
+│   │   ├── lib/
+│   │   │   ├── supabase.py     # Supabase client configuration
+│   │   │   └── cache.py        # In-memory TTL cache
+│   │   ├── middleware/
+│   │   │   ├── auth.py         # Authentication middleware
+│   │   │   └── rate_limit.py   # Rate limiting configuration
+│   │   ├── models/             # Pydantic request/response models
+│   │   ├── repositories/       # Data access layer
+│   │   │   ├── protocols.py    # Repository interfaces (Protocol classes)
+│   │   │   └── supabase/       # Supabase implementations
+│   │   ├── services/           # External service abstractions
+│   │   │   ├── protocols.py    # Service interfaces (AuthService, StorageService)
+│   │   │   └── supabase/       # Supabase implementations
+│   │   └── routes/             # API route handlers
+│   │       ├── auth.py         # Authentication (signup, login, logout, refresh)
+│   │       ├── oauth.py        # OAuth flows (Google, GitHub, LinkedIn)
+│   │       ├── profile.py      # User profiles, avatar, work experience
+│   │       ├── posts.py        # Posts, comments, polls, engagement
+│   │       ├── messages.py     # Conversations, messages, reactions
+│   │       ├── connections.py  # Connection requests, blocking
+│   │       ├── follows.py      # Follow/unfollow
+│   │       ├── notifications.py # Notifications
+│   │       ├── search.py       # Search (users, posts, messages, companies)
+│   │       ├── saves.py        # Saved posts and folders
+│   │       ├── reports.py      # Content reporting and moderation
+│   │       └── media.py        # File upload endpoint
+│   ├── tests/
+│   └── requirements.txt
+├── supabase/
 │   ├── config.toml
-│   └── migrations/        # Database migrations
-├── docs/                  # Project documentation
+│   └── migrations/             # Database migrations (01-18)
+├── docs/                       # Project documentation
 └── README.md
 ```
+
+## Architecture
+
+The backend uses a **Repository Pattern** with **Dependency Injection** to decouple business logic from the database provider:
+
+```
+Routes (business logic)
+  ↓ Depends()
+deps.py (DI wiring — single swap point)
+  ↓
+Repositories / Services (data access)
+  ↓
+Supabase (current provider)
+```
+
+To switch database providers (e.g., Supabase → Neon/PostgreSQL), only `deps.py` and the repository implementations change. Routes remain untouched.
+
+See [docs/ARCHITECTURE_PLAN.md](docs/ARCHITECTURE_PLAN.md) for full details.
 
 ## Key Features
 
 ### Authentication & Security
-- Multiple login methods (Email, Phone, Google, GitHub, LinkedIn)
-- Two-factor authentication ready
-- Privacy settings with granular controls
+- Email/password signup and login
+- OAuth (Google, GitHub, LinkedIn)
 - Login activity tracking
 - Session management
+- Rate limiting on auth endpoints (10/min)
 
 ### Profile Management
-- Comprehensive profile editing (4-tab interface)
+- Profile editing (4-tab interface)
 - Account type switching (Professional/Business)
 - Work history and education tracking
-- Professional pronouns support
-- Location and contact information
-- Profile visibility controls
+- Avatar and cover photo uploads
+- Privacy settings with granular controls
 
 ### Social Feed
 - **For You** and **Following** feed tabs
-- Rich post creation with:
-  - Image and video uploads
-  - Poll creation (2-4 options)
-  - Text formatting (bold, italic, links)
-  - Hashtags and mentions
-  - Emoji and GIF support
-  - Scheduled posts
-  - Draft saving
-- Post interactions (Like, Comment, Repost, Share, Bookmark)
+- Post creation with images, videos, polls, drafts, scheduling
+- Post interactions (Like, Comment, Repost, Share, Save)
+- Optimistic UI updates with TanStack Query
 
 ### Messaging
-- Direct messaging system
-- Read/unread status indicators
-- Real-time messaging ready
+- Direct messaging with conversation management
+- Message editing (15-min window) and soft delete
+- Emoji reactions
+- Conversation pinning
+- Read receipts and unread counts
+- Block/connection checks
 
-### Onboarding
-- Simplified 2-step onboarding flow
-- Flexible profile setup
-- Skip options for optional fields
+### Saved Library
+- Save posts to custom folders
+- Folder management (create, rename, delete)
+- Search within saved posts
+
+### Search
+- Search users, posts, messages, saved posts, companies
+- Autocomplete suggestions
+- Trending posts
+
+### Connections & Follows
+- Connection requests (send, accept, decline)
+- Block/unblock users
+- Mutual connections
+- Connection suggestions
+- Follow/unfollow (separate from connections)
+
+### Notifications
+- In-app notifications with unread counts
+- Mark read/unread, bulk clear
+
+### Moderation
+- Content reporting system
+- Moderation queue for admins
 
 ## Setup Instructions
 
 ### Prerequisites
-- Node.js 18+ or Bun
-- npm, yarn, pnpm, or bun
-- Python 3.9+ 
-- pip (Python package manager)
-- Supabase account (for backend)
+- Node.js 18+
+- Python 3.9+
+- Supabase account
 
 ### Installation
 
 1. **Clone the repository**
    ```bash
    git clone <your-repo-url>
-   cd stonet
+   cd mericet
    ```
 
 2. **Set up Backend**
    ```bash
    cd backend
-   
-   # Create virtual environment (recommended)
    python -m venv .venv
-   
+
    # Activate virtual environment
-   # On Windows:
+   # Windows:
    .venv\Scripts\activate
-   # On macOS/Linux:
+   # macOS/Linux:
    source .venv/bin/activate
-   
-   # Install Python dependencies
+
    pip install -r requirements.txt
    ```
 
@@ -150,170 +194,76 @@ stonet/
    ```
 
 4. **Set up environment variables**
-   
-   **Backend (.env)** - Create in `backend/` directory:
+
+   **Backend** — copy `backend/.env.example` to `backend/.env` and fill in:
    ```env
-   SUPABASE_URL=your_supabase_url
-   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-   JWT_SECRET=your_jwt_secret_key
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+   FRONTEND_URL=http://localhost:8080
+   BACKEND_URL=http://localhost:8000
+   REPORT_MODERATOR_EMAILS=your-email@example.com
+   REPORT_MODERATOR_USERNAMES=your-username
    ```
-   
-   **Frontend (.env.local)** - Create in `frontend/` directory:
+
+   **Frontend** — copy `frontend/.env.example` to `frontend/.env.local` and fill in:
    ```env
-   VITE_SUPABASE_URL=your_supabase_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key
+   VITE_API_BASE_URL=http://localhost:8000
    ```
 
 5. **Run database migrations**
    ```bash
    cd ../supabase
-   # Set up Supabase CLI and run migrations
    supabase db push
    ```
 
-6. **Start the development servers**
-   
-   **Backend server (Terminal 1):**
+6. **Start development servers**
+
+   **Backend (Terminal 1):**
    ```bash
    cd backend
-   # Make sure virtual environment is activated
    python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
-   Backend API will be available at `http://localhost:8000`
-   
-   **Frontend server (Terminal 2):**
+
+   **Frontend (Terminal 2):**
    ```bash
    cd frontend
    npm run dev
    ```
-   Frontend app will be available at `http://localhost:8080`
+
+   - Backend API: `http://localhost:8000`
+   - Frontend app: `http://localhost:8080`
+   - API docs (Swagger): `http://localhost:8000/docs`
 
 ## Development
 
 ### Available Scripts
 
-**Backend (Python/FastAPI)**
-```bash
-# Start development server
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=app
-
-# Run specific test file
-pytest tests/unit/test_auth_unit.py
-
-# Install new dependencies
-pip install package_name
-pip freeze > requirements.txt
-```
-
-**Frontend (React/Vite)**
-```bash
-npm run dev      # Start development server
-npm run build    # Build for production
-npm run preview  # Preview production build
-npm run lint     # Run ESLint
-```
-
-### API Endpoints (Backend)
-
-The FastAPI backend provides the following endpoints:
-
-**Authentication:**
-- `POST /auth/signup` - User registration
-- `POST /auth/login` - User login
-- `POST /auth/logout` - User logout  
-- `POST /auth/refresh` - Refresh access token
-- `GET /auth/check-username/{username}` - Check username availability
-
-**General:**
-- `GET /` - API status and health check
-- `GET /docs` - Interactive API documentation (Swagger UI)
-- `GET /redoc` - Alternative API documentation
-
-**Access API Documentation:**
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-### Code Style & Architecture
-
 **Backend:**
-- FastAPI with async/await patterns
-- Pydantic models for request/response validation
-- Modular structure with separate routes, models, middleware
-- Environment-based configuration
-- Comprehensive error handling
-- Type hints throughout codebase
+```bash
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000   # Dev server
+pytest                                                                 # Run tests
+pytest --cov=app                                                       # Tests with coverage
+```
 
 **Frontend:**
-- TypeScript strict mode disabled for rapid development
-- ESLint configured for code quality
-- Tailwind CSS for consistent styling
-- Component-based architecture
-
-## Database Schema
-
-Current tables:
-- `users` - User profiles and authentication
-- `posts` - User posts and content
-- `connections` - User connections/relationships
-- Additional tables for skills, work experience, messages, etc.
-
-See `supabase/migrations/` for complete schema.
-
-## Environment Variables
-
-### Backend (.env)
-```env
-SUPABASE_URL=              # Your Supabase project URL
-SUPABASE_SERVICE_ROLE_KEY= # Your Supabase service role key (server-side)
-JWT_SECRET=                # Secret key for JWT token generation
+```bash
+npm run dev        # Dev server
+npm run build      # Production build
+npm run preview    # Preview production build
+npm run lint       # ESLint
 ```
-
-### Frontend (.env.local)
-```env
-VITE_SUPABASE_URL=         # Your Supabase project URL
-VITE_SUPABASE_ANON_KEY=    # Your Supabase anonymous key (client-side)
-```
-
-> **Important:** Never commit environment files to Git. The backend .env and frontend .env.local files are already in .gitignore.
 
 ## Contributing
 
-1. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-2. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-3. Push to the branch (`git push origin feature/AmazingFeature`)
+1. Create a feature branch (`git checkout -b feature/your-feature`)
+2. Commit your changes (`git commit -m 'Add your feature'`)
+3. Push to the branch (`git push origin feature/your-feature`)
 4. Open a Pull Request
 
-## Roadmap
-
-### In Progress
-- [ ] OAuth integration (Google, GitHub, LinkedIn)
-- [ ] CI/CD pipeline setup
-- [ ] Real-time messaging
-- [ ] Search functionality
-- [ ] Notifications system
-
-### Planned Features
-- [ ] Video calling
-- [ ] Company pages
-- [ ] Events and webinars
-- [ ] Job board
-- [ ] Analytics dashboard
-- [ ] Mobile app (React Native)
+See [docs/WORKFLOW.md](docs/WORKFLOW.md) for branching strategy and PR guidelines.
 
 ## License
 
 This project is proprietary and confidential.
-
-## Support
-
-For support, email or open an issue in the repository.
-
----
-
-Built by Screen-t
