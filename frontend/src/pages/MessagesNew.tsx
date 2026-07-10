@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -941,40 +941,45 @@ const MessagesNew = () => {
                   >
                     <ArrowLeft className="w-5 h-5" />
                   </Button>
-                  <UserAvatar
-                    src={otherUser.avatar_url}
-                    name={`${otherUser.first_name} ${otherUser.last_name}`}
-                    size="md"
-                  />
-                  <div>
-                    <h3 className="font-semibold">
-                      {otherUser.first_name} {otherUser.last_name}
-                    </h3>
-                    {(() => {
-                      const lastActive = otherUser.last_active_at ? new Date(otherUser.last_active_at) : null;
-                      if (lastActive) {
-                        const diffMin = Math.floor((Date.now() - lastActive.getTime()) / 60000);
-                        if (diffMin < 5) {
-                          return (
-                            <span className="inline-flex items-center gap-1 text-xs text-green-600">
-                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                              Active now
-                            </span>
-                          );
+                  <Link
+                    to={`/profile/${otherUser.username || otherUser.id}`}
+                    className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                  >
+                    <UserAvatar
+                      src={otherUser.avatar_url}
+                      name={`${otherUser.first_name} ${otherUser.last_name}`}
+                      size="md"
+                    />
+                    <div>
+                      <h3 className="font-semibold">
+                        {otherUser.first_name} {otherUser.last_name}
+                      </h3>
+                      {(() => {
+                        const lastActive = otherUser.last_active_at ? new Date(otherUser.last_active_at) : null;
+                        if (lastActive) {
+                          const diffMin = Math.floor((Date.now() - lastActive.getTime()) / 60000);
+                          if (diffMin < 5) {
+                            return (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                Active now
+                              </span>
+                            );
+                          }
+                          const timeAgo = diffMin < 60
+                            ? `${diffMin}m ago`
+                            : diffMin < 1440
+                            ? `${Math.floor(diffMin / 60)}h ago`
+                            : `${Math.floor(diffMin / 1440)}d ago`;
+                          return <p className="text-xs text-muted-foreground">Last seen {timeAgo}</p>;
                         }
-                        const timeAgo = diffMin < 60
-                          ? `${diffMin}m ago`
-                          : diffMin < 1440
-                          ? `${Math.floor(diffMin / 60)}h ago`
-                          : `${Math.floor(diffMin / 1440)}d ago`;
-                        return <p className="text-xs text-muted-foreground">Last seen {timeAgo}</p>;
-                      }
-                      if (otherUser.headline) {
-                        return <p className="text-sm text-muted-foreground">{otherUser.headline}</p>;
-                      }
-                      return null;
-                    })()}
-                  </div>
+                        if (otherUser.headline) {
+                          return <p className="text-sm text-muted-foreground">{otherUser.headline}</p>;
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </Link>
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
