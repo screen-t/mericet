@@ -99,7 +99,11 @@ def update_my_profile(
     user_repo=Depends(get_user_repo),
 ):
     """Update current user's profile"""
-    update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    # exclude_unset so Pydantic defaults (None) don't wipe fields the client didn't touch.
+    # Fields that CAN be explicitly cleared (set to null) are allowed through even when None.
+    _CLEARABLE = {'linkedin_url', 'twitter_url', 'instagram_url', 'github_url', 'website'}
+    raw = payload.model_dump(exclude_unset=True)
+    update_data = {k: v for k, v in raw.items() if v is not None or k in _CLEARABLE}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
 
