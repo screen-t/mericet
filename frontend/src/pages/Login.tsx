@@ -174,8 +174,8 @@ const Login = () => {
             </div>
           )}
 
-          {/* Social Login Options — hidden until OAuth is fully implemented */}
-          {/* <div className="space-y-3 mb-6">
+          {/* Social Login Options */}
+          <div className="space-y-3 mb-6">
             <Button variant="outline" className="w-full gap-2" size="lg" onClick={handleGoogleLogin}>
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path
@@ -218,7 +218,7 @@ const Login = () => {
             <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-3 text-xs text-muted-foreground">
               or continue with
             </span>
-          </div> */}
+          </div>
 
           {/* Email/Phone Login Tabs */}
           <Tabs value={loginMethod} onValueChange={setLoginMethod} className="mb-5">
