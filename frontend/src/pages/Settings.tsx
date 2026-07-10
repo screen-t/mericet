@@ -419,12 +419,12 @@ const Settings = () => {
                 const fields = [
                   !!profileData?.avatar_url,
                   !!profileData?.cover_url,
-                  !!profileData?.headline,
+                  !!profile.headline,
                   !!profileData?.bio,
                   !!profileData?.location,
                   !!profileData?.current_position,
                   !!profileData?.current_company,
-                  !!profileData?.website || !!profileData?.linkedin_url || !!profileData?.twitter_url,
+                  !!(profileData?.website || profile.linkedinUrl || profile.twitterUrl || profile.instagramUrl || profile.githubUrl),
                 ];
                 const filled = fields.filter(Boolean).length;
                 const pct = Math.round((filled / fields.length) * 100);
