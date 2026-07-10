@@ -695,6 +695,7 @@ const MessagesNew = () => {
     queryFn: () => backendApi.profile.getProfile(userId!) as Promise<User>,
     enabled: !!userId,
     staleTime: 60000,
+    refetchInterval: 60000,
   });
 
   // A placeholder is what the backend injects when the real profile lookup times out.
@@ -949,11 +950,30 @@ const MessagesNew = () => {
                     <h3 className="font-semibold">
                       {otherUser.first_name} {otherUser.last_name}
                     </h3>
-                    {otherUser.headline && (
-                      <p className="text-sm text-muted-foreground">
-                        {otherUser.headline}
-                      </p>
-                    )}
+                    {(() => {
+                      const lastActive = otherUser.last_active_at ? new Date(otherUser.last_active_at) : null;
+                      if (lastActive) {
+                        const diffMin = Math.floor((Date.now() - lastActive.getTime()) / 60000);
+                        if (diffMin < 5) {
+                          return (
+                            <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                              Active now
+                            </span>
+                          );
+                        }
+                        const timeAgo = diffMin < 60
+                          ? `${diffMin}m ago`
+                          : diffMin < 1440
+                          ? `${Math.floor(diffMin / 60)}h ago`
+                          : `${Math.floor(diffMin / 1440)}d ago`;
+                        return <p className="text-xs text-muted-foreground">Last seen {timeAgo}</p>;
+                      }
+                      if (otherUser.headline) {
+                        return <p className="text-sm text-muted-foreground">{otherUser.headline}</p>;
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
                 <DropdownMenu>
