@@ -37,6 +37,18 @@ async function backendPost<T>(path: string, body: unknown, token?: string): Prom
   return res.json();
 }
 
+async function backendDelete<T>(path: string, token?: string): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const t = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') || undefined : undefined);
+  if (t) headers['Authorization'] = `Bearer ${t}`;
+  const res = await fetch(`${API_BASE_URL}${path}`, { method: 'DELETE', headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail));
+  }
+  return res.json();
+}
+
 async function backendGet<T>(path: string, token?: string): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const t = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') || undefined : undefined);
@@ -134,5 +146,10 @@ export const authApi = {
   /** Reset password via backend. */
   resetPassword: async (data: { access_token: string; new_password: string }) => {
     return backendPost<{ success: boolean; message: string }>('/auth/reset-password', data);
+  },
+
+  /** Permanently delete the current user's account. */
+  deleteAccount: async () => {
+    return backendDelete<{ message: string }>('/profile/me');
   },
 }

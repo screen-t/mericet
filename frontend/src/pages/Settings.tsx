@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { useAuth } from "@/lib/auth";
+import { authApi } from "@/lib/api";
 import { backendApi } from "@/lib/backend-api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -28,7 +29,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/lib/theme";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
 import { Connection } from "@/types/api";
 
@@ -154,6 +155,9 @@ const Settings = () => {
   });
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const [usernameError, setUsernameError] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Update local state when profile data loads
   useEffect(() => {
@@ -390,6 +394,23 @@ const Settings = () => {
       });
     }
   };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== "DELETE") return;
+    setIsDeleting(true);
+    try {
+      await authApi.deleteAccount();
+      await logout();
+    } catch {
+      toast({
+        title: "Failed to delete account",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <AppLayout>
       {isLoading ? (
@@ -761,12 +782,48 @@ const Settings = () => {
                   Danger Zone
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Once you delete your account, there is no going back.
+                  Once you delete your account, there is no going back. All your data will be permanently removed.
                 </p>
-                <Button variant="destructive" size="sm">
+                <Button variant="destructive" size="sm" onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}>
                   Delete Account
                 </Button>
               </div>
+
+              {/* Delete Account Confirmation Dialog */}
+              <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="text-destructive">Delete Account</DialogTitle>
+                    <DialogDescription>
+                      This will permanently delete your account, profile, posts, messages, and all associated data. This action cannot be undone.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 py-2">
+                    <p className="text-sm text-muted-foreground">
+                      Type <span className="font-mono font-bold text-foreground">DELETE</span> to confirm.
+                    </p>
+                    <Input
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      placeholder="DELETE"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleDeleteAccount}
+                      disabled={deleteConfirmText !== "DELETE" || isDeleting}
+                    >
+                      {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Delete My Account
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </motion.div>
           </TabsContent>
 
