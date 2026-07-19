@@ -142,6 +142,11 @@ const Settings = () => {
     email: "",
     username: "",
     headline: "",
+    bio: "",
+    location: "",
+    currentPosition: "",
+    currentCompany: "",
+    website: "",
     linkedinUrl: "",
     twitterUrl: "",
     instagramUrl: "",
@@ -159,6 +164,11 @@ const Settings = () => {
         email: profileData.email || "",
         username: profileData.username || "",
         headline: profileData.headline || "",
+        bio: profileData.bio || "",
+        location: profileData.location || "",
+        currentPosition: profileData.current_position || "",
+        currentCompany: profileData.current_company || "",
+        website: profileData.website || "",
         linkedinUrl: profileData.linkedin_url || "",
         twitterUrl: profileData.twitter_url || "",
         instagramUrl: profileData.instagram_url || "",
@@ -338,6 +348,11 @@ const Settings = () => {
       last_name: profile.lastName,
       username: normalizedUsername,
       headline: profile.headline,
+      bio: profile.bio.trim() || null,
+      location: profile.location.trim() || null,
+      current_position: profile.currentPosition.trim() || null,
+      current_company: profile.currentCompany.trim() || null,
+      website: profile.website.trim() || null,
       linkedin_url: profile.linkedinUrl.trim() || null,
       twitter_url: profile.twitterUrl.trim() || null,
       instagram_url: profile.instagramUrl.trim() || null,
@@ -423,11 +438,11 @@ const Settings = () => {
                   !!profileData?.avatar_url,
                   !!profileData?.cover_url,
                   !!profile.headline,
-                  !!profileData?.bio,
-                  !!profileData?.location,
-                  !!profileData?.current_position,
-                  !!profileData?.current_company,
-                  !!(profileData?.website || profile.linkedinUrl || profile.twitterUrl || profile.instagramUrl || profile.githubUrl),
+                  !!profile.bio,
+                  !!profile.location,
+                  !!profile.currentPosition,
+                  !!profile.currentCompany,
+                  !!(profile.website || profile.linkedinUrl || profile.twitterUrl || profile.instagramUrl || profile.githubUrl),
                 ];
                 const filled = fields.filter(Boolean).length;
                 const pct = Math.round((filled / fields.length) * 100);
@@ -608,6 +623,64 @@ const Settings = () => {
                     onChange={(e) =>
                       setProfile({ ...profile, headline: e.target.value })
                     }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currentPosition">Current Position</Label>
+                  <Input
+                    id="currentPosition"
+                    placeholder="e.g. Software Engineer"
+                    value={profile.currentPosition}
+                    onChange={(e) =>
+                      setProfile({ ...profile, currentPosition: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currentCompany">Current Company</Label>
+                  <Input
+                    id="currentCompany"
+                    placeholder="e.g. Acme Inc."
+                    value={profile.currentCompany}
+                    onChange={(e) =>
+                      setProfile({ ...profile, currentCompany: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="location">Location</Label>
+                  <Input
+                    id="location"
+                    placeholder="e.g. Nairobi, Kenya"
+                    value={profile.location}
+                    onChange={(e) =>
+                      setProfile({ ...profile, location: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="website">Website</Label>
+                  <Input
+                    id="website"
+                    placeholder="https://yoursite.com"
+                    value={profile.website}
+                    onChange={(e) =>
+                      setProfile({ ...profile, website: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="bio">Bio</Label>
+                  <textarea
+                    id="bio"
+                    rows={3}
+                    maxLength={2000}
+                    placeholder="Tell people a bit about yourself"
+                    value={profile.bio}
+                    onChange={(e) =>
+                      setProfile({ ...profile, bio: e.target.value })
+                    }
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
                   />
                 </div>
               </div>
