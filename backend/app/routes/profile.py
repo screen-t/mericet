@@ -101,7 +101,7 @@ def update_my_profile(
     """Update current user's profile"""
     # exclude_unset so Pydantic defaults (None) don't wipe fields the client didn't touch.
     # Fields that CAN be explicitly cleared (set to null) are allowed through even when None.
-    _CLEARABLE = {'linkedin_url', 'twitter_url', 'instagram_url', 'github_url', 'website'}
+    _CLEARABLE = {'linkedin_url', 'twitter_url', 'instagram_url', 'github_url', 'website', 'bio', 'location', 'current_position', 'current_company'}
     raw = payload.model_dump(exclude_unset=True)
     update_data = {k: v for k, v in raw.items() if v is not None or k in _CLEARABLE}
     if not update_data:
