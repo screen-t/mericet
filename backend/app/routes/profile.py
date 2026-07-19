@@ -138,6 +138,21 @@ def update_my_profile(
     return {"message": "Profile updated successfully", "data": updated}
 
 
+@router.delete("/me")
+def delete_my_account(
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+    auth_service=Depends(get_auth_service),
+):
+    """Permanently delete the current user's account and all associated data."""
+    user_repo.delete(user_id)
+    try:
+        auth_service.delete_user(user_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete auth user: {e}")
+    return {"message": "Account deleted successfully"}
+
+
 # ==================== IMAGE UPLOADS ====================
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}

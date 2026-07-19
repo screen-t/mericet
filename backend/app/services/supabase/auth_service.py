@@ -39,6 +39,18 @@ class SupabaseAuthService:
     def update_password(self, access_token: str, new_password: str) -> None:
         self._client.auth.update_user(access_token, {"password": new_password})
 
+    def delete_user(self, user_id: str) -> None:
+        import httpx
+        import os
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
+        res = httpx.delete(
+            f"{url}/auth/v1/admin/users/{user_id}",
+            headers={"apikey": key, "Authorization": f"Bearer {key}"},
+        )
+        if not res.is_success:
+            raise Exception(res.text)
+
     def get_user_by_id(self, user_id: str) -> Optional[AuthUser]:
         try:
             res = self._client.auth.admin.get_user_by_id(user_id)

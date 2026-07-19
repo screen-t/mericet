@@ -67,6 +67,10 @@ class SupabaseUserRepository:
         result = self._client.table("users").insert(data).execute()
         return result.data[0]
 
+    def delete(self, user_id: str) -> None:
+        self._client.table("users").delete().eq("id", user_id).execute()
+        user_cache.invalidate_prefix(f"user:{user_id}")
+
     def upsert(self, data: dict) -> dict:
         result = self._client.table("users").upsert(data).execute()
         row = result.data[0]
