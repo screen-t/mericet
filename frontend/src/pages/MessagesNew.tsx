@@ -955,7 +955,8 @@ const MessagesNew = () => {
                         {otherUser.first_name} {otherUser.last_name}
                       </h3>
                       {(() => {
-                        const lastActive = otherUser.last_active_at ? new Date(otherUser.last_active_at) : null;
+                        const rawTs = otherUser.last_active_at;
+                        const lastActive = rawTs ? new Date(rawTs.includes('Z') || rawTs.includes('+') ? rawTs : rawTs + 'Z') : null;
                         if (lastActive) {
                           const diffMin = Math.floor((Date.now() - lastActive.getTime()) / 60000);
                           if (diffMin < 5) {
