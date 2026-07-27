@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request
 from app.middleware.auth import require_auth, optional_auth
+from app.middleware.rate_limit import limiter, UPLOAD_LIMIT
 from app.deps import (
     get_user_repo, get_work_experience_repo, get_education_repo,
     get_skill_repo, get_storage_service, get_auth_service,
@@ -131,7 +132,7 @@ def update_my_profile(
             if "email" in str(e).lower():
                 raise HTTPException(status_code=409, detail="Email already in use")
             raise HTTPException(status_code=409, detail="Username already taken")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to update profile")
 
     if not updated:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -155,23 +156,39 @@ def delete_my_account(
 
 # ==================== IMAGE UPLOADS ====================
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg": ("jpg", b"\xff\xd8\xff"),
+    "image/png":  ("png", b"\x89PNG"),
+    "image/webp": ("webp", b"RIFF"),
+    "image/gif":  ("gif", b"GIF"),
+}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 
+def _validate_image(file: UploadFile, contents: bytes) -> str:
+    """Validate content-type and magic bytes; return safe file extension."""
+    mime = file.content_type
+    if mime not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are allowed")
+    if len(contents) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail="Image must be smaller than 5 MB")
+    ext, magic = ALLOWED_IMAGE_TYPES[mime]
+    if not contents.startswith(magic):
+        raise HTTPException(status_code=400, detail="File content does not match its declared type")
+    return ext
+
+
 @router.post("/upload-avatar")
+@limiter.limit(UPLOAD_LIMIT)
 async def upload_avatar(
+    request: Request,
     file: UploadFile = File(...),
     user_id: str = Depends(require_auth),
     user_repo=Depends(get_user_repo),
     storage=Depends(get_storage_service),
 ):
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are allowed")
     contents = await file.read()
-    if len(contents) > MAX_IMAGE_SIZE:
-        raise HTTPException(status_code=400, detail="Image must be smaller than 5 MB")
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    ext = _validate_image(file, contents)
     path = f"{user_id}/avatar.{ext}"
     public_url = storage.upload("avatars", path, contents, file.content_type)
     public_url = f"{public_url}?t={int(time.time())}"
@@ -180,18 +197,16 @@ async def upload_avatar(
 
 
 @router.post("/upload-cover")
+@limiter.limit(UPLOAD_LIMIT)
 async def upload_cover(
+    request: Request,
     file: UploadFile = File(...),
     user_id: str = Depends(require_auth),
     user_repo=Depends(get_user_repo),
     storage=Depends(get_storage_service),
 ):
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are allowed")
     contents = await file.read()
-    if len(contents) > MAX_IMAGE_SIZE:
-        raise HTTPException(status_code=400, detail="Image must be smaller than 5 MB")
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    ext = _validate_image(file, contents)
     path = f"{user_id}/cover.{ext}"
     public_url = storage.upload("covers", path, contents, file.content_type)
     public_url = f"{public_url}?t={int(time.time())}"
@@ -390,7 +405,7 @@ def add_skill(
     except Exception as e:
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
             raise HTTPException(status_code=409, detail="Skill already exists")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to add skill")
 
 
 @router.delete("/skills/{skill_id}")

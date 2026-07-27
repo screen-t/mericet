@@ -30,11 +30,11 @@ class PostMedia(BaseModel):
     thumbnail_url: Optional[str] = None
 
 class PollOption(BaseModel):
-    option_text: str
+    option_text: str = Field(..., min_length=1, max_length=100)
     display_order: int
 
 class PollCreate(BaseModel):
-    question: str
+    question: str = Field(..., min_length=1, max_length=300)
     options: List[PollOption] = Field(..., min_items=2, max_items=4)
     ends_at: Optional[datetime] = None
 

@@ -340,7 +340,7 @@ def like_post(
     except Exception as e:
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
             raise HTTPException(status_code=409, detail="Already liked")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to like post")
     post_repo.increment_likes(post_id)
     post = post_repo.get_by_id(post_id)
     if post:
@@ -395,7 +395,7 @@ def repost(
     except Exception as e:
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
             raise HTTPException(status_code=409, detail="Already reposted")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to repost")
 
 
 @router.delete("/{post_id}/repost")
@@ -425,7 +425,7 @@ def save_post(
     except Exception as e:
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
             raise HTTPException(status_code=409, detail="Already saved")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to save post")
 
 
 @router.delete("/{post_id}/save")

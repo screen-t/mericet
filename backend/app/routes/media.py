@@ -7,10 +7,21 @@ import uuid
 router = APIRouter(prefix="/media", tags=["Media"])
 
 ALLOWED_MEDIA_TYPES = {
-    "image/jpeg", "image/png", "image/webp", "image/gif",
-    "video/mp4", "video/webm",
+    "image/jpeg": "jpg",
+    "image/png":  "png",
+    "image/webp": "webp",
+    "image/gif":  "gif",
+    "video/mp4":  "mp4",
+    "video/webm": "webm",
 }
 MAX_MEDIA_SIZE = 50 * 1024 * 1024  # 50 MB
+
+IMAGE_MAGIC = {
+    "image/jpeg": b"\xff\xd8\xff",
+    "image/png":  b"\x89PNG",
+    "image/webp": b"RIFF",
+    "image/gif":  b"GIF",
+}
 
 
 @router.post("/upload")
@@ -22,14 +33,19 @@ async def upload_media(
     storage=Depends(get_storage_service),
 ):
     """Upload post media (images/videos) and return the public URL."""
-    if file.content_type not in ALLOWED_MEDIA_TYPES:
+    mime = file.content_type
+    if mime not in ALLOWED_MEDIA_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported file type")
     contents = await file.read()
     if len(contents) > MAX_MEDIA_SIZE:
         raise HTTPException(status_code=400, detail="File too large (max 50MB)")
 
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "bin"
+    # Validate magic bytes for images (videos have complex container formats)
+    if mime in IMAGE_MAGIC and not contents.startswith(IMAGE_MAGIC[mime]):
+        raise HTTPException(status_code=400, detail="File content does not match its declared type")
+
+    ext = ALLOWED_MEDIA_TYPES[mime]
     path = f"posts/{user_id}/{uuid.uuid4().hex}.{ext}"
 
-    public_url = storage.upload("post-media", path, contents, file.content_type)
+    public_url = storage.upload("post-media", path, contents, mime)
     return {"url": public_url}

@@ -98,11 +98,30 @@ class SupabaseUserRepository:
         return not bool(result.data)
 
     def search(self, query: str, limit: int = 20) -> list[dict]:
+        # Use individual .ilike() calls instead of .or_() string interpolation to
+        # prevent PostgREST filter injection via metacharacters like `,`, `(`, `)`.
+        term = f"%{query}%"
         result = self._client.table("users") \
             .select("id, username, first_name, last_name, avatar_url, headline") \
-            .or_(f"username.ilike.%{query}%,first_name.ilike.%{query}%,last_name.ilike.%{query}%") \
+            .ilike("username", term) \
             .limit(limit).execute()
-        return result.data or []
+        rows_by_username = {r["id"]: r for r in (result.data or [])}
+
+        result2 = self._client.table("users") \
+            .select("id, username, first_name, last_name, avatar_url, headline") \
+            .ilike("first_name", term) \
+            .limit(limit).execute()
+        for r in (result2.data or []):
+            rows_by_username.setdefault(r["id"], r)
+
+        result3 = self._client.table("users") \
+            .select("id, username, first_name, last_name, avatar_url, headline") \
+            .ilike("last_name", term) \
+            .limit(limit).execute()
+        for r in (result3.data or []):
+            rows_by_username.setdefault(r["id"], r)
+
+        return list(rows_by_username.values())[:limit]
 
     def get_connections_count(self, user_id: str) -> int:
         try:
