@@ -50,19 +50,28 @@ function removeSavedAccount(accountId: string) {
 
 function getStoredTokens(): Session {
   return {
-    access_token: localStorage.getItem(ACCESS_TOKEN_KEY) || undefined,
-    refresh_token: localStorage.getItem(REFRESH_TOKEN_KEY) || undefined,
+    access_token:
+      localStorage.getItem(ACCESS_TOKEN_KEY) ||
+      sessionStorage.getItem(ACCESS_TOKEN_KEY) ||
+      undefined,
+    refresh_token:
+      localStorage.getItem(REFRESH_TOKEN_KEY) ||
+      sessionStorage.getItem(REFRESH_TOKEN_KEY) ||
+      undefined,
   }
 }
 
-function setStoredTokens(session?: Session) {
+function setStoredTokens(session?: Session, persist = true) {
   if (!session) {
     localStorage.removeItem(ACCESS_TOKEN_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY)
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY)
     return
   }
-  if (session.access_token) localStorage.setItem(ACCESS_TOKEN_KEY, session.access_token)
-  if (session.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, session.refresh_token)
+  const storage = persist ? localStorage : sessionStorage
+  if (session.access_token) storage.setItem(ACCESS_TOKEN_KEY, session.access_token)
+  if (session.refresh_token) storage.setItem(REFRESH_TOKEN_KEY, session.refresh_token)
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -118,12 +127,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })()
   }, [])
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, rememberMe = false) => {
     setLoading(true)
     try {
       const res = await authApi.login({ email, password })
       if (res.session) {
-        setStoredTokens(res.session)
+        setStoredTokens(res.session, rememberMe)
         const profile = await authApi.me(res.session.access_token)
         setUser(profile)
         if (profile) {
