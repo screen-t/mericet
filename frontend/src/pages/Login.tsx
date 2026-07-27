@@ -51,7 +51,7 @@ const Login = () => {
     try {
       setError('')
       setLoading(true)
-      await login(email, password)
+      await login(email, password, rememberMe)
       navigate(from, { replace: true })
     } catch (err: unknown) {
       console.error("Login error:", err)
