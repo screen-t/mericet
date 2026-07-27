@@ -233,7 +233,7 @@ export const CreatePostModalNew = ({
               {mediaUrls.map((url, index) => (
                 <div key={index} className="relative group rounded overflow-hidden bg-muted">
                   {url.match(/\.(mp4|webm|mov)$/i) ? (
-                    <video src={url} className="w-full h-40 object-cover" />
+                    <video src={url} controls preload="metadata" className="w-full h-40 object-cover" />
                   ) : (
                     <img
                       src={url}

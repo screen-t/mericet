@@ -67,5 +67,5 @@ def oauth_callback(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="OAuth authentication failed")

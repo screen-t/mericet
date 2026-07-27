@@ -495,6 +495,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
                   key={idx}
                   src={item.url}
                   controls
+                  preload="none"
                   className="w-full rounded-lg max-h-96 object-cover"
                 />
               ) : (

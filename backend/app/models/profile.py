@@ -3,23 +3,39 @@ from typing import Optional
 from datetime import date, datetime
 import re
 
+_DANGEROUS_URL_RE = re.compile(r'^(javascript|data|vbscript):', re.IGNORECASE)
+
+
+def _validate_url(v: Optional[str], field_name: str = "URL") -> Optional[str]:
+    if v is None:
+        return v
+    v = v.strip()
+    if not v:
+        return None
+    if _DANGEROUS_URL_RE.match(v):
+        raise ValueError(f"{field_name} contains an invalid scheme")
+    if len(v) > 500:
+        raise ValueError(f"{field_name} must be 500 characters or fewer")
+    return v
+
+
 # User Profile Models
 class ProfileUpdateRequest(BaseModel):
     email: Optional[EmailStr] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    additional_name: Optional[str] = None
-    pronouns: Optional[str] = None
+    first_name: Optional[str] = Field(None, max_length=50)
+    last_name: Optional[str] = Field(None, max_length=50)
+    additional_name: Optional[str] = Field(None, max_length=50)
+    pronouns: Optional[str] = Field(None, max_length=30)
     headline: Optional[str] = Field(None, max_length=120)
     bio: Optional[str] = Field(None, max_length=2000)
     birthdate: Optional[date] = None
     website: Optional[str] = None
-    location: Optional[str] = None
-    postal_code: Optional[str] = None
-    address: Optional[str] = None
-    current_position: Optional[str] = None
-    current_company: Optional[str] = None
-    industry: Optional[str] = None
+    location: Optional[str] = Field(None, max_length=100)
+    postal_code: Optional[str] = Field(None, max_length=20)
+    address: Optional[str] = Field(None, max_length=200)
+    current_position: Optional[str] = Field(None, max_length=100)
+    current_company: Optional[str] = Field(None, max_length=100)
+    industry: Optional[str] = Field(None, max_length=100)
     account_type: Optional[str] = None
     username: Optional[str] = Field(None, min_length=3, max_length=30)
     linkedin_url: Optional[str] = None
@@ -35,12 +51,32 @@ class ProfileUpdateRequest(BaseModel):
         if not re.match(r'^[a-z0-9_-]+$', username):
             raise ValueError('Username can only contain lowercase letters, numbers, underscores, and hyphens')
         return username
-    
+
     @validator('account_type')
     def validate_account_type(cls, v):
         if v and v not in ['founder', 'developer', 'consultant', 'investor', 'other']:
             raise ValueError('Invalid account type')
         return v
+
+    @validator('website')
+    def validate_website(cls, v):
+        return _validate_url(v, "Website URL")
+
+    @validator('linkedin_url')
+    def validate_linkedin_url(cls, v):
+        return _validate_url(v, "LinkedIn URL")
+
+    @validator('twitter_url')
+    def validate_twitter_url(cls, v):
+        return _validate_url(v, "Twitter URL")
+
+    @validator('instagram_url')
+    def validate_instagram_url(cls, v):
+        return _validate_url(v, "Instagram URL")
+
+    @validator('github_url')
+    def validate_github_url(cls, v):
+        return _validate_url(v, "GitHub URL")
 
 class PrivacySettingsUpdate(BaseModel):
     email_visible: Optional[bool] = None
