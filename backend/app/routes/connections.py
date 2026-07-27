@@ -180,10 +180,18 @@ def get_mutual_connections(
 def get_connection_suggestions(
     user_id: str = Depends(require_auth),
     conn_repo=Depends(get_connection_repo),
+    user_repo=Depends(get_user_repo),
     limit: int = Query(10, ge=1, le=50),
 ):
     excluded = conn_repo.get_excluded_ids(user_id)
-    suggestions = conn_repo.get_suggestions(user_id, list(excluded), limit)
+    my_connected_ids = conn_repo.get_connected_ids(user_id)
+    me = user_repo.get_by_id(user_id, "industry")
+    my_industry = (me or {}).get("industry")
+    suggestions = conn_repo.get_suggestions(
+        user_id, list(excluded), limit,
+        my_connected_ids=my_connected_ids,
+        my_industry=my_industry,
+    )
     return {"suggestions": suggestions}
 
 

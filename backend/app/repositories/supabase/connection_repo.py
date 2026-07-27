@@ -103,13 +103,61 @@ class SupabaseConnectionRepository:
             .eq("status", "accepted").execute()
         return result.count or 0
 
+    def get_connections_of_ids(self, user_ids: list[str]) -> list[dict]:
+        """Return all accepted connection pairs involving any of the given users."""
+        if not user_ids:
+            return []
+        # Two queries (requester side + receiver side) are simpler and safer than
+        # a giant OR string, then deduplicate in Python.
+        r1 = self._client.table("connections") \
+            .select("requester_id, receiver_id") \
+            .in_("requester_id", user_ids).eq("status", "accepted").execute()
+        r2 = self._client.table("connections") \
+            .select("requester_id, receiver_id") \
+            .in_("receiver_id", user_ids).eq("status", "accepted").execute()
+        return (r1.data or []) + (r2.data or [])
+
     def get_suggestions(self, user_id: str, exclude_ids: list[str],
-                        limit: int) -> list[dict]:
+                        limit: int, my_connected_ids: list[str] | None = None,
+                        my_industry: str | None = None) -> list[dict]:
+        # Fetch a larger pool so we can rank and trim
+        pool_size = min(limit * 5, 200)
         result = self._client.table("users") \
             .select("id, username, first_name, last_name, avatar_url, headline, current_position, current_company, industry") \
             .not_.in_("id", list(exclude_ids)) \
-            .eq("is_active", True).limit(limit).execute()
-        return result.data or []
+            .eq("is_active", True).limit(pool_size).execute()
+        candidates = result.data or []
+        if not candidates:
+            return []
+
+        # Build mutual-connection counts: find 2nd-degree connections
+        my_set = set(my_connected_ids or [])
+        candidate_id_set = {c["id"] for c in candidates}
+        mutual_counts: dict[str, int] = {}
+        if my_set:
+            pairs = self.get_connections_of_ids(list(candidate_id_set))
+            for pair in pairs:
+                req, rec = pair["requester_id"], pair["receiver_id"]
+                # One side is the candidate, the other is their connection peer
+                if req in candidate_id_set and rec in my_set:
+                    mutual_counts[req] = mutual_counts.get(req, 0) + 1
+                elif rec in candidate_id_set and req in my_set:
+                    mutual_counts[rec] = mutual_counts.get(rec, 0) + 1
+
+        def _score(c: dict) -> float:
+            score = mutual_counts.get(c["id"], 0) * 5.0
+            if my_industry and c.get("industry") == my_industry:
+                score += 3.0
+            if c.get("headline"):
+                score += 1.0
+            if c.get("avatar_url"):
+                score += 1.0
+            if c.get("current_position"):
+                score += 0.5
+            return score
+
+        candidates.sort(key=_score, reverse=True)
+        return candidates[:limit]
 
     # --- Connection Notes ---
 

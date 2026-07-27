@@ -155,6 +155,55 @@ def create_post(
     return {"message": "Post created", "data": enriched}
 
 
+def _rank_posts(posts: list, social_ids: set) -> list:
+    """Score and sort posts by engagement, freshness, and social proximity."""
+    import math
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+
+    def _score(post: dict) -> float:
+        created_raw = post.get("created_at", "")
+        try:
+            created = datetime.fromisoformat(
+                created_raw.replace("Z", "+00:00") if created_raw else ""
+            )
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            hours_old = max((now - created).total_seconds() / 3600, 0)
+        except Exception:
+            hours_old = 48
+
+        is_social = post.get("author_id") in social_ids
+
+        # Engagement: log-scaled, NO social multiplier here so old connected
+        # posts don't permanently dominate just because of relationship
+        likes = post.get("like_count", 0) or 0
+        comments = post.get("comment_count", 0) or 0
+        reposts = post.get("repost_count", 0) or 0
+        engagement = math.log1p(likes) * 2 + math.log1p(comments) * 3 + math.log1p(reposts) * 2
+
+        # Poll votes count as engagement so polls aren't always last
+        poll = post.get("poll")
+        if poll and isinstance(poll, dict):
+            options = poll.get("options") or []
+            poll_votes = sum(o.get("vote_count", 0) for o in options)
+            engagement += math.log1p(poll_votes) * 2
+
+        # Freshness: social posts decay half as fast so they stay visible longer
+        decay = 0.035 if is_social else 0.07
+        freshness = math.exp(-decay * hours_old) * 4
+
+        # Recency bonus: only for connections/follows and only within 24h
+        recency_bonus = 0.0
+        if is_social and hours_old < 24:
+            recency_bonus = 4.0 * math.exp(-0.08 * hours_old)
+
+        return engagement + freshness + recency_bonus
+
+    return sorted(posts, key=_score, reverse=True)
+
+
 @router.get("", response_model=List[PostResponse])
 def get_feed(
     user_id: str = Depends(require_auth),
@@ -165,18 +214,25 @@ def get_feed(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
+    from app.deps import get_connection_repo
+    conn_repo = get_connection_repo()
+    following_ids = set(follow_repo.get_following_ids(user_id, 1000, 0))
+    connected_ids = set(conn_repo.get_connected_ids(user_id))
+    social_ids = following_ids | connected_ids
+
     if feed_type == "following":
-        from app.deps import get_connection_repo
-        conn_repo = get_connection_repo()
-        following_ids = set(follow_repo.get_following_ids(user_id, 1000, 0))
-        connected_ids = set(conn_repo.get_connected_ids(user_id))
-        all_ids = list(following_ids | connected_ids)
+        # Chronological — you chose this tab to see your network in order
+        all_ids = list(social_ids)
         if not all_ids:
             return []
         posts = post_repo.get_by_author_ids(all_ids, limit, offset)
+        return bulk_enrich_posts(posts, user_id, post_repo, user_repo)
     else:
-        posts = post_repo.get_feed("public", limit, offset)
-    return bulk_enrich_posts(posts, user_id, post_repo, user_repo)
+        # For You: fetch a large pool, rank, then paginate
+        pool = post_repo.get_feed("public", limit * 3, 0)
+        enriched = bulk_enrich_posts(pool, user_id, post_repo, user_repo)
+        ranked = _rank_posts(enriched, social_ids)
+        return ranked[offset:offset + limit]
 
 
 @router.get("/{post_id}", response_model=PostResponse)
