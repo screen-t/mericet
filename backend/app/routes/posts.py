@@ -497,6 +497,17 @@ def vote_on_poll(
     if not poll_id:
         raise HTTPException(status_code=404, detail="Poll not found")
 
+    poll = post_repo.get_poll_by_id(poll_id)
+    if poll and poll.get("ends_at"):
+        from datetime import datetime, timezone
+        ends_at = poll["ends_at"]
+        if isinstance(ends_at, str):
+            ends_at = datetime.fromisoformat(ends_at.replace("Z", "+00:00"))
+        if ends_at.tzinfo is None:
+            ends_at = ends_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > ends_at:
+            raise HTTPException(status_code=400, detail="This poll has ended")
+
     existing = post_repo.get_existing_vote(poll_id, user_id)
     if existing:
         old_option_id = existing["option_id"]

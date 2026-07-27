@@ -115,8 +115,13 @@ export const CreatePostModalNew = ({
   };
 
   const handleSubmit = () => {
-    if (!content.trim() && mediaUrls.length === 0) {
+    const hasPoll = showPoll && pollOptions.filter(opt => opt.trim()).length >= 2;
+    if (!content.trim() && mediaUrls.length === 0 && !hasPoll) {
       toast({ title: "Please add some content", variant: "destructive" });
+      return;
+    }
+    if (hasPoll && !content.trim()) {
+      toast({ title: "Please add a question for your poll", variant: "destructive" });
       return;
     }
 
@@ -215,7 +220,7 @@ export const CreatePostModalNew = ({
 
           {/* Content Input */}
           <Textarea
-            placeholder="What do you want to talk about?"
+            placeholder={showPoll ? "Ask a question for your poll..." : "What do you want to talk about?"}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={6}

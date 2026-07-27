@@ -67,6 +67,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [showAuthGate, setShowAuthGate] = useState(false);
+  const [isVoting, setIsVoting] = useState(false);
   const [optimisticLiked, setOptimisticLiked] = useState(post.is_liked ?? false);
   const [optimisticLikeCount, setOptimisticLikeCount] = useState(post.like_count ?? post.likes_count ?? 0);
   const [editContent, setEditContent] = useState(post.content || "");
@@ -287,18 +288,17 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
 
   const handleVote = (optionIndex: number) => {
     const optionId = (post as { poll?: { options?: Array<{ id: string }> } }).poll?.options?.[optionIndex]?.id;
-    if (!optionId) {
-      toast({ title: "Failed to vote", variant: "destructive" });
-      return;
-    }
+    if (!optionId || isVoting) return;
+    setIsVoting(true);
     backendApi.posts.votePoll(post.id, optionId)
       .then(() => {
-        toast({ title: "Vote recorded!" });
         queryClient.invalidateQueries({ queryKey: ['feed'] });
+        queryClient.invalidateQueries({ queryKey: ['post', post.id] });
       })
-      .catch(() => {
-        toast({ title: "Failed to vote", variant: "destructive" });
-      });
+      .catch((err: Error) => {
+        toast({ title: err.message || "Failed to vote", variant: "destructive" });
+      })
+      .finally(() => setIsVoting(false));
   };
 
   const handleCopyLink = async () => {
@@ -521,6 +521,9 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
         if (pollObj?.options?.length) {
           const totalVotes = pollObj.options.reduce((sum, o) => sum + (o.vote_count || 0), 0);
           const hasVoted = !!pollObj.user_vote;
+          const endsAt = (pollObj as { ends_at?: string }).ends_at;
+          const isExpired = endsAt ? new Date(endsAt.includes('Z') || endsAt.includes('+') ? endsAt : endsAt + 'Z') < new Date() : false;
+          const locked = hasVoted || isExpired || isVoting;
           return (
             <div className="mb-4 space-y-2">
               {pollObj.options.map((option, index) => {
@@ -529,27 +532,28 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
                 return (
                   <button
                     key={option.id}
-                    onClick={() => !hasVoted && handleVote(index)}
-                    disabled={hasVoted}
+                    onClick={() => !locked && handleVote(index)}
+                    disabled={locked}
                     className={cn(
                       "w-full p-3 rounded-lg border text-left relative overflow-hidden transition-colors",
-                      hasVoted ? "cursor-not-allowed" : "hover:border-primary",
+                      locked ? "cursor-not-allowed opacity-90" : "hover:border-primary",
                       isSelected && "border-primary bg-primary/5"
                     )}
                   >
-                    <div className="absolute inset-0 bg-primary/10" style={{ width: `${percentage}%` }} />
+                    <div className="absolute inset-0 bg-primary/10" style={{ width: `${(hasVoted || isExpired) ? percentage : 0}%` }} />
                     <div className="relative flex items-center justify-between">
                       <span className="font-medium">{option.option_text}</span>
-                      {hasVoted && <span className="text-sm text-muted-foreground">{percentage.toFixed(0)}%</span>}
+                      {(hasVoted || isExpired) && <span className="text-sm text-muted-foreground">{percentage.toFixed(0)}%</span>}
                     </div>
                   </button>
                 );
               })}
-              {totalVotes > 0 && (
-                <p className="text-xs text-muted-foreground text-center">
-                  {totalVotes} vote{totalVotes !== 1 ? 's' : ''}
-                </p>
-              )}
+              <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                <span>{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</span>
+                {endsAt && (
+                  <span>{isExpired ? 'Poll ended' : `Ends ${formatDistanceToNow(new Date(endsAt.includes('Z') || endsAt.includes('+') ? endsAt : endsAt + 'Z'), { addSuffix: true })}`}</span>
+                )}
+              </div>
             </div>
           );
         }
