@@ -265,8 +265,9 @@ const Settings = () => {
 
   const removeAvatarMutation = useMutation({
     mutationFn: () => backendApi.profile.removeAvatar(),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+      await refreshUser();
       toast({ title: "Profile photo removed" });
     },
     onError: () => toast({ title: "Failed to remove photo", variant: "destructive" }),
@@ -274,8 +275,9 @@ const Settings = () => {
 
   const removeCoverMutation = useMutation({
     mutationFn: () => backendApi.profile.removeCover(),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+      await refreshUser();
       toast({ title: "Cover photo removed" });
     },
     onError: () => toast({ title: "Failed to remove cover", variant: "destructive" }),
