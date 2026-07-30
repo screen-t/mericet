@@ -58,23 +58,32 @@ const visibilityIcons = {
   private: Lock,
 };
 
-// Autoplay-on-scroll video player with mute toggle and click-to-pause.
-// Browsers block autoplay with sound, so the video always starts muted.
+// Tracks whether the user has ever manually unmuted a video this session.
+// Once they have, subsequent videos autoplay unmuted — matching YouTube/Instagram behaviour.
+// Module-level so it's shared across all VideoPlayer instances; resets on page refresh.
+let sessionUnmuted = false;
+
+// Autoplay-on-scroll video player with mute toggle, fullscreen, and click-to-pause.
+// Browsers block autoplay with sound, so the first video always starts muted.
 // React's `muted` prop doesn't update after mount (known React bug), so we
 // control it via the DOM ref directly.
 const VideoPlayer = ({ src }: { src: string }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(!sessionUnmuted);
   const [isPaused, setIsPaused] = useState(true);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    video.muted = true;
+    video.muted = !sessionUnmuted;
+    setIsMuted(!sessionUnmuted);
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
+          // Honour the session unmute preference on each new autoplay
+          video.muted = !sessionUnmuted;
+          setIsMuted(!sessionUnmuted);
           video.play().catch(() => {});
           setIsPaused(false);
         } else {
@@ -106,6 +115,8 @@ const VideoPlayer = ({ src }: { src: string }) => {
     if (!video) return;
     video.muted = !video.muted;
     setIsMuted(video.muted);
+    // Record that the user has chosen to hear audio — future videos start unmuted
+    if (!video.muted) sessionUnmuted = true;
   };
 
   const openFullscreen = (e: React.MouseEvent) => {
