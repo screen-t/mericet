@@ -288,6 +288,7 @@ const Settings = () => {
     mutationFn: (data: Record<string, unknown>) => backendApi.profile.updateProfile(data),
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
       await refreshUser();
       toast({
         title: "Profile updated",

@@ -31,7 +31,6 @@ import { ConversationsResponse, MessagesResponse, User, MessageReaction } from '
 import {
   Search,
   Send,
-  Paperclip,
   Loader2,
   MessageSquare,
   ArrowLeft,
@@ -1351,9 +1350,6 @@ const MessagesNew = () => {
                   </div>
                 )}
                 <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-                  <Button type="button" variant="ghost" size="icon">
-                    <Paperclip className="w-5 h-5" />
-                  </Button>
                   <Input
                     placeholder="Type a message..."
                     value={messageText}
