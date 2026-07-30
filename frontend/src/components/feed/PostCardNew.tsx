@@ -421,6 +421,28 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     }
   };
 
+  const handleExternalShare = async () => {
+    const postUrl = `${window.location.origin}/posts/${post.id}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Post on Mericet",
+          text: post.content?.slice(0, 100) ?? "",
+          url: postUrl,
+        });
+      } catch {
+        // User cancelled or share failed — do nothing
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(postUrl);
+        toast({ title: "Link copied to clipboard" });
+      } catch {
+        toast({ title: "Could not copy link", variant: "destructive" });
+      }
+    }
+  };
+
   const handleDeletePost = () => {
     const ok = window.confirm("Delete this post? This action cannot be undone.");
     if (!ok) return;
@@ -762,6 +784,9 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
               setShowShareModal(true);
             }}>
               Send in message
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExternalShare}>
+              Share externally
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
