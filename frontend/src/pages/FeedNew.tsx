@@ -142,7 +142,7 @@ const FeedNew = () => {
       <CreatePostModalNew
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onPostCreated={() => queryClient.invalidateQueries({ queryKey: ['feed'] })}
+        onPostCreated={() => setIsCreateModalOpen(false)}
       />
     </AppLayout>
   );

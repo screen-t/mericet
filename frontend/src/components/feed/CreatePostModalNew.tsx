@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth";
 import { backendApi } from "@/lib/backend-api";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import { Post } from "@/types/api";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +46,8 @@ export const CreatePostModalNew = ({
 }: CreatePostModalProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [content, setContent] = useState("");
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
   const [showPoll, setShowPoll] = useState(false);
@@ -91,8 +96,29 @@ export const CreatePostModalNew = ({
       scheduled_at?: string;
       is_draft?: boolean;
     }) => backendApi.posts.createPost(data),
-    onSuccess: () => {
-      toast({ title: "Post created successfully!" });
+    onSuccess: (response) => {
+      const newPost: Post | undefined = (response as { data?: Post })?.data;
+
+      // Prepend the new post to every feed cache entry so it's immediately
+      // visible at the top regardless of ranking, for both tabs.
+      if (newPost) {
+        queryClient.setQueriesData<Post[]>({ queryKey: ['feed'] }, (old) => {
+          if (!Array.isArray(old)) return old;
+          // Avoid duplicates if a background refetch already added it
+          if (old.some((p) => p.id === newPost.id)) return old;
+          return [newPost, ...old];
+        });
+      }
+
+      toast({
+        title: "Post created!",
+        action: newPost ? (
+          <ToastAction altText="View post" onClick={() => navigate(`/posts/${newPost.id}`)}>
+            View post
+          </ToastAction>
+        ) : undefined,
+      });
+
       resetForm();
       onClose();
       onPostCreated?.();
