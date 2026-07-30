@@ -6,13 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import { Eye, EyeOff, Mail, ArrowRight, Phone, Shield, ChevronRight, Plus } from "lucide-react";
+import { Eye, EyeOff, Mail, ArrowRight, Shield, ChevronRight, Plus } from "lucide-react";
 import { authApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -22,7 +16,6 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-  const [loginMethod, setLoginMethod] = useState("email");
   const [loading, setLoading] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -222,112 +215,54 @@ const Login = () => {
             </span>
           </div>
 
-          {/* Email/Phone Login Tabs */}
-          <Tabs value={loginMethod} onValueChange={setLoginMethod} className="mb-5">
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="email" className="gap-2">
-                <Mail className="h-4 w-4" />
-                Email
-              </TabsTrigger>
-              <TabsTrigger value="phone" className="gap-2">
-                <Phone className="h-4 w-4" />
-                Phone
-              </TabsTrigger>
-            </TabsList>
+          <form onSubmit={handleSubmit} className="space-y-5 mb-5">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="your.email@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
+            </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-
-            <TabsContent value="email" className="space-y-4 mt-0">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="your.email@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                    <Link
-                      to="/forgot-password"
-                      className="text-sm text-primary hover:underline"
-                    >
-                      Forgot password?
-                    </Link>
-                  </div>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="pr-10"
-                      autoComplete="current-password"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="phone" className="space-y-4 mt-0">
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="+1 (555) 000-0000"
-                    autoComplete="tel"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone-password">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="phone-password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
-                      className="pr-10"
-                      autoComplete="current-password"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <Button type="button" variant="link" className="px-0 h-auto text-sm">
-                  Send me a verification code instead
-                </Button>
-              </TabsContent>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-primary hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-10"
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
 
             <div className="flex items-center gap-2">
               <Checkbox
@@ -345,7 +280,6 @@ const Login = () => {
               <ArrowRight className="h-4 w-4" />
             </Button>
           </form>
-          </Tabs>
 
           {hasSavedAccounts && showForm && (
             <button
