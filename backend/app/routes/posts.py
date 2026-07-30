@@ -326,7 +326,9 @@ def delete_post(
 # ==================== ENGAGEMENT ====================
 
 @router.post("/{post_id}/like")
+@limiter.limit(WRITE_LIMIT)
 def like_post(
+    request: Request,
     post_id: str,
     user_id: str = Depends(require_auth),
     post_repo=Depends(get_post_repo),
@@ -368,7 +370,9 @@ def unlike_post(
 
 
 @router.post("/{post_id}/repost")
+@limiter.limit(WRITE_LIMIT)
 def repost(
+    request: Request,
     post_id: str,
     user_id: str = Depends(require_auth),
     post_repo=Depends(get_post_repo),
@@ -480,7 +484,9 @@ def get_comments(
 
 
 @router.post("/{post_id}/comments")
+@limiter.limit(WRITE_LIMIT)
 def create_comment(
+    request: Request,
     post_id: str,
     payload: CommentCreate,
     user_id: str = Depends(require_auth),
@@ -543,7 +549,9 @@ def delete_comment(
 # ==================== POLLS ====================
 
 @router.post("/{post_id}/poll/vote")
+@limiter.limit(WRITE_LIMIT)
 def vote_on_poll(
+    request: Request,
     post_id: str,
     payload: PollVote,
     user_id: str = Depends(require_auth),

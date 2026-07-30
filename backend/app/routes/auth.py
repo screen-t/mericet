@@ -47,7 +47,10 @@ def signup(
     try:
         result = auth_service.sign_up(payload.email, payload.password)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Signup failed: {str(e)}")
+        msg = str(e).lower()
+        if "already registered" in msg or "already exists" in msg or "duplicate" in msg:
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
+        raise HTTPException(status_code=500, detail="Signup failed. Please try again.")
 
     if result.user is None:
         raise HTTPException(status_code=409, detail="User with this email already exists")

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -25,6 +25,10 @@ import {
   Image,
   Loader2,
   BarChart3,
+  Play,
+  Volume2,
+  VolumeX,
+  Maximize,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -52,6 +56,112 @@ const visibilityIcons = {
   public: Globe,
   connections: Users,
   private: Lock,
+};
+
+// Tracks whether the user has ever manually unmuted a video this session.
+// Once they have, subsequent videos autoplay unmuted — matching YouTube/Instagram behaviour.
+// Module-level so it's shared across all VideoPlayer instances; resets on page refresh.
+let sessionUnmuted = false;
+
+// Autoplay-on-scroll video player with mute toggle, fullscreen, and click-to-pause.
+// Browsers block autoplay with sound, so the first video always starts muted.
+// React's `muted` prop doesn't update after mount (known React bug), so we
+// control it via the DOM ref directly.
+const VideoPlayer = ({ src }: { src: string }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isMuted, setIsMuted] = useState(!sessionUnmuted);
+  const [isPaused, setIsPaused] = useState(true);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !sessionUnmuted;
+    setIsMuted(!sessionUnmuted);
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          // Honour the session unmute preference on each new autoplay
+          video.muted = !sessionUnmuted;
+          setIsMuted(!sessionUnmuted);
+          video.play().catch(() => {});
+          setIsPaused(false);
+        } else {
+          video.pause();
+          setIsPaused(true);
+        }
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, [src]);
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play().catch(() => {});
+      setIsPaused(false);
+    } else {
+      video.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const toggleMute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
+    // Record that the user has chosen to hear audio — future videos start unmuted
+    if (!video.muted) sessionUnmuted = true;
+  };
+
+  const openFullscreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    videoRef.current?.requestFullscreen?.();
+  };
+
+  return (
+    <div
+      className="relative rounded-lg overflow-hidden bg-black cursor-pointer"
+      onClick={togglePlay}
+    >
+      <video
+        ref={videoRef}
+        src={src}
+        preload="metadata"
+        playsInline
+        loop
+        className="w-full max-h-96 object-cover"
+      />
+      {isPaused && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+          <div className="bg-black/60 rounded-full p-3">
+            <Play className="w-8 h-8 text-white fill-white" />
+          </div>
+        </div>
+      )}
+      <div className="absolute bottom-2 right-2 flex items-center gap-1">
+        <button
+          onClick={toggleMute}
+          className="bg-black/60 text-white rounded-full p-1.5 hover:bg-black/80 transition-colors"
+          aria-label={isMuted ? "Unmute" : "Mute"}
+        >
+          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
+        <button
+          onClick={openFullscreen}
+          className="bg-black/60 text-white rounded-full p-1.5 hover:bg-black/80 transition-colors"
+          aria-label="Full screen"
+        >
+          <Maximize className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
 };
 
 export const PostCardNew = ({ post }: PostCardNewProps) => {
@@ -311,6 +421,28 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     }
   };
 
+  const handleExternalShare = async () => {
+    const postUrl = `${window.location.origin}/posts/${post.id}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Post on Mericet",
+          text: post.content?.slice(0, 100) ?? "",
+          url: postUrl,
+        });
+      } catch {
+        // User cancelled or share failed — do nothing
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(postUrl);
+        toast({ title: "Link copied to clipboard" });
+      } catch {
+        toast({ title: "Could not copy link", variant: "destructive" });
+      }
+    }
+  };
+
   const handleDeletePost = () => {
     const ok = window.confirm("Delete this post? This action cannot be undone.");
     if (!ok) return;
@@ -491,13 +623,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           <div className="mb-4 space-y-2">
             {mediaItems.map((item, idx) => (
               item.media_type === "video" ? (
-                <video
-                  key={idx}
-                  src={item.url}
-                  controls
-                  preload="none"
-                  className="w-full rounded-lg max-h-96 object-cover"
-                />
+                <VideoPlayer key={idx} src={item.url} />
               ) : (
                 <img
                   key={idx}
@@ -658,6 +784,9 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
               setShowShareModal(true);
             }}>
               Send in message
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExternalShare}>
+              Share externally
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

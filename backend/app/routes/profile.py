@@ -156,26 +156,30 @@ def delete_my_account(
 
 # ==================== IMAGE UPLOADS ====================
 
-ALLOWED_IMAGE_TYPES = {
-    "image/jpeg": ("jpg", b"\xff\xd8\xff"),
-    "image/png":  ("png", b"\x89PNG"),
-    "image/webp": ("webp", b"RIFF"),
-    "image/gif":  ("gif", b"GIF"),
-}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 
-def _validate_image(file: UploadFile, contents: bytes) -> str:
-    """Validate content-type and magic bytes; return safe file extension."""
-    mime = file.content_type
-    if mime not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are allowed")
+def _detect_image_type(contents: bytes) -> tuple[str, str] | None:
+    """Return (mime, ext) by inspecting magic bytes. Never trusts browser content-type."""
+    if contents[:3] == b"\xff\xd8\xff":
+        return ("image/jpeg", "jpg")
+    if contents[:8] == b"\x89PNG\r\n\x1a\n":
+        return ("image/png", "png")
+    if contents[:4] == b"RIFF" and contents[8:12] == b"WEBP":
+        return ("image/webp", "webp")
+    if contents[:6] in (b"GIF87a", b"GIF89a"):
+        return ("image/gif", "gif")
+    return None
+
+
+def _validate_image(file: UploadFile, contents: bytes) -> tuple[str, str]:
+    """Detect image type from magic bytes; return (mime, ext). Raises 400 on bad input."""
     if len(contents) > MAX_IMAGE_SIZE:
         raise HTTPException(status_code=400, detail="Image must be smaller than 5 MB")
-    ext, magic = ALLOWED_IMAGE_TYPES[mime]
-    if not contents.startswith(magic):
-        raise HTTPException(status_code=400, detail="File content does not match its declared type")
-    return ext
+    result = _detect_image_type(contents)
+    if result is None:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are allowed")
+    return result
 
 
 @router.post("/upload-avatar")
@@ -188,9 +192,9 @@ async def upload_avatar(
     storage=Depends(get_storage_service),
 ):
     contents = await file.read()
-    ext = _validate_image(file, contents)
+    mime, ext = _validate_image(file, contents)
     path = f"{user_id}/avatar.{ext}"
-    public_url = storage.upload("avatars", path, contents, file.content_type)
+    public_url = storage.upload("avatars", path, contents, mime)
     public_url = f"{public_url}?t={int(time.time())}"
     user_repo.update(user_id, {"avatar_url": public_url})
     return {"avatar_url": public_url}
@@ -206,12 +210,30 @@ async def upload_cover(
     storage=Depends(get_storage_service),
 ):
     contents = await file.read()
-    ext = _validate_image(file, contents)
+    mime, ext = _validate_image(file, contents)
     path = f"{user_id}/cover.{ext}"
-    public_url = storage.upload("covers", path, contents, file.content_type)
+    public_url = storage.upload("covers", path, contents, mime)
     public_url = f"{public_url}?t={int(time.time())}"
     user_repo.update(user_id, {"cover_url": public_url})
     return {"cover_url": public_url}
+
+
+@router.delete("/me/avatar")
+def remove_avatar(
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+):
+    user_repo.update(user_id, {"avatar_url": None})
+    return {"message": "Profile photo removed"}
+
+
+@router.delete("/me/cover")
+def remove_cover(
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+):
+    user_repo.update(user_id, {"cover_url": None})
+    return {"message": "Cover photo removed"}
 
 
 @router.put("/privacy")

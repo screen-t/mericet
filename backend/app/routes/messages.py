@@ -121,7 +121,9 @@ def _conversation_sort_key(conv: dict):
 
 
 @router.post("")
+@limiter.limit(WRITE_LIMIT)
 def send_message(
+    request: Request,
     payload: MessageCreate,
     user_id: str = Depends(require_auth),
     msg_repo=Depends(get_message_repo),

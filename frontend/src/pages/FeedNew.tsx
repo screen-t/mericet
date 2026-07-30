@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { CreatePostBox } from "@/components/feed/CreatePostBox";
-import { CreatePostModalNew } from "@/components/feed/CreatePostModalNew";
 import { PostCardNew } from "@/components/feed/PostCardNew";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
@@ -12,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Post } from '@/types/api';
 
 const FeedNew = () => {
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"for_you" | "following">("for_you");
   const queryClient = useQueryClient();
 
@@ -36,14 +33,6 @@ const FeedNew = () => {
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Create Post */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <CreatePostBox onOpenModal={() => setIsCreateModalOpen(true)} />
-        </motion.div>
-
         {/* Feed Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <div className="flex items-center justify-between">
@@ -138,12 +127,6 @@ const FeedNew = () => {
         </Tabs>
       </div>
 
-      {/* Create Post Modal */}
-      <CreatePostModalNew
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onPostCreated={() => queryClient.invalidateQueries({ queryKey: ['feed'] })}
-      />
     </AppLayout>
   );
 };
