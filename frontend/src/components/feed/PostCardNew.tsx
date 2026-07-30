@@ -28,6 +28,7 @@ import {
   Play,
   Volume2,
   VolumeX,
+  Maximize,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -107,6 +108,11 @@ const VideoPlayer = ({ src }: { src: string }) => {
     setIsMuted(video.muted);
   };
 
+  const openFullscreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    videoRef.current?.requestFullscreen?.();
+  };
+
   return (
     <div
       className="relative rounded-lg overflow-hidden bg-black cursor-pointer"
@@ -127,13 +133,22 @@ const VideoPlayer = ({ src }: { src: string }) => {
           </div>
         </div>
       )}
-      <button
-        onClick={toggleMute}
-        className="absolute bottom-2 right-2 bg-black/60 text-white rounded-full p-1.5 hover:bg-black/80 transition-colors"
-        aria-label={isMuted ? "Unmute" : "Mute"}
-      >
-        {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-      </button>
+      <div className="absolute bottom-2 right-2 flex items-center gap-1">
+        <button
+          onClick={toggleMute}
+          className="bg-black/60 text-white rounded-full p-1.5 hover:bg-black/80 transition-colors"
+          aria-label={isMuted ? "Unmute" : "Mute"}
+        >
+          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
+        <button
+          onClick={openFullscreen}
+          className="bg-black/60 text-white rounded-full p-1.5 hover:bg-black/80 transition-colors"
+          aria-label="Full screen"
+        >
+          <Maximize className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 };
