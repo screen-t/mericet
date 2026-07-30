@@ -214,6 +214,24 @@ async def upload_cover(
     return {"cover_url": public_url}
 
 
+@router.delete("/me/avatar")
+def remove_avatar(
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+):
+    user_repo.update(user_id, {"avatar_url": None})
+    return {"message": "Profile photo removed"}
+
+
+@router.delete("/me/cover")
+def remove_cover(
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+):
+    user_repo.update(user_id, {"cover_url": None})
+    return {"message": "Cover photo removed"}
+
+
 @router.put("/privacy")
 def update_privacy_settings(
     payload: PrivacySettingsUpdate,

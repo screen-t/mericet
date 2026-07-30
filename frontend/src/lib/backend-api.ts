@@ -137,6 +137,16 @@ const profile = {
       body: form,
     }).then((r) => handleResponse(r)) as Promise<{ cover_url: string }>;
   },
+  removeAvatar: (): Promise<{ message: string }> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/me/avatar`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  removeCover: (): Promise<{ message: string }> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/me/cover`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
   addWorkExperience: (data: Record<string, unknown>) =>
     fetchWithAuth(`${API_BASE_URL}/profile/work-experience`, {
       method: "POST",

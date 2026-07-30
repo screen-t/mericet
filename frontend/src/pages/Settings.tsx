@@ -30,6 +30,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/lib/theme";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link } from "react-router-dom";
 import { Connection } from "@/types/api";
 
@@ -260,6 +261,24 @@ const Settings = () => {
       toast({ title: "Cover image updated!" });
     },
     onError: () => toast({ title: "Failed to upload cover", variant: "destructive" }),
+  });
+
+  const removeAvatarMutation = useMutation({
+    mutationFn: () => backendApi.profile.removeAvatar(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+      toast({ title: "Profile photo removed" });
+    },
+    onError: () => toast({ title: "Failed to remove photo", variant: "destructive" }),
+  });
+
+  const removeCoverMutation = useMutation({
+    mutationFn: () => backendApi.profile.removeCover(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+      toast({ title: "Cover photo removed" });
+    },
+    onError: () => toast({ title: "Failed to remove cover", variant: "destructive" }),
   });
 
   // Mutation to update profile
@@ -510,16 +529,37 @@ const Settings = () => {
                       e.target.value = "";
                     }}
                   />
-                  <button
-                    onClick={() => avatarInputRef.current?.click()}
-                    className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:bg-primary/90 transition-colors"
-                  >
-                    {uploadAvatarMutation.isPending ? (
+                  {uploadAvatarMutation.isPending || removeAvatarMutation.isPending ? (
+                    <div className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
+                    </div>
+                  ) : profileData?.avatar_url ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:bg-primary/90 transition-colors">
+                          <Camera className="h-4 w-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => avatarInputRef.current?.click()}>
+                          Change profile photo
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => removeAvatarMutation.mutate()}
+                        >
+                          Remove profile photo
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <button
+                      onClick={() => avatarInputRef.current?.click()}
+                      className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:bg-primary/90 transition-colors"
+                    >
                       <Camera className="h-4 w-4" />
-                    )}
-                  </button>
+                    </button>
+                  )}
                 </div>
                 <div>
                   <h3 className="font-semibold">Profile Photo</h3>
@@ -547,19 +587,43 @@ const Settings = () => {
                       e.target.value = "";
                     }}
                   />
-                  <button
-                    onClick={() => coverInputRef.current?.click()}
-                    className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors cursor-pointer"
-                  >
-                    {uploadCoverMutation.isPending ? (
+                  {uploadCoverMutation.isPending || removeCoverMutation.isPending ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                       <Loader2 className="w-6 h-6 text-white animate-spin" />
-                    ) : (
+                    </div>
+                  ) : profileData?.cover_url ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors cursor-pointer">
+                          <div className="flex items-center gap-2 text-white">
+                            <Camera className="w-5 h-5" />
+                            <span className="text-sm font-medium">Edit Cover</span>
+                          </div>
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => coverInputRef.current?.click()}>
+                          Change cover photo
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => removeCoverMutation.mutate()}
+                        >
+                          Remove cover photo
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <button
+                      onClick={() => coverInputRef.current?.click()}
+                      className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors cursor-pointer"
+                    >
                       <div className="flex items-center gap-2 text-white">
                         <Camera className="w-5 h-5" />
-                        <span className="text-sm font-medium">Change Cover</span>
+                        <span className="text-sm font-medium">Add Cover</span>
                       </div>
-                    )}
-                  </button>
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">JPG, PNG or GIF. Max 5MB. Recommended: 1500×500px</p>
               </div>

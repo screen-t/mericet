@@ -82,6 +82,24 @@ export const ProfilePage = () => {
     onError: () => toast({ title: "Failed to upload cover", variant: "destructive" }),
   });
 
+  const removeAvatarMutation = useMutation({
+    mutationFn: () => backendApi.profile.removeAvatar(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      toast({ title: "Profile photo removed" });
+    },
+    onError: () => toast({ title: "Failed to remove photo", variant: "destructive" }),
+  });
+
+  const removeCoverMutation = useMutation({
+    mutationFn: () => backendApi.profile.removeCover(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      toast({ title: "Cover photo removed" });
+    },
+    onError: () => toast({ title: "Failed to remove cover", variant: "destructive" }),
+  });
+
   // Determine which user profile to show
   const profileUserId = userId || user?.id;
   const isOwnProfile = !userId || userId === user?.id;
@@ -274,19 +292,33 @@ export const ProfilePage = () => {
                   e.target.value = "";
                 }}
               />
-              <button
-                onClick={() => coverInputRef.current?.click()}
-                className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-              >
-                {uploadCoverMutation.isPending ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                {uploadCoverMutation.isPending || removeCoverMutation.isPending ? (
                   <Loader2 className="w-8 h-8 text-white animate-spin" />
                 ) : (
-                  <div className="flex items-center gap-2 text-white">
-                    <Camera className="w-6 h-6" />
-                    <span className="text-sm font-medium">Change Cover</span>
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex items-center gap-2 text-white cursor-pointer">
+                        <Camera className="w-6 h-6" />
+                        <span className="text-sm font-medium">Edit Cover</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => coverInputRef.current?.click()}>
+                        Change cover photo
+                      </DropdownMenuItem>
+                      {profile.cover_url && (
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => removeCoverMutation.mutate()}
+                        >
+                          Remove cover photo
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
-              </button>
+              </div>
             </>
           )}
         </motion.div>
@@ -320,16 +352,32 @@ export const ProfilePage = () => {
                         e.target.value = "";
                       }}
                     />
-                    <button
-                      onClick={() => avatarInputRef.current?.click()}
-                      className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer"
-                    >
-                      {uploadAvatarMutation.isPending ? (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover/avatar:opacity-100 transition-opacity">
+                      {uploadAvatarMutation.isPending || removeAvatarMutation.isPending ? (
                         <Loader2 className="w-6 h-6 text-white animate-spin" />
                       ) : (
-                        <Camera className="w-6 h-6 text-white" />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="flex items-center justify-center w-full h-full rounded-full cursor-pointer">
+                              <Camera className="w-6 h-6 text-white" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem onClick={() => avatarInputRef.current?.click()}>
+                              Change profile photo
+                            </DropdownMenuItem>
+                            {profile.avatar_url && (
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => removeAvatarMutation.mutate()}
+                              >
+                                Remove profile photo
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
-                    </button>
+                    </div>
                   </>
                 )}
               </div>
