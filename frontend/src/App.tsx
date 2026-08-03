@@ -25,6 +25,7 @@ import SearchPage from "./pages/SearchPage";
 import PostDetail from "./pages/PostDetail";
 import ModerationQueue from "./pages/ModerationQueue";
 import Settings from "./pages/Settings";
+import SecuritySettings from "./pages/SecuritySettings";
 import NotFound from "./pages/NotFound";
 import OAuthCallback from "./pages/OAuthCallBack";
 import Companies from "./pages/Companies";
@@ -76,6 +77,7 @@ const App = () => (
             <Route path="/posts/:postId" element={<PostDetail />} />
             <Route path="/moderation" element={<RequireAuth><ModerationQueue /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+            <Route path="/settings/security" element={<RequireAuth><SecuritySettings /></RequireAuth>} />
             <Route path="/companies" element={<RequireAuth><Companies /></RequireAuth>} />
             <Route path="/saved" element={<RequireAuth><Saved /></RequireAuth>} />
             <Route path="/saved/:folderId" element={<RequireAuth><Saved /></RequireAuth>} />
