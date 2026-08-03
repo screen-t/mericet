@@ -183,7 +183,12 @@ def forgot_password(request: Request, payload: ForgotPasswordRequest, auth_servi
 @router.post("/reset-password")
 @limiter.limit("5/minute")
 def reset_password(request: Request, payload: ResetPasswordRequest, auth_service=Depends(get_auth_service)):
-    auth_service.update_password(payload.access_token, payload.new_password)
+    try:
+        auth_service.update_password(payload.access_token, payload.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to update password. Please try again.")
     return {"success": True, "message": "Password updated successfully"}
 
 
