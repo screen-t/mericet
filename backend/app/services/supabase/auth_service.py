@@ -34,7 +34,10 @@ class SupabaseAuthService:
         return self._to_auth_result(res)
 
     def reset_password_email(self, email: str) -> None:
-        self._client.auth.reset_password_email(email)
+        self._client.auth.reset_password_email(
+            email,
+            options={"redirect_to": "https://mericet.vercel.app/reset-password"},
+        )
 
     def update_password(self, access_token: str, new_password: str) -> None:
         self._client.auth.update_user(access_token, {"password": new_password})
