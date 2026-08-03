@@ -843,6 +843,24 @@ const Settings = () => {
 
               <Separator />
 
+              {/* Security & Login */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    Security & Login
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Change your password and manage login activity
+                  </p>
+                </div>
+                <Link to="/settings/security">
+                  <Button variant="outline" size="sm">Manage</Button>
+                </Link>
+              </div>
+
+              <Separator />
+
               {/* Danger Zone */}
               <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/5">
                 <h3 className="font-semibold text-destructive mb-2">
