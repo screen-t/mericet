@@ -86,6 +86,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ;(async () => {
       const tokens = getStoredTokens()
       if (tokens.access_token) {
+        // Snapshot the token so we can detect if login() ran concurrently and
+        // stored new tokens before this restore finishes — if so, bail out.
+        const startToken = tokens.access_token
         let networkFail = false
         try {
           let me: User | null = null
@@ -122,12 +125,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
 
-          if (cancelled) return
+          // If login() ran while we were awaiting, the stored token has changed.
+          // Don't clobber the new session — just leave everything as login() left it.
+          if (cancelled || getStoredTokens().access_token !== startToken) return
+
           if (me) setUser(me)
           else if (!networkFail) setStoredTokens(undefined)
-          // If networkFail, keep tokens — they are probably still valid
         } catch {
-          if (cancelled) return
+          if (cancelled || getStoredTokens().access_token !== startToken) return
           setStoredTokens(undefined)
           setUser(null)
         }

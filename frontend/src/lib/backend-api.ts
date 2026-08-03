@@ -8,8 +8,13 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000"
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 
+function getStoredToken(): string | null {
+  if (typeof localStorage === "undefined") return null;
+  return localStorage.getItem(ACCESS_TOKEN_KEY) || sessionStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
 function getAuthHeaders(): HeadersInit {
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem(ACCESS_TOKEN_KEY) : null;
+  const token = getStoredToken();
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -20,7 +25,7 @@ function getAuthHeaders(): HeadersInit {
 let refreshingPromise: Promise<string | null> | null = null;
 
 async function tryRefreshToken(): Promise<string | null> {
-  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY) || sessionStorage.getItem(REFRESH_TOKEN_KEY);
   if (!refreshToken) return null;
   try {
     // Route through backend — no direct Supabase call needed
@@ -60,6 +65,8 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   if (!newToken) {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
     window.location.href = "/login";
     return res;
   }
