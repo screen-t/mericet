@@ -82,49 +82,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    // Attempt to restore session using stored tokens — no Supabase client needed
-    (async () => {
+    let cancelled = false
+    ;(async () => {
       const tokens = getStoredTokens()
       if (tokens.access_token) {
+        let networkFail = false
         try {
           let me: User | null = null
           try {
-            // Try with stored access token
             me = await authApi.me(tokens.access_token)
-          } catch {
-            // Token may be expired. For OAuth users, Supabase rotates refresh tokens
-            // internally — using the stored one via backend refresh will fail with
-            // "Already Used". Try Supabase's own session first to get the current token.
-            try {
-              const { supabase } = await import('./supabase')
-              const { data } = await supabase.auth.getSession()
-              if (data.session?.access_token) {
-                setStoredTokens({
-                  access_token: data.session.access_token,
-                  refresh_token: data.session.refresh_token ?? undefined,
-                })
-                me = await authApi.me(data.session.access_token)
-              }
-            } catch { /* fall through to backend refresh */ }
+          } catch (err) {
+            if (err instanceof TypeError) {
+              // Network error — backend is cold-starting. Keep the session alive
+              // so the user isn't logged out just because Render is waking up.
+              networkFail = true
+            } else {
+              // HTTP error (likely 401) — try to get a fresh token before giving up.
+              try {
+                const { supabase } = await import('./supabase')
+                const { data } = await supabase.auth.getSession()
+                if (data.session?.access_token) {
+                  setStoredTokens({
+                    access_token: data.session.access_token,
+                    refresh_token: data.session.refresh_token ?? undefined,
+                  })
+                  me = await authApi.me(data.session.access_token)
+                }
+              } catch { /* fall through to backend refresh */ }
 
-            // If Supabase session didn't recover us, try backend refresh as last resort
-            if (!me && tokens.refresh_token) {
-              const refreshed = await authApi.refresh({ refresh_token: tokens.refresh_token })
-              if (refreshed.session) {
-                setStoredTokens(refreshed.session)
-                me = await authApi.me(refreshed.session.access_token)
+              if (!me && tokens.refresh_token) {
+                try {
+                  const refreshed = await authApi.refresh({ refresh_token: tokens.refresh_token })
+                  if (refreshed.session) {
+                    setStoredTokens(refreshed.session)
+                    me = await authApi.me(refreshed.session.access_token)
+                  }
+                } catch { /* all refresh paths exhausted */ }
               }
             }
           }
+
+          if (cancelled) return
           if (me) setUser(me)
-          else setStoredTokens(undefined)
+          else if (!networkFail) setStoredTokens(undefined)
+          // If networkFail, keep tokens — they are probably still valid
         } catch {
+          if (cancelled) return
           setStoredTokens(undefined)
           setUser(null)
         }
       }
-      setLoading(false)
+      if (!cancelled) setLoading(false)
     })()
+    return () => { cancelled = true }
   }, [])
 
   const login = async (email: string, password: string, rememberMe = false) => {
