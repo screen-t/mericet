@@ -10,7 +10,9 @@ import { Shield, Eye, EyeOff, CheckCircle } from 'lucide-react'
 const ResetPassword = () => {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const token = searchParams.get('token') || ''
+  // Supabase puts the access_token in the URL hash after redirect (e.g. #access_token=...&type=recovery)
+  const hashParams = new URLSearchParams(window.location.hash.substring(1))
+  const token = hashParams.get('access_token') || searchParams.get('token') || ''
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
