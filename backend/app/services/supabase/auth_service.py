@@ -40,9 +40,17 @@ class SupabaseAuthService:
         )
 
     def update_password(self, access_token: str, new_password: str) -> None:
-        user_response = self._client.auth.get_user(access_token)
+        try:
+            user_response = self._client.auth.get_user(access_token)
+        except Exception as e:
+            raise ValueError(f"Token validation failed: {e}")
+        if not user_response or not user_response.user:
+            raise ValueError("Token is invalid or expired")
         user_id = user_response.user.id
-        self._client.auth.admin.update_user_by_id(user_id, {"password": new_password})
+        try:
+            self._client.auth.admin.update_user_by_id(user_id, {"password": new_password})
+        except Exception as e:
+            raise ValueError(f"Failed to update password: {e}")
 
     def delete_user(self, user_id: str) -> None:
         import httpx
