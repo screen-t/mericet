@@ -40,7 +40,9 @@ class SupabaseAuthService:
         )
 
     def update_password(self, access_token: str, new_password: str) -> None:
-        self._client.auth.update_user(access_token, {"password": new_password})
+        user_response = self._client.auth.get_user(access_token)
+        user_id = user_response.user.id
+        self._client.auth.admin.update_user_by_id(user_id, {"password": new_password})
 
     def delete_user(self, user_id: str) -> None:
         import httpx
