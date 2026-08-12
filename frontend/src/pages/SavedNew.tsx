@@ -396,6 +396,8 @@ export default function Saved() {
                         onClick={() => navigate(`/saved/${folder.id}`)}
                         onEdit={() => openEditDialog(folder)}
                         onDelete={() => deleteFolderMutation.mutate(folder.id)}
+                        onTogglePublic={() => togglePublicMutation.mutate({ id: folder.id, isPublic: !folder.is_public })}
+                        onCopyLink={() => copyShareLink(folder)}
                       />
                     ))}
                   </div>
@@ -485,11 +487,13 @@ export default function Saved() {
 
 // ── Sub-components ────────────────────────────────────────────
 
-function FolderCard({ folder, onClick, onEdit, onDelete }: {
+function FolderCard({ folder, onClick, onEdit, onDelete, onTogglePublic, onCopyLink }: {
   folder: Folder;
   onClick: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onTogglePublic: () => void;
+  onCopyLink: () => void;
 }) {
   return (
     <Card
@@ -520,7 +524,7 @@ function FolderCard({ folder, onClick, onEdit, onDelete }: {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                className="h-6 w-6 shrink-0 md:opacity-0 md:group-hover:opacity-100 md:transition-opacity"
                 onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
@@ -530,6 +534,16 @@ function FolderCard({ folder, onClick, onEdit, onDelete }: {
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(); }}>
                 <Pencil className="h-4 w-4 mr-2" /> Edit
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onTogglePublic(); }}>
+                {folder.is_public
+                  ? <><Lock className="h-4 w-4 mr-2" /> Make private</>
+                  : <><Globe className="h-4 w-4 mr-2" /> Make public</>}
+              </DropdownMenuItem>
+              {folder.is_public && folder.share_token && (
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onCopyLink(); }}>
+                  <Link2 className="h-4 w-4 mr-2" /> Copy share link
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 className="text-destructive"
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
