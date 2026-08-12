@@ -2,6 +2,13 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { VitePWA } from "vite-plugin-pwa";
+import { webcrypto } from "node:crypto";
+
+// Polyfill globalThis.crypto for Node.js < 19 (needed by workbox-build / serialize-javascript)
+if (!globalThis.crypto) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).crypto = webcrypto;
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
