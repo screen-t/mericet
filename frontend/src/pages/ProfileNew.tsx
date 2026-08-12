@@ -708,12 +708,14 @@ export const ProfilePage = () => {
 
         {/* Profile Tabs */}
         <Tabs defaultValue="about" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 h-auto gap-0">
-            <TabsTrigger value="about" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">About</TabsTrigger>
-            <TabsTrigger value="posts" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Posts</TabsTrigger>
-            <TabsTrigger value="experience" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Experience</TabsTrigger>
-            <TabsTrigger value="education" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Education</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto">
+            <TabsList className="grid grid-cols-4 w-full min-w-[360px] h-auto gap-0">
+              <TabsTrigger value="about" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">About</TabsTrigger>
+              <TabsTrigger value="posts" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Posts</TabsTrigger>
+              <TabsTrigger value="experience" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Experience</TabsTrigger>
+              <TabsTrigger value="education" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Education</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="about" className="space-y-6">
             <motion.div
