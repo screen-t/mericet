@@ -449,24 +449,26 @@ const Settings = () => {
         </div>
 
         <Tabs defaultValue="account" className="space-y-6">
-          <TabsList className="bg-card border border-border">
-            <TabsTrigger value="account" className="gap-2">
-              <User className="h-4 w-4" />
-              Account
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-2">
-              <Bell className="h-4 w-4" />
-              Notifications
-            </TabsTrigger>
-            <TabsTrigger value="privacy" className="gap-2">
-              <Shield className="h-4 w-4" />
-              Privacy
-            </TabsTrigger>
-            <TabsTrigger value="appearance" className="gap-2">
-              <Palette className="h-4 w-4" />
-              Appearance
-            </TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto sm:overflow-visible">
+            <TabsList className="bg-card border border-border flex flex-nowrap w-max sm:grid sm:grid-cols-4 sm:w-full">
+              <TabsTrigger value="account" className="gap-2 whitespace-nowrap">
+                <User className="h-4 w-4" />
+                Account
+              </TabsTrigger>
+              <TabsTrigger value="notifications" className="gap-2 whitespace-nowrap">
+                <Bell className="h-4 w-4" />
+                Notifications
+              </TabsTrigger>
+              <TabsTrigger value="privacy" className="gap-2 whitespace-nowrap">
+                <Shield className="h-4 w-4" />
+                Privacy
+              </TabsTrigger>
+              <TabsTrigger value="appearance" className="gap-2 whitespace-nowrap">
+                <Palette className="h-4 w-4" />
+                Appearance
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Account Tab */}
           <TabsContent value="account">
