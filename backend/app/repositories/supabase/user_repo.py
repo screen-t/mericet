@@ -27,6 +27,12 @@ class SupabaseUserRepository:
                     time.sleep(0.1 * (attempt + 1))
         return None
 
+    def get_by_ids(self, user_ids: list[str], fields: str = "id, first_name, last_name, username, avatar_url") -> list[dict]:
+        if not user_ids:
+            return []
+        result = self._client.table("users").select(fields).in_("id", user_ids).execute()
+        return result.data or []
+
     def get_by_username(self, username: str) -> Optional[dict]:
         cache_key = f"username:{username}"
         cached = user_cache.get(cache_key)

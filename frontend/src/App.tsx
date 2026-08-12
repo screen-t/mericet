@@ -30,6 +30,7 @@ import NotFound from "./pages/NotFound";
 import OAuthCallback from "./pages/OAuthCallBack";
 import Companies from "./pages/Companies";
 import Saved from "./pages/SavedNew";
+import PublicFolderPage from "./pages/PublicFolderPage";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 
@@ -81,6 +82,7 @@ const App = () => (
             <Route path="/companies" element={<RequireAuth><Companies /></RequireAuth>} />
             <Route path="/saved" element={<RequireAuth><Saved /></RequireAuth>} />
             <Route path="/saved/:folderId" element={<RequireAuth><Saved /></RequireAuth>} />
+            <Route path="/collections/:shareToken" element={<PublicFolderPage />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

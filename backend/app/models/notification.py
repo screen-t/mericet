@@ -9,6 +9,7 @@ class NotificationType(str, Enum):
     CONNECTION = "connection"
     MESSAGE = "message"
     SYSTEM = "system"
+    FOLDER_POST = "folder_post"
 
 class NotificationCreate(BaseModel):
     user_id: str
