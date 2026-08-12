@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Connection } from "@/types/api";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Dialog,
@@ -38,7 +39,7 @@ export function ShareFolderModal({ open, onOpenChange, folderName, shareUrl }: P
     queryKey: ["connections-for-share"],
     queryFn: async () => {
       const res = await backendApi.connections.getConnections("accepted", 100, 0);
-      return (res.connections as any[]).map((c: any): Peer => ({
+      return res.connections.map((c: Connection): Peer => ({
         id: c.user?.id ?? "",
         first_name: c.user?.first_name ?? "",
         last_name: c.user?.last_name ?? "",
@@ -50,16 +51,15 @@ export function ShareFolderModal({ open, onOpenChange, folderName, shareUrl }: P
     staleTime: 60_000,
   });
 
-  const peers = data ?? [];
-
   const filtered = useMemo(() => {
+    const peers = data ?? [];
     if (!query.trim()) return peers;
     const q = query.toLowerCase();
     return peers.filter(p =>
       `${p.first_name} ${p.last_name}`.toLowerCase().includes(q) ||
       (p.username ?? "").toLowerCase().includes(q)
     );
-  }, [peers, query]);
+  }, [data, query]);
 
   const sendMutation = useMutation({
     mutationFn: async () => {

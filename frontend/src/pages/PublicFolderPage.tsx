@@ -8,6 +8,7 @@ import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { FolderOpen, Users, ArrowLeft, Loader2, Inbox } from "lucide-react";
+import { Post } from "@/types/api";
 
 export default function PublicFolderPage() {
   const { shareToken } = useParams<{ shareToken: string }>();
@@ -64,7 +65,7 @@ export default function PublicFolderPage() {
   const { folder, owner, posts, is_following } = data as {
     folder: { id: string; folder_name: string; description?: string; color: string; post_count: number; follower_count: number; user_id: string };
     owner: { id: string; first_name: string; last_name: string; username?: string; avatar_url?: string } | null;
-    posts: any[];
+    posts: Post[];
     is_following: boolean;
   };
 
@@ -147,7 +148,7 @@ export default function PublicFolderPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {posts.map((post: any) => <PostCardNew key={post.id} post={post} />)}
+            {posts.map((post) => <PostCardNew key={post.id} post={post} />)}
           </div>
         )}
       </div>
