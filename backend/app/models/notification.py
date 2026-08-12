@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 from enum import Enum
@@ -22,8 +22,13 @@ class NotificationResponse(BaseModel):
     id: str
     user_id: str
     type: str
-    title: str
+    title: str = ""
     message: str
     link: Optional[str]
     is_read: bool
     created_at: datetime
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def coerce_title(cls, v):
+        return v if v is not None else ""

@@ -31,7 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/lib/theme";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Connection } from "@/types/api";
 
 const BlockedUsersSection = () => {
@@ -129,6 +129,7 @@ const BlockedUsersSection = () => {
 const Settings = () => {
   const { toast } = useToast();
   const { logout, refreshUser, savedAccounts, switchAccount, removeAccount } = useAuth();
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -1123,7 +1124,14 @@ const Settings = () => {
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
-                                onClick={() => switchAccount(account)}
+                                onClick={async () => {
+                                  try { await switchAccount(account) }
+                                  catch (err) {
+                                    const msg = err instanceof Error ? err.message : ''
+                                    const hint = msg.startsWith('session_expired:') ? msg.slice('session_expired:'.length) : undefined
+                                    navigate('/login', { state: { hint } })
+                                  }
+                                }}
                               >
                                 Switch
                               </Button>

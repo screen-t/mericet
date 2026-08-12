@@ -23,7 +23,6 @@ import {
   Inbox,
   Globe,
   Lock,
-  Link2,
   Users,
 } from "lucide-react";
 import {
@@ -40,6 +39,8 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { ShareFolderModal } from "@/components/saves/ShareFolderModal";
+import { Share2, MessageCircle } from "lucide-react";
 
 interface Folder {
   id: string;
@@ -76,6 +77,7 @@ export default function Saved() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
+  const [shareModalFolder, setShareModalFolder] = useState<Folder | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderDesc, setNewFolderDesc] = useState("");
   const [newFolderColor, setNewFolderColor] = useState(PRESET_COLORS[0]);
@@ -167,10 +169,22 @@ export default function Saved() {
     onError: () => toast({ title: "Failed to update folder", variant: "destructive" }),
   });
 
-  function copyShareLink(folder: Folder) {
-    const url = `${window.location.origin}/collections/${folder.share_token}`;
+  function folderShareUrl(folder: Folder) {
+    return `${window.location.origin}/collections/${folder.share_token}`;
+  }
+
+  async function shareLink(folder: Folder) {
+    const url = folderShareUrl(folder);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: folder.folder_name, text: `Check out my saved folder "${folder.folder_name}" on Mericet`, url });
+        return;
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return; // user cancelled
+      }
+    }
     navigator.clipboard.writeText(url).then(
-      () => toast({ title: "Share link copied" }),
+      () => toast({ title: "Link copied to clipboard" }),
       () => toast({ title: "Could not copy link", variant: "destructive" }),
     );
   }
@@ -261,9 +275,14 @@ export default function Saved() {
                     : <><Globe className="h-4 w-4 mr-2" /> Make public</>}
                 </DropdownMenuItem>
                 {activeFolder.is_public && activeFolder.share_token && (
-                  <DropdownMenuItem onClick={() => copyShareLink(activeFolder)}>
-                    <Link2 className="h-4 w-4 mr-2" /> Copy share link
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem onClick={() => shareLink(activeFolder)}>
+                      <Share2 className="h-4 w-4 mr-2" /> Share link
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShareModalFolder(activeFolder)}>
+                      <MessageCircle className="h-4 w-4 mr-2" /> Send via message
+                    </DropdownMenuItem>
+                  </>
                 )}
                 <DropdownMenuItem
                   className="text-destructive"
@@ -307,6 +326,14 @@ export default function Saved() {
           isPending={updateFolderMutation.isPending}
           submitLabel="Save changes"
         />
+        {shareModalFolder && (
+          <ShareFolderModal
+            open={!!shareModalFolder}
+            onOpenChange={(v) => { if (!v) setShareModalFolder(null); }}
+            folderName={shareModalFolder.folder_name}
+            shareUrl={folderShareUrl(shareModalFolder)}
+          />
+        )}
       </AppLayout>
     );
   }
@@ -397,7 +424,8 @@ export default function Saved() {
                         onEdit={() => openEditDialog(folder)}
                         onDelete={() => deleteFolderMutation.mutate(folder.id)}
                         onTogglePublic={() => togglePublicMutation.mutate({ id: folder.id, isPublic: !folder.is_public })}
-                        onCopyLink={() => copyShareLink(folder)}
+                        onShareLink={() => shareLink(folder)}
+                        onSendMessage={() => setShareModalFolder(folder)}
                       />
                     ))}
                   </div>
@@ -481,19 +509,29 @@ export default function Saved() {
         isPending={updateFolderMutation.isPending}
         submitLabel="Save changes"
       />
+
+      {shareModalFolder && (
+        <ShareFolderModal
+          open={!!shareModalFolder}
+          onOpenChange={(v) => { if (!v) setShareModalFolder(null); }}
+          folderName={shareModalFolder.folder_name}
+          shareUrl={folderShareUrl(shareModalFolder)}
+        />
+      )}
     </AppLayout>
   );
 }
 
 // ── Sub-components ────────────────────────────────────────────
 
-function FolderCard({ folder, onClick, onEdit, onDelete, onTogglePublic, onCopyLink }: {
+function FolderCard({ folder, onClick, onEdit, onDelete, onTogglePublic, onShareLink, onSendMessage }: {
   folder: Folder;
   onClick: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onTogglePublic: () => void;
-  onCopyLink: () => void;
+  onShareLink: () => void;
+  onSendMessage: () => void;
 }) {
   return (
     <Card
@@ -540,9 +578,14 @@ function FolderCard({ folder, onClick, onEdit, onDelete, onTogglePublic, onCopyL
                   : <><Globe className="h-4 w-4 mr-2" /> Make public</>}
               </DropdownMenuItem>
               {folder.is_public && folder.share_token && (
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onCopyLink(); }}>
-                  <Link2 className="h-4 w-4 mr-2" /> Copy share link
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareLink(); }}>
+                    <Share2 className="h-4 w-4 mr-2" /> Share link
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSendMessage(); }}>
+                    <MessageCircle className="h-4 w-4 mr-2" /> Send via message
+                  </DropdownMenuItem>
+                </>
               )}
               <DropdownMenuItem
                 className="text-destructive"

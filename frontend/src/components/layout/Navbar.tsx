@@ -271,7 +271,14 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                           <DropdownMenuItem
                             key={account.id}
                             className="cursor-pointer"
-                            onClick={() => switchAccount(account)}
+                            onClick={async () => {
+                              try { await switchAccount(account) }
+                              catch (err) {
+                                const msg = err instanceof Error ? err.message : ''
+                                const hint = msg.startsWith('session_expired:') ? msg.slice('session_expired:'.length) : undefined
+                                navigate('/login', { state: { hint } })
+                              }
+                            }}
                           >
                             <UserAvatar
                               src={account.avatar_url}
@@ -477,7 +484,15 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                             key={account.id}
                             variant="outline"
                             className="w-full gap-3 justify-start"
-                            onClick={() => { setIsMobileMenuOpen(false); switchAccount(account); }}
+                            onClick={async () => {
+                              setIsMobileMenuOpen(false)
+                              try { await switchAccount(account) }
+                              catch (err) {
+                                const msg = err instanceof Error ? err.message : ''
+                                const hint = msg.startsWith('session_expired:') ? msg.slice('session_expired:'.length) : undefined
+                                navigate('/login', { state: { hint } })
+                              }
+                            }}
                           >
                             <UserAvatar
                               src={account.avatar_url}
