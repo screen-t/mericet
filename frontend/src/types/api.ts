@@ -237,6 +237,7 @@ export interface PostsResponse {
 
 export interface CommentsResponse {
   comments: Comment[];
+  total: number;
 }
 
 export interface ConnectionsResponse {

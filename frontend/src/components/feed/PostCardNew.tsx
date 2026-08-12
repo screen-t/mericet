@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -9,7 +9,7 @@ import { backendApi } from "@/lib/backend-api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
-import { Post, Comment, CommentsResponse } from '@/types/api';
+import { Post, Comment } from '@/types/api';
 import {
   Heart,
   MessageCircle,
@@ -441,14 +441,27 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     },
   });
 
-  // Fetch comments
-  const { data: commentsData } = useQuery<CommentsResponse>({
+  const PAGE_SIZE = 10;
+
+  const {
+    data: commentsPages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['comments', post.id],
-    queryFn: () => backendApi.posts.getComments(post.id, 10, 0),
+    queryFn: ({ pageParam }) =>
+      backendApi.posts.getComments(post.id, PAGE_SIZE, pageParam as number),
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((s, p) => s + p.comments.length, 0);
+      return loaded < lastPage.total ? loaded : undefined;
+    },
+    initialPageParam: 0,
     enabled: showComments,
   });
 
-  const comments = commentsData?.comments || [];
+  const comments = commentsPages?.pages.flatMap(p => p.comments) ?? [];
+  const commentTotal = commentsPages?.pages[0]?.total ?? 0;
 
   const getPostMediaUrls = (currentPost: Post): string[] => {
     const fromMedia = ((currentPost as { media?: Array<{ url: string }> }).media || []).map((m) => m.url);
@@ -969,6 +982,11 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           </div>
 
           {/* Comments List */}
+          {commentTotal > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {comments.length} of {commentTotal} comment{commentTotal !== 1 ? 's' : ''}
+            </p>
+          )}
           {comments.map((comment: Comment) => (
             <CommentItem
               key={comment.id}
@@ -979,6 +997,19 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
               onChanged={() => queryClient.invalidateQueries({ queryKey: ['comments', post.id] })}
             />
           ))}
+          {hasNextPage && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-muted-foreground text-xs"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+            >
+              {isFetchingNextPage
+                ? "Loading..."
+                : `View ${commentTotal - comments.length} more comment${commentTotal - comments.length !== 1 ? 's' : ''}`}
+            </Button>
+          )}
         </div>
       )}
 

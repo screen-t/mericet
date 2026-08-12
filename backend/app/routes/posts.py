@@ -4,7 +4,7 @@ from app.deps import get_post_repo, get_user_repo, get_auth_service, get_follow_
 from app.middleware.rate_limit import limiter, WRITE_LIMIT
 from app.models.post import (
     PostCreate, PostUpdate, PostResponse,
-    CommentCreate, CommentUpdate, CommentResponse,
+    CommentCreate, CommentUpdate, CommentResponse, CommentsPageResponse,
     PollVote
 )
 from typing import List, Optional
@@ -461,26 +461,26 @@ def get_saved_posts(
 
 # ==================== COMMENTS ====================
 
-@router.get("/{post_id}/comments", response_model=List[CommentResponse])
+@router.get("/{post_id}/comments", response_model=CommentsPageResponse)
 def get_comments(
     post_id: str,
     user_id: Optional[str] = Depends(optional_auth),
     post_repo=Depends(get_post_repo),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
+    total = post_repo.count_comments(post_id)
     comments = post_repo.get_comments(post_id, limit, offset)
-    if not comments:
-        return []
-    if user_id:
-        comment_ids = [c["id"] for c in comments]
-        liked_set = post_repo.get_liked_comment_ids(user_id, comment_ids)
-        for comment in comments:
-            comment["is_liked"] = comment["id"] in liked_set
-    else:
-        for comment in comments:
-            comment["is_liked"] = False
-    return comments
+    if comments:
+        if user_id:
+            comment_ids = [c["id"] for c in comments]
+            liked_set = post_repo.get_liked_comment_ids(user_id, comment_ids)
+            for comment in comments:
+                comment["is_liked"] = comment["id"] in liked_set
+        else:
+            for comment in comments:
+                comment["is_liked"] = False
+    return {"comments": comments or [], "total": total}
 
 
 @router.post("/{post_id}/comments")

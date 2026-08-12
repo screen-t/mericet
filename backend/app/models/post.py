@@ -101,6 +101,10 @@ class CommentResponse(BaseModel):
     author: Optional[dict] = None
     is_liked: Optional[bool] = None
 
+class CommentsPageResponse(BaseModel):
+    comments: List[CommentResponse]
+    total: int
+
 # Poll Vote Model
 class PollVote(BaseModel):
     option_id: str
