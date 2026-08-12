@@ -118,11 +118,26 @@ const NetworkNew = () => {
     },
   });
 
-  // Filter connections based on search
+  const q = searchQuery.toLowerCase();
+
   const filteredConnections = connections.filter((conn) =>
-    `${conn.user?.first_name} ${conn.user?.last_name} ${conn.user?.username}`
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase())
+    `${conn.user?.first_name} ${conn.user?.last_name} ${conn.user?.username}`.toLowerCase().includes(q)
+  );
+
+  const filteredFollowers = followers.filter((u) =>
+    `${u.first_name} ${u.last_name} ${u.username ?? ""}`.toLowerCase().includes(q)
+  );
+
+  const filteredFollowing = following.filter((u) =>
+    `${u.first_name} ${u.last_name} ${u.username ?? ""}`.toLowerCase().includes(q)
+  );
+
+  const filteredReceived = receivedRequests.filter((r) =>
+    `${r.user?.first_name} ${r.user?.last_name} ${r.user?.username ?? ""}`.toLowerCase().includes(q)
+  );
+
+  const filteredSent = sentRequests.filter((r) =>
+    `${r.user?.first_name} ${r.user?.last_name} ${r.user?.username ?? ""}`.toLowerCase().includes(q)
   );
 
   return (
@@ -190,9 +205,9 @@ const NetworkNew = () => {
             ) : filteredConnections.length === 0 ? (
               <div className="text-center py-12">
                 <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-semibold">No connections yet</p>
+                <p className="text-lg font-semibold">{q ? "No results" : "No connections yet"}</p>
                 <p className="text-muted-foreground mt-2">
-                  Start building your network by connecting with others!
+                  {q ? "No connections match your search." : "Start building your network by connecting with others!"}
                 </p>
               </div>
             ) : (
@@ -259,17 +274,17 @@ const NetworkNew = () => {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-            ) : followers.length === 0 ? (
+            ) : filteredFollowers.length === 0 ? (
               <div className="text-center py-12">
                 <Heart className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-semibold">No followers yet</p>
+                <p className="text-lg font-semibold">{q ? "No results" : "No followers yet"}</p>
                 <p className="text-muted-foreground mt-2">
-                  When people follow you, they'll appear here
+                  {q ? "No followers match your search." : "When people follow you, they'll appear here"}
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {followers.map((follower, index) => (
+                {filteredFollowers.map((follower, index) => (
                   <motion.div
                     key={follower.id}
                     initial={{ opacity: 0, y: 20 }}
@@ -314,17 +329,17 @@ const NetworkNew = () => {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-            ) : following.length === 0 ? (
+            ) : filteredFollowing.length === 0 ? (
               <div className="text-center py-12">
                 <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-semibold">Not following anyone</p>
+                <p className="text-lg font-semibold">{q ? "No results" : "Not following anyone"}</p>
                 <p className="text-muted-foreground mt-2">
-                  Follow people to see their content in your feed
+                  {q ? "No one you follow matches your search." : "Follow people to see their content in your feed"}
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {following.map((person, index) => (
+                {filteredFollowing.map((person, index) => (
                   <motion.div
                     key={person.id}
                     initial={{ opacity: 0, y: 20 }}
@@ -369,24 +384,24 @@ const NetworkNew = () => {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-            ) : allPendingRequests.length === 0 ? (
+            ) : filteredReceived.length === 0 && filteredSent.length === 0 ? (
               <div className="text-center py-12">
                 <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-semibold">No pending requests</p>
+                <p className="text-lg font-semibold">{q ? "No results" : "No pending requests"}</p>
                 <p className="text-muted-foreground mt-2">
-                  You'll see connection requests here
+                  {q ? "No requests match your search." : "You'll see connection requests here"}
                 </p>
               </div>
             ) : (
               <div className="space-y-8">
                 {/* Received requests */}
-                {receivedRequests.length > 0 && (
+                {filteredReceived.length > 0 && (
                   <div>
                     <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                      Received ({receivedRequests.length})
+                      Received ({filteredReceived.length})
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {receivedRequests.map((request, index: number) => (
+                      {filteredReceived.map((request, index: number) => (
                         <motion.div
                           key={request.id}
                           initial={{ opacity: 0, y: 20 }}
@@ -451,13 +466,13 @@ const NetworkNew = () => {
                 )}
 
                 {/* Sent requests */}
-                {sentRequests.length > 0 && (
+                {filteredSent.length > 0 && (
                   <div>
                     <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                      Sent ({sentRequests.length})
+                      Sent ({filteredSent.length})
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {sentRequests.map((request, index: number) => (
+                      {filteredSent.map((request, index: number) => (
                         <motion.div
                           key={request.id}
                           initial={{ opacity: 0, y: 20 }}
