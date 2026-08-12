@@ -14,6 +14,7 @@ import {
   Heart,
   MessageCircle,
   UserPlus,
+  UserCheck,
   Share2,
   Bell,
   Check,
@@ -26,6 +27,8 @@ const notificationIcons: Record<string, React.ElementType> = {
   like: Heart,
   comment: MessageCircle,
   connection: UserPlus,
+  connection_request: UserPlus,
+  connection_accepted: UserCheck,
   message: MessageCircle,
   folder_post: Share2,
   system: Bell,
@@ -123,7 +126,10 @@ const NotificationsNew = () => {
         }
         return notification.actor_id ? `/profile/${notification.actor_id}` : '#';
       case 'connection':
+      case 'connection_request':
         return '/network?tab=requests';
+      case 'connection_accepted':
+        return notification.actor_id ? `/profile/${notification.actor_id}` : '/network';
       case 'message':
         return notification.actor_id ? `/messages/${notification.actor_id}` : '/messages';
       default:
