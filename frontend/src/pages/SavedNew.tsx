@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -54,9 +55,10 @@ type Tab = "folders" | "all" | "unsorted";
 export default function Saved() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { folderId } = useParams<{ folderId: string }>();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<Tab>("folders");
-  const [openFolder, setOpenFolder] = useState<Folder | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
@@ -69,6 +71,8 @@ export default function Saved() {
     queryKey: ["saveFolders"],
     queryFn: () => backendApi.saves.getFolders() as Promise<Folder[]>,
   });
+
+  const activeFolder = folderId ? (folders.find(f => f.id === folderId) ?? null) : null;
 
   const { data: allSaved = [], isLoading: allLoading } = useQuery<Post[]>({
     queryKey: ["allSaved"],
@@ -83,14 +87,14 @@ export default function Saved() {
   });
 
   const { data: folderData, isLoading: folderPostsLoading } = useQuery({
-    queryKey: ["folderPosts", openFolder?.id],
-    queryFn: () => backendApi.saves.getFolderPosts(openFolder!.id, 50, 0),
-    enabled: !!openFolder,
+    queryKey: ["folderPosts", folderId],
+    queryFn: () => backendApi.saves.getFolderPosts(folderId!, 50, 0),
+    enabled: !!folderId,
   });
 
   const { data: searchResults = [], isLoading: searchLoading } = useQuery<Post[]>({
-    queryKey: ["savedSearch", searchQuery, openFolder?.id],
-    queryFn: () => backendApi.saves.searchSaved(searchQuery, openFolder?.id),
+    queryKey: ["savedSearch", searchQuery, folderId],
+    queryFn: () => backendApi.saves.searchSaved(searchQuery, folderId),
     enabled: searchQuery.length >= 2,
   });
 
@@ -125,10 +129,10 @@ export default function Saved() {
   });
 
   const deleteFolderMutation = useMutation({
-    mutationFn: (folderId: string) => backendApi.saves.deleteFolder(folderId),
+    mutationFn: (id: string) => backendApi.saves.deleteFolder(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["saveFolders"] });
-      if (openFolder) setOpenFolder(null);
+      if (folderId) navigate("/saved");
       toast({ title: "Folder deleted. Posts moved to Unsorted." });
     },
     onError: () => toast({ title: "Failed to delete folder", variant: "destructive" }),
@@ -151,7 +155,7 @@ export default function Saved() {
   const isSearching = searchQuery.length >= 2;
   const displayPosts = isSearching
     ? searchResults
-    : openFolder
+    : activeFolder
     ? (folderData?.posts ?? [])
     : activeTab === "all"
     ? allSaved
@@ -159,32 +163,41 @@ export default function Saved() {
 
   const postsLoading = isSearching
     ? searchLoading
-    : openFolder
+    : activeFolder
     ? folderPostsLoading
     : activeTab === "all"
     ? allLoading
     : unsortedLoading;
 
   // ── Folder detail view ────────────────────────────────────
-  if (openFolder) {
+  if (folderId) {
+    if (foldersLoading || !activeFolder) {
+      return (
+        <AppLayout>
+          <div className="flex justify-center py-24">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        </AppLayout>
+      );
+    }
     return (
       <AppLayout>
         <div className="max-w-2xl mx-auto space-y-4 px-2">
           {/* Header */}
           <div className="flex items-center gap-3 pt-2">
-            <Button variant="ghost" size="sm" onClick={() => setOpenFolder(null)}>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/saved")}>
               <ArrowLeft className="h-4 w-4 mr-1" /> Back
             </Button>
             <div
               className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ backgroundColor: openFolder.color }}
+              style={{ backgroundColor: activeFolder.color }}
             >
               <FolderOpen className="h-4 w-4 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold truncate">{openFolder.folder_name}</h1>
-              {openFolder.description && (
-                <p className="text-xs text-muted-foreground">{openFolder.description}</p>
+              <h1 className="text-xl font-bold truncate">{activeFolder.folder_name}</h1>
+              {activeFolder.description && (
+                <p className="text-xs text-muted-foreground">{activeFolder.description}</p>
               )}
             </div>
             <DropdownMenu>
@@ -192,12 +205,12 @@ export default function Saved() {
                 <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => openEditDialog(openFolder)}>
+                <DropdownMenuItem onClick={() => openEditDialog(activeFolder)}>
                   <Pencil className="h-4 w-4 mr-2" /> Edit folder
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="text-destructive"
-                  onClick={() => deleteFolderMutation.mutate(openFolder.id)}
+                  onClick={() => deleteFolderMutation.mutate(activeFolder.id)}
                 >
                   <Trash2 className="h-4 w-4 mr-2" /> Delete folder
                 </DropdownMenuItem>
@@ -320,7 +333,7 @@ export default function Saved() {
                       <FolderCard
                         key={folder.id}
                         folder={folder}
-                        onClick={() => setOpenFolder(folder)}
+                        onClick={() => navigate(`/saved/${folder.id}`)}
                         onEdit={() => openEditDialog(folder)}
                         onDelete={() => deleteFolderMutation.mutate(folder.id)}
                       />

@@ -158,24 +158,24 @@ const NetworkNew = () => {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full max-w-3xl grid-cols-5">
-            <TabsTrigger value="connections" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+          <TabsList className="flex w-full max-w-3xl overflow-x-auto h-auto flex-nowrap justify-start">
+            <TabsTrigger value="connections" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap shrink-0">
               <UserCheck className="w-4 h-4 hidden sm:block" />
               Connections ({connections.length})
             </TabsTrigger>
-            <TabsTrigger value="followers" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+            <TabsTrigger value="followers" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap shrink-0">
               <Heart className="w-4 h-4 hidden sm:block" />
               Followers ({followers.length})
             </TabsTrigger>
-            <TabsTrigger value="following" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+            <TabsTrigger value="following" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap shrink-0">
               <Users className="w-4 h-4 hidden sm:block" />
               Following ({following.length})
             </TabsTrigger>
-            <TabsTrigger value="requests" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+            <TabsTrigger value="requests" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap shrink-0">
               <Clock className="w-4 h-4 hidden sm:block" />
               Requests ({allPendingRequests.length})
             </TabsTrigger>
-            <TabsTrigger value="suggestions" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+            <TabsTrigger value="suggestions" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap shrink-0">
               <UserPlus className="w-4 h-4 hidden sm:block" />
               Suggestions
             </TabsTrigger>

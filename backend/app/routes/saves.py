@@ -164,10 +164,20 @@ def search_saved(
     limit: int = Query(20, ge=1, le=100),
 ):
     from app.routes.posts import bulk_enrich_posts
-    post_ids = save_repo.search_saved(user_id, q, limit, folder_id)
+    # Fetch all saved post IDs (scoped to folder if given) — no text filter yet
+    post_ids = save_repo.search_saved(user_id, q, limit=200, folder_id=folder_id)
     if not post_ids:
         return []
-    posts = post_repo.search(q, limit)
-    saved_set = set(post_ids)
-    posts = [p for p in posts if p["id"] in saved_set]
-    return bulk_enrich_posts(posts, user_id, post_repo, user_repo)
+    # Fetch the actual posts, enrich with author data, then filter in Python
+    # so we can match on content OR author first/last name
+    posts = post_repo.get_by_ids(post_ids)
+    enriched = bulk_enrich_posts(posts, user_id, post_repo, user_repo)
+    q_lower = q.lower()
+    results = [
+        p for p in enriched
+        if q_lower in (p.get("content") or "").lower()
+        or q_lower in (p.get("author", {}).get("first_name") or "").lower()
+        or q_lower in (p.get("author", {}).get("last_name") or "").lower()
+        or q_lower in (p.get("author", {}).get("username") or "").lower()
+    ]
+    return results[:limit]

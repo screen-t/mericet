@@ -174,8 +174,13 @@ export const ProfilePage = () => {
       toast({ title: "Connection request sent!" });
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
     },
-    onError: () => {
-      toast({ title: "Failed to send request", variant: "destructive" });
+    onError: (error: Error) => {
+      // 409 means the request already exists — treat as success and refresh
+      if (error.message?.toLowerCase().includes('already')) {
+        queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
+        return;
+      }
+      toast({ title: "Couldn't send request. Please try again.", variant: "destructive" });
     },
   });
 
@@ -186,20 +191,25 @@ export const ProfilePage = () => {
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
     },
     onError: () => {
-      toast({ title: "Failed to remove connection", variant: "destructive" });
+      // Refresh anyway — the connection may have already been removed
+      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
     },
   });
 
   const respondToRequest = useMutation({
-    mutationFn: (accept: boolean) =>
-      backendApi.connections.respondToRequest(connectionStatus?.connection_id ?? "", accept),
+    mutationFn: (accept: boolean) => {
+      const connectionId = connectionStatus?.connection_id;
+      if (!connectionId) throw new Error('Connection ID not found');
+      return backendApi.connections.respondToRequest(connectionId, accept);
+    },
     onSuccess: (_, accept) => {
       toast({ title: accept ? "Connection accepted!" : "Request declined" });
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
       queryClient.invalidateQueries({ queryKey: ['connections'] });
     },
     onError: () => {
-      toast({ title: "Failed to respond to request", variant: "destructive" });
+      // Refresh status silently — the action may have gone through
+      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
     },
   });
 
@@ -209,6 +219,11 @@ export const ProfilePage = () => {
       queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
       queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
     },
+    onError: () => {
+      // Refresh silently — backend returns 200 for "already following" so a
+      // real error here is a network blip; let the UI self-correct
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
+    },
   });
 
   const unfollowMutation = useMutation({
@@ -216,6 +231,9 @@ export const ProfilePage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
       queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
     },
   });
 
@@ -690,12 +708,14 @@ export const ProfilePage = () => {
 
         {/* Profile Tabs */}
         <Tabs defaultValue="about" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 h-auto gap-0">
-            <TabsTrigger value="about" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">About</TabsTrigger>
-            <TabsTrigger value="posts" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Posts</TabsTrigger>
-            <TabsTrigger value="experience" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Experience</TabsTrigger>
-            <TabsTrigger value="education" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Education</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto">
+            <TabsList className="grid grid-cols-4 w-full min-w-[360px] h-auto gap-0">
+              <TabsTrigger value="about" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">About</TabsTrigger>
+              <TabsTrigger value="posts" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Posts</TabsTrigger>
+              <TabsTrigger value="experience" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Experience</TabsTrigger>
+              <TabsTrigger value="education" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Education</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="about" className="space-y-6">
             <motion.div

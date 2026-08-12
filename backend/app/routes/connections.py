@@ -34,7 +34,7 @@ def send_connection_request(
 ):
     existing = conn_repo.get_between(user_id, payload.receiver_id)
     if existing:
-        raise HTTPException(status_code=409, detail="Connection request already exists")
+        return {"message": "Connection request already exists", "data": _enrich_connection(existing, user_repo)}
     data = {"requester_id": user_id, "receiver_id": payload.receiver_id, "status": "pending"}
     created = conn_repo.create(data)
     from app.routes.notifications import create_notification
