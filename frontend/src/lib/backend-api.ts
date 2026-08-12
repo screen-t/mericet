@@ -670,6 +670,37 @@ const saves = {
     ).then(handleResponse<import('@/types/api').Post[]>);
     return Array.isArray(list) ? list : [];
   },
+
+  togglePublic: (folderId: string, isPublic: boolean) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/folders/${folderId}/public`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ is_public: isPublic }),
+    }).then(handleResponse),
+
+  getPublicFolder: (shareToken: string) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/public/${shareToken}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+
+  followFolder: (folderId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/folders/${folderId}/follow`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+
+  unfollowFolder: (folderId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/folders/${folderId}/follow`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+
+  getFollowing: async () => {
+    const list = await fetchWithAuth(`${API_BASE_URL}/saves/following`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse);
+    return Array.isArray(list) ? list : [];
+  },
 };
 
 // --- Follows ---

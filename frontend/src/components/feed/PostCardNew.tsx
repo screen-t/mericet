@@ -60,6 +60,7 @@ function formatDate(dateString: string) {
 
 interface PostCardNewProps {
   post: Post;
+  highlightCommentId?: string;
 }
 
 interface CommentItemProps {
@@ -68,16 +69,27 @@ interface CommentItemProps {
   postAuthorId?: string;
   postId: string;
   onChanged: () => void;
+  isHighlighted?: boolean;
 }
 
-function CommentItem({ comment, currentUserId, postAuthorId, postId, onChanged }: CommentItemProps) {
+function CommentItem({ comment, currentUserId, postAuthorId, postId, onChanged, isHighlighted }: CommentItemProps) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(comment.content ?? "");
+  const [highlighted, setHighlighted] = useState(isHighlighted ?? false);
+  const commentRef = useRef<HTMLDivElement>(null);
   const isCommentAuthor = comment.author?.id === currentUserId;
   const isPostOwner = postAuthorId === currentUserId;
   const canDelete = isCommentAuthor || isPostOwner;
   const canEdit = isCommentAuthor;
+
+  useEffect(() => {
+    if (isHighlighted && commentRef.current) {
+      commentRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      const timer = setTimeout(() => setHighlighted(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isHighlighted]);
 
   const updateMutation = useMutation({
     mutationFn: (content: string) => backendApi.posts.updateComment(comment.id, content),
@@ -95,7 +107,13 @@ function CommentItem({ comment, currentUserId, postAuthorId, postId, onChanged }
   });
 
   return (
-    <div className="flex gap-2 text-sm">
+    <div
+      ref={commentRef}
+      className={cn(
+        "flex gap-2 text-sm rounded-md p-1 -mx-1 transition-colors duration-700",
+        highlighted ? "bg-primary/15" : ""
+      )}
+    >
       <UserAvatar src={comment.author?.avatar_url} name={comment.author?.first_name} size="sm" />
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-1">
@@ -272,11 +290,11 @@ const VideoPlayer = ({ src }: { src: string }) => {
   );
 };
 
-export const PostCardNew = ({ post }: PostCardNewProps) => {
+export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(!!highlightCommentId);
   const [commentText, setCommentText] = useState("");
   const [showRepostDialog, setShowRepostDialog] = useState(false);
   const [showUndoRepostDialog, setShowUndoRepostDialog] = useState(false);
@@ -995,6 +1013,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
               postAuthorId={post.author?.id ?? post.author_id}
               postId={post.id}
               onChanged={() => queryClient.invalidateQueries({ queryKey: ['comments', post.id] })}
+              isHighlighted={comment.id === highlightCommentId}
             />
           ))}
           {hasNextPage && (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -14,6 +14,7 @@ import {
   Heart,
   MessageCircle,
   UserPlus,
+  UserCheck,
   Share2,
   Bell,
   Check,
@@ -22,14 +23,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const notificationIcons = {
+const notificationIcons: Record<string, React.ElementType> = {
   like: Heart,
   comment: MessageCircle,
+  connection: UserPlus,
   connection_request: UserPlus,
-  connection_accepted: UserPlus,
-  repost: Share2,
-  mention: Bell,
-  follow: UserPlus,
+  connection_accepted: UserCheck,
+  message: MessageCircle,
+  folder_post: Share2,
+  system: Bell,
 };
 
 const NotificationsNew = () => {
@@ -109,18 +111,29 @@ const NotificationsNew = () => {
   };
 
   const getNotificationLink = (notification: Notification) => {
+    if (notification.link) return notification.link;
     switch (notification.type) {
       case 'like':
-      case 'comment':
       case 'repost':
-      case 'mention':
-        return notification.post_id ? `/post/${notification.post_id}` : '#';
-      case 'connection_request':
-      case 'connection_accepted':
-      case 'follow':
+        return notification.post_id
+          ? `/posts/${notification.post_id}`
+          : notification.actor_id ? `/profile/${notification.actor_id}` : '#';
+      case 'comment':
+        if (notification.post_id) {
+          return notification.comment_id
+            ? `/posts/${notification.post_id}?comment=${notification.comment_id}`
+            : `/posts/${notification.post_id}`;
+        }
         return notification.actor_id ? `/profile/${notification.actor_id}` : '#';
+      case 'connection':
+      case 'connection_request':
+        return '/network?tab=requests';
+      case 'connection_accepted':
+        return notification.actor_id ? `/profile/${notification.actor_id}` : '/network';
+      case 'message':
+        return notification.actor_id ? `/messages/${notification.actor_id}` : '/messages';
       default:
-        return notification.link || '#';
+        return '#';
     }
   };
 
@@ -220,19 +233,13 @@ const NotificationsNew = () => {
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1">
                                 <p className="text-sm">
-                                  <span className="font-semibold">
-                                    {notification.actor?.first_name}{" "}
-                                    {notification.actor?.last_name}
-                                  </span>{" "}
-                                  <span className="text-muted-foreground">
-                                    {notification.message}
-                                  </span>
+                                  {notification.actor && (
+                                    <span className="font-semibold">
+                                      {notification.actor.first_name} {notification.actor.last_name}{" "}
+                                    </span>
+                                  )}
+                                  <span>{notification.message}</span>
                                 </p>
-                                {notification.post_preview && (
-                                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                                    "{notification.post_preview}"
-                                  </p>
-                                )}
                                 <p className="text-xs text-muted-foreground mt-1">
                                   {formatTimestamp(notification.created_at)}
                                 </p>

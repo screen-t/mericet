@@ -6,25 +6,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { Eye, EyeOff, Mail, ArrowRight, Shield, ChevronRight, Plus } from "lucide-react";
+import { Eye, EyeOff, Mail, ArrowRight, Shield, ChevronRight, Plus, X } from "lucide-react";
 import { authApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 
 const Login = () => {
+  const { login, savedAccounts, switchAccount, removeAccount } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const locationState = location.state as { from?: { pathname?: string }; hint?: string } | null
+  const from = locationState?.from?.pathname || '/feed'
+  const emailHint = locationState?.hint || ''
+
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(emailHint);
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const [showForm, setShowForm] = useState(false);
-
-  const { login, savedAccounts, switchAccount } = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || '/feed'
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [error, setError] = useState(emailHint ? 'Session expired — please log in again.' : '');
+  const [showForm, setShowForm] = useState(!!emailHint);
 
   const hasSavedAccounts = savedAccounts.length > 0
 
@@ -32,8 +35,12 @@ const Login = () => {
     setSwitchingId(account.id)
     try {
       await switchAccount(account)
-    } catch {
-      setError('Failed to switch account. Please log in again.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ''
+      const expiredEmail = msg.startsWith('session_expired:') ? msg.slice('session_expired:'.length) : account.email
+      setEmail(expiredEmail)
+      setError('Session expired — please sign in again.')
+      setShowForm(true)
     } finally {
       setSwitchingId(null)
     }
@@ -120,27 +127,56 @@ const Login = () => {
               <p className="text-sm font-medium text-muted-foreground">Choose an account</p>
               <div className="space-y-2">
                 {savedAccounts.map(account => (
-                  <button
-                    key={account.id}
-                    onClick={() => handleSwitchAccount(account)}
-                    disabled={switchingId === account.id}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors text-left disabled:opacity-60"
-                  >
-                    <UserAvatar
-                      src={account.avatar_url}
-                      name={`${account.first_name} ${account.last_name}`}
-                      size="sm"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{account.first_name} {account.last_name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{account.email}</p>
+                  <div key={account.id} className="rounded-lg border border-border overflow-hidden">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleSwitchAccount(account)}
+                        disabled={switchingId === account.id || confirmRemoveId === account.id}
+                        className="flex-1 flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors text-left disabled:opacity-60"
+                      >
+                        <UserAvatar
+                          src={account.avatar_url}
+                          name={`${account.first_name} ${account.last_name}`}
+                          size="sm"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{account.first_name} {account.last_name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{account.email}</p>
+                        </div>
+                        {switchingId === account.id ? (
+                          <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setConfirmRemoveId(account.id)}
+                        title="Forget this account"
+                        className="p-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     </div>
-                    {switchingId === account.id ? (
-                      <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    {confirmRemoveId === account.id && (
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-muted/50 border-t border-border">
+                        <p className="text-xs text-muted-foreground">Remove from this device?</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setConfirmRemoveId(null)}
+                            className="text-xs px-2 py-1 rounded hover:bg-muted transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => { removeAccount(account.id); setConfirmRemoveId(null); }}
+                            className="text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
                     )}
-                  </button>
+                  </div>
                 ))}
               </div>
               <button

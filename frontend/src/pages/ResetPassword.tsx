@@ -44,7 +44,7 @@ const ResetPassword = () => {
     } else {
       navigate('/login')
     }
-  }, [])
+  }, [navigate, searchParams])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()

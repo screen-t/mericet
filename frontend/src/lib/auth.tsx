@@ -228,22 +228,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           saveCurrentAccount(profile, { access_token: account.access_token, refresh_token: account.refresh_token })
           setSavedAccountsState(getSavedAccounts())
         }
+        navigate('/feed')
       } catch {
-        const refreshed = await authApi.refresh({ refresh_token: account.refresh_token })
-        if (refreshed.session) {
-          setStoredTokens(refreshed.session)
-          const profile = await authApi.me(refreshed.session.access_token)
-          setUser(profile)
-          if (profile) {
-            saveCurrentAccount(profile, refreshed.session)
-            setSavedAccountsState(getSavedAccounts())
+        // Token expired — try to refresh it
+        try {
+          const refreshed = await authApi.refresh({ refresh_token: account.refresh_token })
+          if (refreshed.session) {
+            setStoredTokens(refreshed.session)
+            const profile = await authApi.me(refreshed.session.access_token)
+            setUser(profile)
+            if (profile) {
+              saveCurrentAccount(profile, refreshed.session)
+              setSavedAccountsState(getSavedAccounts())
+            }
+            navigate('/feed')
+            return
           }
-        }
+        } catch { /* refresh also failed — session is fully expired */ }
+
+        // Session is dead — clean up and let the caller handle navigation
+        removeSavedAccount(account.id)
+        setSavedAccountsState(getSavedAccounts())
+        setStoredTokens(undefined)
+        setUser(null)
+        throw new Error(`session_expired:${account.email}`)
       }
-      navigate('/feed')
-    } catch {
-      removeSavedAccount(account.id)
-      setSavedAccountsState(getSavedAccounts())
     } finally {
       setLoading(false)
     }

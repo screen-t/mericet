@@ -55,6 +55,38 @@ type ConfirmAction =
   | { type: "delete-conversation" }
   | null;
 
+const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+
+function renderWithLinks(text: string, isMyMessage: boolean) {
+  return text.split('\n').map((line, lineIdx) => {
+    const parts = line.split(URL_REGEX);
+    return (
+      <span key={lineIdx}>
+        {lineIdx > 0 && <br />}
+        {parts.map((part, partIdx) =>
+          partIdx % 2 === 1 ? (
+            <a
+              key={partIdx}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                "underline break-all",
+                isMyMessage ? "text-white/90 hover:text-white" : "text-primary hover:text-primary/80"
+              )}
+            >
+              {part}
+            </a>
+          ) : (
+            <span key={partIdx}>{part}</span>
+          )
+        )}
+      </span>
+    );
+  });
+}
+
 const MessagesNew = () => {
   const { userId } = useParams<{ userId?: string }>();
   const navigate = useNavigate();
@@ -1153,7 +1185,7 @@ const MessagesNew = () => {
                                       <span className="font-medium">{quotedName}</span>
                                       <p className="truncate">{quotedText}</p>
                                     </div>
-                                    <p className="text-sm">{actualContent}</p>
+                                    <p className="text-sm">{renderWithLinks(actualContent, isMyMessage)}</p>
                                   </>
                                 );
                               }
@@ -1177,7 +1209,7 @@ const MessagesNew = () => {
                                   />
                                 );
                               }
-                              return <p className="text-sm">{message.content}</p>;
+                              return <p className="text-sm">{renderWithLinks(message.content, isMyMessage)}</p>;
                             })()}
                             <p
                               className={cn(

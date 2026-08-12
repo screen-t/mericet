@@ -21,6 +21,9 @@ import {
   Pencil,
   X,
   Inbox,
+  Globe,
+  Lock,
+  Users,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -35,14 +38,26 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { UserAvatar } from "@/components/ui/UserAvatar";
+import { ShareFolderModal } from "@/components/saves/ShareFolderModal";
+import { Share2, MessageCircle } from "lucide-react";
 
 interface Folder {
   id: string;
+  user_id: string;
   folder_name: string;
   description?: string;
   color: string;
   post_count: number;
+  is_public: boolean;
+  share_token?: string;
+  thumbnail_url?: string;
   created_at: string;
+}
+
+interface FollowingFolder extends Folder {
+  owner: { id: string; first_name: string; last_name: string; username?: string; avatar_url?: string } | null;
+  is_following: true;
 }
 
 const PRESET_COLORS = [
@@ -50,7 +65,7 @@ const PRESET_COLORS = [
   "#3b82f6", "#ef4444", "#8b5cf6", "#14b8a6",
 ];
 
-type Tab = "folders" | "all" | "unsorted";
+type Tab = "folders" | "all" | "unsorted" | "following";
 
 export default function Saved() {
   const { toast } = useToast();
@@ -62,6 +77,7 @@ export default function Saved() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
+  const [shareModalFolder, setShareModalFolder] = useState<Folder | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderDesc, setNewFolderDesc] = useState("");
   const [newFolderColor, setNewFolderColor] = useState(PRESET_COLORS[0]);
@@ -96,6 +112,11 @@ export default function Saved() {
     queryKey: ["savedSearch", searchQuery, folderId],
     queryFn: () => backendApi.saves.searchSaved(searchQuery, folderId),
     enabled: searchQuery.length >= 2,
+  });
+
+  const { data: followingFolders = [], isLoading: followingLoading } = useQuery<FollowingFolder[]>({
+    queryKey: ["followingFolders"],
+    queryFn: () => backendApi.saves.getFollowing() as Promise<FollowingFolder[]>,
   });
 
   // Mutations
@@ -137,6 +158,36 @@ export default function Saved() {
     },
     onError: () => toast({ title: "Failed to delete folder", variant: "destructive" }),
   });
+
+  const togglePublicMutation = useMutation({
+    mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
+      backendApi.saves.togglePublic(id, isPublic),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["saveFolders"] });
+      toast({ title: activeFolder?.is_public ? "Folder is now private" : "Folder is now public" });
+    },
+    onError: () => toast({ title: "Failed to update folder", variant: "destructive" }),
+  });
+
+  function folderShareUrl(folder: Folder) {
+    return `${window.location.origin}/collections/${folder.share_token}`;
+  }
+
+  async function shareLink(folder: Folder) {
+    const url = folderShareUrl(folder);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: folder.folder_name, text: `Check out my saved folder "${folder.folder_name}" on Mericet`, url });
+        return;
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return; // user cancelled
+      }
+    }
+    navigator.clipboard.writeText(url).then(
+      () => toast({ title: "Link copied to clipboard" }),
+      () => toast({ title: "Could not copy link", variant: "destructive" }),
+    );
+  }
 
   function openEditDialog(folder: Folder) {
     setEditingFolder(folder);
@@ -195,7 +246,14 @@ export default function Saved() {
               <FolderOpen className="h-4 w-4 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold truncate">{activeFolder.folder_name}</h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl font-bold truncate">{activeFolder.folder_name}</h1>
+                {activeFolder.is_public && (
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                    <Globe className="h-3 w-3" /> Public
+                  </span>
+                )}
+              </div>
               {activeFolder.description && (
                 <p className="text-xs text-muted-foreground">{activeFolder.description}</p>
               )}
@@ -208,6 +266,24 @@ export default function Saved() {
                 <DropdownMenuItem onClick={() => openEditDialog(activeFolder)}>
                   <Pencil className="h-4 w-4 mr-2" /> Edit folder
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => togglePublicMutation.mutate({ id: activeFolder.id, isPublic: !activeFolder.is_public })}
+                  disabled={togglePublicMutation.isPending}
+                >
+                  {activeFolder.is_public
+                    ? <><Lock className="h-4 w-4 mr-2" /> Make private</>
+                    : <><Globe className="h-4 w-4 mr-2" /> Make public</>}
+                </DropdownMenuItem>
+                {activeFolder.is_public && activeFolder.share_token && (
+                  <>
+                    <DropdownMenuItem onClick={() => shareLink(activeFolder)}>
+                      <Share2 className="h-4 w-4 mr-2" /> Share link
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShareModalFolder(activeFolder)}>
+                      <MessageCircle className="h-4 w-4 mr-2" /> Send via message
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuItem
                   className="text-destructive"
                   onClick={() => deleteFolderMutation.mutate(activeFolder.id)}
@@ -250,6 +326,14 @@ export default function Saved() {
           isPending={updateFolderMutation.isPending}
           submitLabel="Save changes"
         />
+        {shareModalFolder && (
+          <ShareFolderModal
+            open={!!shareModalFolder}
+            onOpenChange={(v) => { if (!v) setShareModalFolder(null); }}
+            folderName={shareModalFolder.folder_name}
+            shareUrl={folderShareUrl(shareModalFolder)}
+          />
+        )}
       </AppLayout>
     );
   }
@@ -290,19 +374,22 @@ export default function Saved() {
         ) : (
           <>
             {/* Tabs */}
-            <div className="flex gap-1 border-b">
-              {(["folders", "all", "unsorted"] as Tab[]).map((tab) => (
+            <div className="flex gap-1 border-b overflow-x-auto">
+              {(["folders", "all", "unsorted", "following"] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={cn(
-                    "px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors",
+                    "px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors shrink-0",
                     activeTab === tab
                       ? "border-primary text-primary"
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {tab === "folders" ? "My Folders" : tab === "all" ? "All Saves" : "Unsorted"}
+                  {tab === "folders" ? "My Folders"
+                    : tab === "all" ? "All Saves"
+                    : tab === "unsorted" ? "Unsorted"
+                    : "Following"}
                 </button>
               ))}
             </div>
@@ -336,6 +423,9 @@ export default function Saved() {
                         onClick={() => navigate(`/saved/${folder.id}`)}
                         onEdit={() => openEditDialog(folder)}
                         onDelete={() => deleteFolderMutation.mutate(folder.id)}
+                        onTogglePublic={() => togglePublicMutation.mutate({ id: folder.id, isPublic: !folder.is_public })}
+                        onShareLink={() => shareLink(folder)}
+                        onSendMessage={() => setShareModalFolder(folder)}
                       />
                     ))}
                   </div>
@@ -351,6 +441,38 @@ export default function Saved() {
             {/* Unsorted tab */}
             {activeTab === "unsorted" && (
               <PostList posts={unsorted} loading={unsortedLoading} emptyMessage="No unsorted saves — great organisation!" />
+            )}
+
+            {/* Following tab */}
+            {activeTab === "following" && (
+              followingLoading ? (
+                <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+              ) : followingFolders.length === 0 ? (
+                <Card className="p-12 text-center">
+                  <div className="max-w-sm mx-auto space-y-4">
+                    <div className="flex justify-center">
+                      <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Users className="h-10 w-10 text-primary" />
+                      </div>
+                    </div>
+                    <h2 className="text-xl font-bold">No followed folders</h2>
+                    <p className="text-muted-foreground text-sm">
+                      When someone shares a public folder and you follow it, it appears here.
+                      You'll get notified whenever they add new posts.
+                    </p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 pb-20">
+                  {followingFolders.map((folder) => (
+                    <FollowingFolderCard
+                      key={folder.id}
+                      folder={folder}
+                      onClick={() => navigate(`/collections/${folder.share_token}`)}
+                    />
+                  ))}
+                </div>
+              )
             )}
           </>
         )}
@@ -387,60 +509,132 @@ export default function Saved() {
         isPending={updateFolderMutation.isPending}
         submitLabel="Save changes"
       />
+
+      {shareModalFolder && (
+        <ShareFolderModal
+          open={!!shareModalFolder}
+          onOpenChange={(v) => { if (!v) setShareModalFolder(null); }}
+          folderName={shareModalFolder.folder_name}
+          shareUrl={folderShareUrl(shareModalFolder)}
+        />
+      )}
     </AppLayout>
   );
 }
 
 // ── Sub-components ────────────────────────────────────────────
 
-function FolderCard({ folder, onClick, onEdit, onDelete }: {
+function FolderCard({ folder, onClick, onEdit, onDelete, onTogglePublic, onShareLink, onSendMessage }: {
   folder: Folder;
   onClick: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onTogglePublic: () => void;
+  onShareLink: () => void;
+  onSendMessage: () => void;
 }) {
   return (
     <Card
       onClick={onClick}
-      className="p-4 cursor-pointer hover:shadow-md transition-shadow relative group"
+      className="cursor-pointer hover:shadow-md transition-shadow relative group overflow-hidden"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div
-          className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
-          style={{ backgroundColor: folder.color }}
-        >
-          <FolderOpen className="h-5 w-5 text-white" />
+      {/* Thumbnail strip */}
+      {folder.thumbnail_url ? (
+        <div className="h-24 w-full overflow-hidden">
+          <img src={folder.thumbnail_url} alt="" className="w-full h-full object-cover" />
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(); }}>
-              <Pencil className="h-4 w-4 mr-2" /> Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-destructive"
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            >
-              <Trash2 className="h-4 w-4 mr-2" /> Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      <div className="mt-3">
-        <p className="font-semibold text-sm leading-tight">{folder.folder_name}</p>
+      ) : (
+        <div className="h-24 w-full flex items-center justify-center" style={{ backgroundColor: folder.color + "33" }}>
+          <FolderOpen className="h-10 w-10" style={{ color: folder.color }} />
+        </div>
+      )}
+
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className="h-5 w-5 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: folder.color }}>
+              <FolderOpen className="h-3 w-3 text-white" />
+            </div>
+            {folder.is_public && <Globe className="h-3 w-3 text-muted-foreground shrink-0" />}
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0 md:opacity-0 md:group-hover:opacity-100 md:transition-opacity"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(); }}>
+                <Pencil className="h-4 w-4 mr-2" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onTogglePublic(); }}>
+                {folder.is_public
+                  ? <><Lock className="h-4 w-4 mr-2" /> Make private</>
+                  : <><Globe className="h-4 w-4 mr-2" /> Make public</>}
+              </DropdownMenuItem>
+              {folder.is_public && folder.share_token && (
+                <>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareLink(); }}>
+                    <Share2 className="h-4 w-4 mr-2" /> Share link
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSendMessage(); }}>
+                    <MessageCircle className="h-4 w-4 mr-2" /> Send via message
+                  </DropdownMenuItem>
+                </>
+              )}
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <p className="font-semibold text-sm leading-tight mt-1.5 truncate">{folder.folder_name}</p>
         {folder.description && (
           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{folder.description}</p>
         )}
-        <p className="text-xs text-muted-foreground mt-2">{folder.post_count} post{folder.post_count !== 1 ? "s" : ""}</p>
+        <p className="text-xs text-muted-foreground mt-1.5">{folder.post_count} post{folder.post_count !== 1 ? "s" : ""}</p>
+      </div>
+    </Card>
+  );
+}
+
+function FollowingFolderCard({ folder, onClick }: { folder: FollowingFolder; onClick: () => void }) {
+  return (
+    <Card
+      onClick={onClick}
+      className="cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
+    >
+      {folder.thumbnail_url ? (
+        <div className="h-24 w-full overflow-hidden">
+          <img src={folder.thumbnail_url} alt="" className="w-full h-full object-cover" />
+        </div>
+      ) : (
+        <div className="h-24 w-full flex items-center justify-center" style={{ backgroundColor: folder.color + "33" }}>
+          <FolderOpen className="h-10 w-10" style={{ color: folder.color }} />
+        </div>
+      )}
+      <div className="p-3">
+        <p className="font-semibold text-sm leading-tight truncate">{folder.folder_name}</p>
+        {folder.description && (
+          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{folder.description}</p>
+        )}
+        <p className="text-xs text-muted-foreground mt-1.5">{folder.post_count} post{folder.post_count !== 1 ? "s" : ""}</p>
+        {folder.owner && (
+          <div className="flex items-center gap-1.5 mt-2">
+            <UserAvatar src={folder.owner.avatar_url} name={folder.owner.first_name} size="sm" />
+            <span className="text-xs text-muted-foreground truncate">
+              {folder.owner.first_name} {folder.owner.last_name}
+            </span>
+          </div>
+        )}
       </div>
     </Card>
   );
