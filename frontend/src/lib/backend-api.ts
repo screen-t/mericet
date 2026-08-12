@@ -300,6 +300,17 @@ const posts = {
     ).then(handleResponse<import('@/types/api').Post[]>);
     return Array.isArray(list) ? list : [];
   },
+  updateComment: (commentId: string, content: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/comments/${commentId}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ content }),
+    }).then(handleResponse),
+  deleteComment: (commentId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/comments/${commentId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
   getComments: async (postId: string, limit: number, offset: number): Promise<import('@/types/api').CommentsResponse> => {
     const raw = await fetchWithAuth(
       `${API_BASE_URL}/posts/${postId}/comments?limit=${limit}&offset=${offset}`,

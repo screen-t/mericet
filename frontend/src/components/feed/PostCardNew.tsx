@@ -48,8 +48,116 @@ import { SaveToFolderModal } from "@/components/feed/SaveToFolderModal";
 import { SharePostModal } from "@/components/feed/SharePostModal";
 import { ReportDialog } from "@/components/modals/ReportDialog";
 
+function formatDate(dateString: string) {
+  try {
+    const hasOffset = dateString.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(dateString);
+    const normalized = hasOffset ? dateString : dateString + "Z";
+    return formatDistanceToNow(new Date(normalized), { addSuffix: true });
+  } catch {
+    return "recently";
+  }
+}
+
 interface PostCardNewProps {
   post: Post;
+}
+
+interface CommentItemProps {
+  comment: Comment;
+  currentUserId?: string;
+  postAuthorId?: string;
+  postId: string;
+  onChanged: () => void;
+}
+
+function CommentItem({ comment, currentUserId, postAuthorId, postId, onChanged }: CommentItemProps) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(comment.content ?? "");
+  const isCommentAuthor = comment.author?.id === currentUserId;
+  const isPostOwner = postAuthorId === currentUserId;
+  const canDelete = isCommentAuthor || isPostOwner;
+  const canEdit = isCommentAuthor;
+
+  const updateMutation = useMutation({
+    mutationFn: (content: string) => backendApi.posts.updateComment(comment.id, content),
+    onSuccess: () => {
+      setEditing(false);
+      onChanged();
+    },
+    onError: () => toast({ title: "Failed to update comment", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => backendApi.posts.deleteComment(comment.id),
+    onSuccess: onChanged,
+    onError: () => toast({ title: "Failed to delete comment", variant: "destructive" }),
+  });
+
+  return (
+    <div className="flex gap-2 text-sm">
+      <UserAvatar src={comment.author?.avatar_url} name={comment.author?.first_name} size="sm" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-1">
+          <p className="font-semibold">{comment.author?.first_name} {comment.author?.last_name}</p>
+          {(canDelete || canEdit) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 -mt-0.5">
+                  <MoreHorizontal className="w-3.5 h-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canEdit && (
+                  <DropdownMenuItem onClick={() => { setEditText(comment.content ?? ""); setEditing(true); }}>
+                    Edit
+                  </DropdownMenuItem>
+                )}
+                {canEdit && canDelete && <DropdownMenuSeparator />}
+                {canDelete && (
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => deleteMutation.mutate()}
+                    disabled={deleteMutation.isPending}
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        {editing ? (
+          <div className="mt-1 space-y-1">
+            <Textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              rows={2}
+              className="resize-none text-sm"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => updateMutation.mutate(editText.trim())}
+                disabled={!editText.trim() || updateMutation.isPending}
+              >
+                {updateMutation.isPending ? "Saving..." : "Save"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-muted-foreground">{comment.content}</p>
+        )}
+
+        <span className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</span>
+      </div>
+    </div>
+  );
 }
 
 const visibilityIcons = {
@@ -514,18 +622,6 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      // Supabase timestamps may omit a timezone suffix, causing JS to parse them
-      // as local time instead of UTC, making posts appear N hours old.
-      // Ensure the string is treated as UTC by appending "Z" if no offset is present.
-      const hasOffset = dateString.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(dateString);
-      const normalized = hasOffset ? dateString : dateString + "Z";
-      return formatDistanceToNow(new Date(normalized), { addSuffix: true });
-    } catch {
-      return "recently";
-    }
-  };
 
   return (
     <motion.article
@@ -874,18 +970,14 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
 
           {/* Comments List */}
           {comments.map((comment: Comment) => (
-            <div key={comment.id} className="flex gap-2 text-sm">
-              <UserAvatar
-                src={comment.author?.avatar_url}
-                name={comment.author?.first_name}
-                size="sm"
-              />
-              <div className="flex-1">
-                <p className="font-semibold">{comment.author?.first_name} {comment.author?.last_name}</p>
-                <p className="text-muted-foreground">{comment.content}</p>
-                <span className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</span>
-              </div>
-            </div>
+            <CommentItem
+              key={comment.id}
+              comment={comment}
+              currentUserId={user?.id}
+              postAuthorId={post.author?.id ?? post.author_id}
+              postId={post.id}
+              onChanged={() => queryClient.invalidateQueries({ queryKey: ['comments', post.id] })}
+            />
           ))}
         </div>
       )}

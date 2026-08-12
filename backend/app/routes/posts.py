@@ -539,7 +539,12 @@ def delete_comment(
     post_repo=Depends(get_post_repo),
 ):
     owner_data = post_repo.get_comment_owner(comment_id)
-    if not owner_data or owner_data["author_id"] != user_id:
+    if not owner_data:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    is_comment_author = owner_data["author_id"] == user_id
+    post = post_repo.get_by_id(owner_data["post_id"], "author_id")
+    is_post_owner = post and post.get("author_id") == user_id
+    if not is_comment_author and not is_post_owner:
         raise HTTPException(status_code=403, detail="Not authorized")
     post_repo.delete_comment(comment_id)
     post_repo.decrement_comments(owner_data["post_id"])
