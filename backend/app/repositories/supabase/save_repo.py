@@ -68,13 +68,17 @@ class SupabaseSaveRepository:
     def get_saved_post_ids(self, user_id: str, limit: int,
                            offset: int) -> list[str]:
         result = self._client.table("saved_posts").select("post_id") \
-            .eq("user_id", user_id).execute()
+            .eq("user_id", user_id) \
+            .order("created_at", desc=True) \
+            .range(offset, offset + limit - 1).execute()
         return [s["post_id"] for s in (result.data or [])]
 
     def get_unsorted_post_ids(self, user_id: str, limit: int,
                               offset: int) -> list[str]:
         result = self._client.table("saved_posts").select("post_id") \
-            .eq("user_id", user_id).is_("folder_id", None).execute()
+            .eq("user_id", user_id).is_("folder_id", None) \
+            .order("created_at", desc=True) \
+            .range(offset, offset + limit - 1).execute()
         return [s["post_id"] for s in (result.data or [])]
 
     def get_folder_post_ids(self, folder_id: str, user_id: str,
