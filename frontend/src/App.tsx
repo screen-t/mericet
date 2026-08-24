@@ -30,6 +30,7 @@ import Companies from "./pages/Companies";
 import Saved from "./pages/SavedNew";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import Contact from "./pages/Contact";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -61,6 +62,7 @@ const App = () => (
             <Route path="/auth/callback" element={<OAuthCallback />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/contact" element={<Contact />} />
 
             {/* Protected routes */}
             <Route path="/feed" element={<RequireAuth><FeedNew /></RequireAuth>} />
