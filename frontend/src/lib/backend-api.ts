@@ -266,6 +266,11 @@ const posts = {
       method: "DELETE",
       headers: getAuthHeaders(),
     }).then(handleResponse),
+  getLikers: (postId: string, limit = 50, offset = 0) =>
+    fetchWithAuth(
+      `${API_BASE_URL}/posts/${encodeURIComponent(postId)}/likes?limit=${limit}&offset=${offset}`
+    ).then(handleResponse<{ likers: import('@/types/api').User[]; count: number }>),
+
   addComment: (postId: string, content: string) =>
     fetchWithAuth(`${API_BASE_URL}/posts/${postId}/comments`, {
       method: "POST",
