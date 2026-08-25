@@ -369,6 +369,8 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
       currentlyLiked
         ? backendApi.posts.unlikePost(post.id)
         : backendApi.posts.likePost(post.id),
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     onMutate: async (currentlyLiked: boolean) => {
       // Cancel any in-flight feed refetches so they don't overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: ['feed'] });

@@ -42,10 +42,12 @@ self.addEventListener('fetch', (event) => {
     caches.match(request).then((cached) => {
       const network = fetch(request).then((response) => {
         if (response.ok) {
-          caches.open(CACHE).then((cache) => cache.put(request, response.clone()));
+          // Clone BEFORE returning so the body isn't consumed when the async cache.put runs
+          const toCache = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(request, toCache));
         }
         return response;
-      });
+      }).catch(() => cached); // If network fails, fall back to cached version (may be undefined)
       return cached || network;
     })
   );
