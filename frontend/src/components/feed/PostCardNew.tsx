@@ -702,7 +702,7 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-start gap-3">
-          <Link to={`/profile/${post.author?.id}`}>
+          <Link to={`/profile/${post.author?.username || post.author?.id}`}>
             <UserAvatar
               src={post.author?.avatar_url}
               name={`${post.author?.first_name} ${post.author?.last_name}`}
@@ -711,7 +711,7 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <Link to={`/profile/${post.author?.id}`}>
+              <Link to={`/profile/${post.author?.username || post.author?.id}`}>
                 <h4 className="font-semibold hover:text-primary cursor-pointer transition-colors">
                   {post.author?.first_name} {post.author?.last_name}
                 </h4>
@@ -1099,7 +1099,7 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
                 {likers.map((liker) => (
                   <Link
                     key={liker.id}
-                    to={`/profile/${liker.id}`}
+                    to={`/profile/${liker.username || liker.id}`}
                     onClick={() => setShowLikers(false)}
                     className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors"
                   >

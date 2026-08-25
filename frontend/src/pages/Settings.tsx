@@ -90,7 +90,7 @@ const BlockedUsersSection = () => {
               blocked.map((conn: Connection) => (
                 <div key={conn.id} className="flex items-center justify-between p-3 rounded-lg border">
                   <Link
-                    to={`/profile/${conn.user?.id}`}
+                    to={`/profile/${conn.user?.username || conn.user?.id}`}
                     onClick={() => setOpen(false)}
                     className="flex items-center gap-3 min-w-0 flex-1"
                   >

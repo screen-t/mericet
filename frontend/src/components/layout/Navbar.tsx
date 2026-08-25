@@ -108,10 +108,10 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
     setShowSearchSuggestions(false);
   };
 
-  const handleSuggestionPick = (suggestion: { text: string; user_id?: string; post_id?: string; type?: string }) => {
+  const handleSuggestionPick = (suggestion: { text: string; user_id?: string; username?: string; post_id?: string; type?: string }) => {
     setSearchQuery(suggestion.text);
     if (suggestion.type === "user" && suggestion.user_id) {
-      navigate(`/profile/${suggestion.user_id}`);
+      navigate(`/profile/${suggestion.username || suggestion.user_id}`);
     } else if (suggestion.type === "company") {
       navigate(`/companies?q=${encodeURIComponent(suggestion.text)}`);
     } else if (suggestion.type === "post" && suggestion.post_id) {

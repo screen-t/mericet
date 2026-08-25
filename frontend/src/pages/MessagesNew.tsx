@@ -586,7 +586,7 @@ const MessagesNew = () => {
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setMessageText("");
     setReplyTo(null);
-    sendMessageMutation.mutate({ recipientId: userId, content, tempId, conversationId: resolvedConversationId });
+    sendMessageMutation.mutate({ recipientId: otherUser?.id || userId, content, tempId, conversationId: resolvedConversationId });
   };
 
   const handleSelectConversation = (convUserId?: string | null) => {
@@ -751,6 +751,14 @@ const MessagesNew = () => {
     (!isPlaceholderUser(otherUserFromConversations) ? otherUserFromConversations : null) ??
     newConvProfile ??
     otherUserFromConversations;
+
+  // Self-heal non-canonical URLs (e.g. a username instead of the UUID) once the
+  // real profile resolves — every internal comparison above assumes userId is a UUID.
+  useEffect(() => {
+    if (otherUser?.id && userId && otherUser.id !== userId) {
+      navigate(`/messages/${otherUser.id}`, { replace: true });
+    }
+  }, [otherUser?.id, userId, navigate]);
 
   return (
     <AppLayout>

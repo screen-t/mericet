@@ -69,7 +69,7 @@ const SearchPage = () => {
   const renderUserCard = (user: User) => (
     <Card key={user.id} className="p-4">
       <div className="flex items-start gap-3">
-        <Link to={`/profile/${user.id}`}>
+        <Link to={`/profile/${user.username || user.id}`}>
           <UserAvatar
             src={user.avatar_url}
             name={`${user.first_name} ${user.last_name}`}
@@ -77,7 +77,7 @@ const SearchPage = () => {
           />
         </Link>
         <div className="flex-1 min-w-0">
-          <Link to={`/profile/${user.id}`}>
+          <Link to={`/profile/${user.username || user.id}`}>
             <h4 className="font-semibold hover:text-primary truncate">
               {user.first_name} {user.last_name}
             </h4>
@@ -90,7 +90,7 @@ const SearchPage = () => {
               {user.headline}
             </p>
           )}
-          <Link to={`/profile/${user.id}`}>
+          <Link to={`/profile/${user.username || user.id}`}>
             <Button size="sm" variant="outline" className="mt-3">
               <UserPlus className="w-4 h-4 mr-2" />
               View Profile
