@@ -159,6 +159,18 @@ class SupabasePostRepository:
             .eq("user_id", user_id).in_("post_id", post_ids).execute()
         return {r["post_id"] for r in (result.data or [])}
 
+    def get_likers(self, post_id: str, limit: int = 50, offset: int = 0) -> list[dict]:
+        result = self._client.table("post_likes") \
+            .select("liker:user_id(id, first_name, last_name, username, avatar_url, headline)") \
+            .eq("post_id", post_id) \
+            .limit(limit).offset(offset).execute()
+        likers = []
+        for row in (result.data or []):
+            user = row.get("liker")
+            if user:
+                likers.append(user)
+        return likers
+
     def get_like_counts(self, post_ids: list[str]) -> dict[str, int]:
         result = self._client.table("post_likes").select("post_id") \
             .in_("post_id", post_ids).execute()

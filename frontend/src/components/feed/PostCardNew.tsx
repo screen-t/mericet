@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -303,7 +303,44 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [showAuthGate, setShowAuthGate] = useState(false);
+  const [showLikers, setShowLikers] = useState(false);
   const [isVoting, setIsVoting] = useState(false);
+
+  const PAGE_SIZE_LIKERS = 20;
+  const likersSentinelRef = useRef<HTMLDivElement>(null);
+
+  const {
+    data: likersPages,
+    isLoading: likersLoading,
+    isFetchingNextPage: likersFetchingMore,
+    hasNextPage: likersHasMore,
+    fetchNextPage: likersFetchNext,
+  } = useInfiniteQuery({
+    queryKey: ['likers', post.id],
+    queryFn: ({ pageParam = 0 }) =>
+      backendApi.posts.getLikers(post.id, PAGE_SIZE_LIKERS, pageParam as number),
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((s, p) => s + p.likers.length, 0);
+      return lastPage.likers.length === PAGE_SIZE_LIKERS ? loaded : undefined;
+    },
+    initialPageParam: 0,
+    enabled: showLikers,
+    staleTime: 30_000,
+  });
+
+  const likers = likersPages?.pages.flatMap((p) => p.likers) ?? [];
+
+  useEffect(() => {
+    if (!likersHasMore || likersFetchingMore) return;
+    const sentinel = likersSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) likersFetchNext(); },
+      { threshold: 0.1 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [likersHasMore, likersFetchingMore, likersFetchNext]);
   const [optimisticLiked, setOptimisticLiked] = useState(post.is_liked ?? false);
   const [optimisticLikeCount, setOptimisticLikeCount] = useState(post.like_count ?? post.likes_count ?? 0);
   const [editContent, setEditContent] = useState(post.content || "");
@@ -855,18 +892,28 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
 
       {/* Actions */}
       <div className="flex items-center justify-between pt-3 border-t">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleLike}
-          className={cn(
-            "gap-2 transition-colors",
-            displayLiked && "text-red-500 hover:text-red-600"
-          )}
-        >
-          <Heart className={cn("h-4 w-4 transition-all", displayLiked && "fill-current scale-110")} />
-          <span>{displayLikeCount}</span>
-        </Button>
+        <div className="flex items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLike}
+            className={cn(
+              "gap-1 transition-colors pr-1",
+              displayLiked && "text-red-500 hover:text-red-600"
+            )}
+          >
+            <Heart className={cn("h-4 w-4 transition-all", displayLiked && "fill-current scale-110")} />
+          </Button>
+          <button
+            onClick={() => { if (displayLikeCount > 0) setShowLikers(true); }}
+            className={cn(
+              "text-sm px-1 rounded hover:bg-muted transition-colors",
+              displayLikeCount > 0 ? "cursor-pointer hover:underline" : "cursor-default"
+            )}
+          >
+            {displayLikeCount}
+          </button>
+        </div>
 
         <Button
           variant="ghost"
@@ -1031,6 +1078,47 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
           )}
         </div>
       )}
+
+      {/* Likers Dialog */}
+      <Dialog open={showLikers} onOpenChange={setShowLikers}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Liked by</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto -mx-1 space-y-0.5">
+            {likersLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : likers.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No likes yet.</p>
+            ) : (
+              <>
+                {likers.map((liker) => (
+                  <Link
+                    key={liker.id}
+                    to={`/profile/${liker.id}`}
+                    onClick={() => setShowLikers(false)}
+                    className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors"
+                  >
+                    <UserAvatar src={liker.avatar_url} name={`${liker.first_name} ${liker.last_name}`} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{liker.first_name} {liker.last_name}</p>
+                      {liker.username && (
+                        <p className="text-xs text-muted-foreground">@{liker.username}</p>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+                {/* Sentinel — triggers next page load when scrolled into view */}
+                <div ref={likersSentinelRef} className="py-1 flex justify-center">
+                  {likersFetchingMore && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Repost Dialog */}
       <Dialog open={showRepostDialog} onOpenChange={setShowRepostDialog}>

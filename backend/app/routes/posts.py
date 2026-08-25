@@ -358,6 +358,18 @@ def like_post(
     return {"message": "Post liked"}
 
 
+@router.get("/{post_id}/likes")
+def get_post_likers(
+    post_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user_id: str = Depends(require_auth),
+    post_repo=Depends(get_post_repo),
+):
+    likers = post_repo.get_likers(post_id, limit, offset)
+    return {"likers": likers, "count": len(likers)}
+
+
 @router.delete("/{post_id}/like")
 def unlike_post(
     post_id: str,
