@@ -32,6 +32,8 @@ def send_connection_request(
     conn_repo=Depends(get_connection_repo),
     user_repo=Depends(get_user_repo),
 ):
+    if conn_repo.either_blocked(user_id, payload.receiver_id):
+        raise HTTPException(status_code=403, detail="Cannot send a connection request to this user")
     existing = conn_repo.get_between(user_id, payload.receiver_id)
     if existing:
         return {"message": "Connection request already exists", "data": _enrich_connection(existing, user_repo)}

@@ -46,7 +46,18 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const ProfilePage = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -58,6 +69,8 @@ export const ProfilePage = () => {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [showReportDialog, setShowReportDialog] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteEditing, setNoteEditing] = useState(false);
 
@@ -104,45 +117,7 @@ export const ProfilePage = () => {
   const profileUserId = userId || user?.id;
   const isOwnProfile = !userId || userId === user?.id;
 
-  const { data: muteStatus } = useQuery({
-    queryKey: ['muteStatus', profileUserId],
-    queryFn: () => backendApi.notifications.getMuteStatus(profileUserId!),
-    enabled: !isOwnProfile && !!profileUserId,
-  });
-
-  const muteMutation = useMutation({
-    mutationFn: () =>
-      muteStatus?.is_muted
-        ? backendApi.notifications.unmuteUser(profileUserId!)
-        : backendApi.notifications.muteUser(profileUserId!),
-    onSuccess: () => {
-      toast({ title: muteStatus?.is_muted ? "User unmuted" : "User muted" });
-      queryClient.invalidateQueries({ queryKey: ['muteStatus', profileUserId] });
-    },
-    onError: () => toast({ title: "Failed to update mute status", variant: "destructive" }),
-  });
-
-  const { data: noteData } = useQuery({
-    queryKey: ['connectionNote', profileUserId],
-    queryFn: () => backendApi.connections.getConnectionNote(profileUserId!),
-    enabled: !isOwnProfile && !!profileUserId,
-  });
-
-  useEffect(() => {
-    if (noteData?.note !== undefined) setNoteText(noteData.note || "");
-  }, [noteData]);
-
-  const saveNoteMutation = useMutation({
-    mutationFn: (note: string) => backendApi.connections.saveConnectionNote(profileUserId!, note),
-    onSuccess: () => {
-      toast({ title: noteText.trim() ? "Note saved" : "Note removed" });
-      setNoteEditing(false);
-      queryClient.invalidateQueries({ queryKey: ['connectionNote', profileUserId] });
-    },
-    onError: () => toast({ title: "Failed to save note", variant: "destructive" }),
-  });
-
-  // Fetch profile data
+  // Fetch profile first — dependent queries need profile.id (UUID) not the URL param (may be a username)
   const { data: profile, isLoading, error } = useQuery<Profile>({
     queryKey: ['profile', profileUserId],
     queryFn: async () => {
@@ -154,7 +129,48 @@ export const ProfilePage = () => {
     enabled: !!profileUserId,
   });
 
+  const profileId = profile?.id ?? profileUserId;
+
+  const { data: muteStatus } = useQuery({
+    queryKey: ['muteStatus', profileId],
+    queryFn: () => backendApi.notifications.getMuteStatus(profile!.id),
+    enabled: !isOwnProfile && !!profile?.id,
+  });
+
+  const muteMutation = useMutation({
+    mutationFn: () =>
+      muteStatus?.is_muted
+        ? backendApi.notifications.unmuteUser(profile?.id ?? profileUserId!)
+        : backendApi.notifications.muteUser(profile?.id ?? profileUserId!),
+    onSuccess: () => {
+      toast({ title: muteStatus?.is_muted ? "User unmuted" : "User muted" });
+      queryClient.invalidateQueries({ queryKey: ['muteStatus', profileId] });
+    },
+    onError: () => toast({ title: "Failed to update mute status", variant: "destructive" }),
+  });
+
+  const { data: noteData } = useQuery({
+    queryKey: ['connectionNote', profileId],
+    queryFn: () => backendApi.connections.getConnectionNote(profile!.id),
+    enabled: !isOwnProfile && !!profile?.id,
+  });
+
+  useEffect(() => {
+    if (noteData?.note !== undefined) setNoteText(noteData.note || "");
+  }, [noteData]);
+
+  const saveNoteMutation = useMutation({
+    mutationFn: (note: string) => backendApi.connections.saveConnectionNote(profile?.id ?? profileUserId!, note),
+    onSuccess: () => {
+      toast({ title: noteText.trim() ? "Note saved" : "Note removed" });
+      setNoteEditing(false);
+      queryClient.invalidateQueries({ queryKey: ['connectionNote', profileId] });
+    },
+    onError: () => toast({ title: "Failed to save note", variant: "destructive" }),
+  });
+
   // Fetch connection status if viewing another user's profile
+  // Note: getConnectionStatus accepts username; followStatus needs UUID
   const { data: connectionStatus } = useQuery({
     queryKey: ['connectionStatus', profileUserId],
     queryFn: () => backendApi.connections.getConnectionStatus(profileUserId!),
@@ -162,14 +178,14 @@ export const ProfilePage = () => {
   });
 
   const { data: followStatus } = useQuery({
-    queryKey: ['followStatus', profileUserId],
-    queryFn: () => backendApi.follows.status(profileUserId!),
-    enabled: !isOwnProfile && !!profileUserId,
+    queryKey: ['followStatus', profileId],
+    queryFn: () => backendApi.follows.status(profile!.id),
+    enabled: !isOwnProfile && !!profile?.id,
   });
 
   // Connection actions
   const sendConnectionRequest = useMutation({
-    mutationFn: () => backendApi.connections.sendRequest(profileUserId!),
+    mutationFn: () => backendApi.connections.sendRequest(profile?.id ?? profileUserId!),
     onSuccess: () => {
       toast({ title: "Connection request sent!" });
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
@@ -214,31 +230,31 @@ export const ProfilePage = () => {
   });
 
   const followMutation = useMutation({
-    mutationFn: () => backendApi.follows.follow(profileUserId!),
+    mutationFn: () => backendApi.follows.follow(profile?.id ?? profileUserId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileId] });
       queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
     },
     onError: () => {
       // Refresh silently — backend returns 200 for "already following" so a
       // real error here is a network blip; let the UI self-correct
-      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileId] });
     },
   });
 
   const unfollowMutation = useMutation({
-    mutationFn: () => backendApi.follows.unfollow(profileUserId!),
+    mutationFn: () => backendApi.follows.unfollow(profile?.id ?? profileUserId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileId] });
       queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
     },
     onError: () => {
-      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileId] });
     },
   });
 
   const blockMutation = useMutation({
-    mutationFn: () => backendApi.connections.blockUser(profileUserId!),
+    mutationFn: () => backendApi.connections.blockUser(profile?.id ?? profileUserId!),
     onSuccess: () => {
       toast({ title: "User blocked" });
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
@@ -249,7 +265,7 @@ export const ProfilePage = () => {
   });
 
   const unblockMutation = useMutation({
-    mutationFn: () => backendApi.connections.unblockUser(profileUserId!),
+    mutationFn: () => backendApi.connections.unblockUser(profile?.id ?? profileUserId!),
     onSuccess: () => {
       toast({ title: "User unblocked" });
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
@@ -572,7 +588,7 @@ export const ProfilePage = () => {
                             )}
                             <Button
                               variant="outline"
-                              onClick={() => removeConnection.mutate()}
+                              onClick={() => setShowRemoveConfirm(true)}
                               className="w-full sm:w-auto"
                             >
                               <UserCheck className="w-4 h-4 mr-2" />
@@ -647,6 +663,16 @@ export const ProfilePage = () => {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => muteMutation.mutate()}
+                                disabled={muteMutation.isPending}
+                              >
+                                {muteStatus?.is_muted ? "Unmute notifications" : "Mute notifications"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
+                                Report user
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
                               {connectionStatus?.status === 'blocked' ? (
                                 connectionStatus.is_requester ? (
                                   <DropdownMenuItem
@@ -664,21 +690,12 @@ export const ProfilePage = () => {
                               ) : (
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
-                                  onClick={() => blockMutation.mutate()}
+                                  onClick={() => setShowBlockConfirm(true)}
                                   disabled={blockMutation.isPending}
                                 >
                                   Block
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuItem
-                                onClick={() => muteMutation.mutate()}
-                                disabled={muteMutation.isPending}
-                              >
-                                {muteStatus?.is_muted ? "Unmute notifications" : "Mute notifications"}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
-                                Report user
-                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         )}
@@ -705,6 +722,46 @@ export const ProfilePage = () => {
           targetId={profileUserId!}
           targetLabel="user"
         />
+
+        <AlertDialog open={showRemoveConfirm} onOpenChange={setShowRemoveConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove connection?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {profile?.first_name ?? "This user"} will be removed from your connections. You can always reconnect later.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => removeConnection.mutate()}
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={showBlockConfirm} onOpenChange={setShowBlockConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Block {profile?.first_name ?? "this user"}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                They won't be able to see your profile or send you connection requests. You can unblock them at any time.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => blockMutation.mutate()}
+              >
+                Block
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Profile Tabs */}
         <Tabs defaultValue="about" className="w-full">
