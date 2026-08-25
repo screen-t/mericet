@@ -125,7 +125,7 @@ export default function PublicFolderPage() {
         {/* Owner info */}
         {owner && (
           <Link
-            to={`/profile/${owner.id}`}
+            to={`/profile/${owner.username || owner.id}`}
             className="flex items-center gap-2.5 text-sm hover:opacity-80 transition-opacity"
           >
             <UserAvatar src={owner.avatar_url} name={owner.first_name} size="sm" />

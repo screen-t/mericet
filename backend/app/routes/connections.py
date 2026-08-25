@@ -1,8 +1,14 @@
+import re
 from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from app.middleware.auth import require_auth
 from app.deps import get_connection_repo, get_user_repo
 from app.models.connection import ConnectionRequest, ConnectionUpdate, ConnectionResponse
 from typing import List
+
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
 
 router = APIRouter(prefix="/connections", tags=["Connections"])
 
@@ -129,7 +135,14 @@ def check_connection_status_by_id(
     other_user_id: str,
     user_id: str = Depends(require_auth),
     conn_repo=Depends(get_connection_repo),
+    user_repo=Depends(get_user_repo),
 ):
+    # Despite the route name, callers sometimes pass a username instead of a UUID
+    if not _UUID_RE.match(other_user_id):
+        user = user_repo.get_by_username(other_user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        other_user_id = user["id"]
     conn = conn_repo.get_between(user_id, other_user_id)
     if not conn:
         return {"status": "none", "can_connect": True}
@@ -149,6 +162,8 @@ def check_connection_status(
 ):
     user = user_repo.get_by_username(username)
     if not user:
+        user = user_repo.get_by_id(username)
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
     other_user_id = user["id"]
     conn = conn_repo.get_between(user_id, other_user_id)
@@ -166,6 +181,8 @@ def get_mutual_connections(
     user_repo=Depends(get_user_repo),
 ):
     user = user_repo.get_by_username(username)
+    if not user:
+        user = user_repo.get_by_id(username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     other_user_id = user["id"]

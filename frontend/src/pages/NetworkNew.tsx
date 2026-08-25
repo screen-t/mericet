@@ -221,7 +221,7 @@ const NetworkNew = () => {
                   >
                     <Card className="p-4">
                       <div className="flex items-start gap-3">
-                        <Link to={`/profile/${connection.user?.id}`}>
+                        <Link to={`/profile/${connection.user?.username || connection.user?.id}`}>
                           <UserAvatar
                             src={connection.user?.avatar_url}
                             name={`${connection.user?.first_name} ${connection.user?.last_name}`}
@@ -229,7 +229,7 @@ const NetworkNew = () => {
                           />
                         </Link>
                         <div className="flex-1 min-w-0">
-                          <Link to={`/profile/${connection.user?.id}`}>
+                          <Link to={`/profile/${connection.user?.username || connection.user?.id}`}>
                             <h4 className="font-semibold hover:text-primary truncate">
                               {connection.user?.first_name} {connection.user?.last_name}
                             </h4>
@@ -293,7 +293,7 @@ const NetworkNew = () => {
                   >
                     <Card className="p-4">
                       <div className="flex items-start gap-3">
-                        <Link to={`/profile/${follower.id}`}>
+                        <Link to={`/profile/${follower.username || follower.id}`}>
                           <UserAvatar
                             src={follower.avatar_url}
                             name={`${follower.first_name} ${follower.last_name}`}
@@ -301,7 +301,7 @@ const NetworkNew = () => {
                           />
                         </Link>
                         <div className="flex-1 min-w-0">
-                          <Link to={`/profile/${follower.id}`}>
+                          <Link to={`/profile/${follower.username || follower.id}`}>
                             <h4 className="font-semibold hover:text-primary truncate">
                               {follower.first_name} {follower.last_name}
                             </h4>
@@ -348,7 +348,7 @@ const NetworkNew = () => {
                   >
                     <Card className="p-4">
                       <div className="flex items-start gap-3">
-                        <Link to={`/profile/${person.id}`}>
+                        <Link to={`/profile/${person.username || person.id}`}>
                           <UserAvatar
                             src={person.avatar_url}
                             name={`${person.first_name} ${person.last_name}`}
@@ -356,7 +356,7 @@ const NetworkNew = () => {
                           />
                         </Link>
                         <div className="flex-1 min-w-0">
-                          <Link to={`/profile/${person.id}`}>
+                          <Link to={`/profile/${person.username || person.id}`}>
                             <h4 className="font-semibold hover:text-primary truncate">
                               {person.first_name} {person.last_name}
                             </h4>
@@ -410,7 +410,7 @@ const NetworkNew = () => {
                         >
                           <Card className="p-4">
                             <div className="flex items-start gap-3">
-                              <Link to={`/profile/${request.user?.id}`}>
+                              <Link to={`/profile/${request.user?.username || request.user?.id}`}>
                                 <UserAvatar
                                   src={request.user?.avatar_url}
                                   name={`${request.user?.first_name} ${request.user?.last_name}`}
@@ -418,7 +418,7 @@ const NetworkNew = () => {
                                 />
                               </Link>
                               <div className="flex-1 min-w-0">
-                                <Link to={`/profile/${request.user?.id}`}>
+                                <Link to={`/profile/${request.user?.username || request.user?.id}`}>
                                   <h4 className="font-semibold hover:text-primary truncate">
                                     {request.user?.first_name} {request.user?.last_name}
                                   </h4>
@@ -481,7 +481,7 @@ const NetworkNew = () => {
                         >
                           <Card className="p-4">
                             <div className="flex items-start gap-3">
-                              <Link to={`/profile/${request.user?.id}`}>
+                              <Link to={`/profile/${request.user?.username || request.user?.id}`}>
                                 <UserAvatar
                                   src={request.user?.avatar_url}
                                   name={`${request.user?.first_name} ${request.user?.last_name}`}
@@ -489,7 +489,7 @@ const NetworkNew = () => {
                                 />
                               </Link>
                               <div className="flex-1 min-w-0">
-                                <Link to={`/profile/${request.user?.id}`}>
+                                <Link to={`/profile/${request.user?.username || request.user?.id}`}>
                                   <h4 className="font-semibold hover:text-primary truncate">
                                     {request.user?.first_name} {request.user?.last_name}
                                   </h4>
@@ -556,7 +556,7 @@ const NetworkNew = () => {
                   >
                     <Card className="p-4">
                       <div className="flex items-start gap-3">
-                        <Link to={`/profile/${suggestion.id}`}>
+                        <Link to={`/profile/${suggestion.username || suggestion.id}`}>
                           <UserAvatar
                             src={suggestion.avatar_url}
                             name={`${suggestion.first_name} ${suggestion.last_name}`}
@@ -564,7 +564,7 @@ const NetworkNew = () => {
                           />
                         </Link>
                         <div className="flex-1 min-w-0">
-                          <Link to={`/profile/${suggestion.id}`}>
+                          <Link to={`/profile/${suggestion.username || suggestion.id}`}>
                             <h4 className="font-semibold hover:text-primary truncate">
                               {suggestion.first_name} {suggestion.last_name}
                             </h4>

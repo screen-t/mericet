@@ -38,6 +38,7 @@ import {
   Instagram,
   Github,
   StickyNote,
+  Share2,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -76,6 +77,23 @@ export const ProfilePage = () => {
 
   const toAbsoluteUrl = (url: string) =>
     /^https?:\/\//i.test(url) ? url : `https://${url}`;
+
+  const handleShareProfile = async (targetProfile: Profile) => {
+    const shareUrl = `${window.location.origin}/profile/${targetProfile.username || targetProfile.id}`;
+    const name = `${targetProfile.first_name} ${targetProfile.last_name}`.trim();
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: name, text: `Check out ${name}'s profile on Mericet`, url: shareUrl });
+        return;
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+      }
+    }
+    navigator.clipboard.writeText(shareUrl).then(
+      () => toast({ title: "Profile link copied" }),
+      () => toast({ title: "Could not copy link", variant: "destructive" }),
+    );
+  };
 
   const uploadAvatarMutation = useMutation({
     mutationFn: (file: File) => backendApi.profile.uploadAvatar(file),
@@ -171,7 +189,7 @@ export const ProfilePage = () => {
 
   // Fetch connection status if viewing another user's profile
   // Note: getConnectionStatus accepts username; followStatus needs UUID
-  const { data: connectionStatus } = useQuery({
+  const { data: connectionStatus, isLoading: connectionStatusLoading } = useQuery({
     queryKey: ['connectionStatus', profileUserId],
     queryFn: () => backendApi.connections.getConnectionStatus(profileUserId!),
     enabled: !isOwnProfile && !!profileUserId,
@@ -556,13 +574,18 @@ export const ProfilePage = () => {
                           Edit Profile
                         </Link>
                       </Button>
+                    ) : connectionStatusLoading ? (
+                      <div className="flex gap-2">
+                        <div className="h-10 w-24 rounded-md bg-muted animate-pulse" />
+                        <div className="h-10 w-24 rounded-md bg-muted animate-pulse" />
+                      </div>
                     ) : (
                       <>
                         {connectionStatus?.status === 'accepted' ? (
                           <>
                             <Button
                               variant="default"
-                              onClick={() => navigate(`/messages/${profileUserId}`)}
+                              onClick={() => navigate(`/messages/${profile.id}`)}
                               className="w-full sm:w-auto"
                             >
                               <MessageSquare className="w-4 h-4 mr-2" />
@@ -663,6 +686,11 @@ export const ProfilePage = () => {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleShareProfile(profile)}>
+                                <Share2 className="w-4 h-4 mr-2" />
+                                Share profile
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onClick={() => muteMutation.mutate()}
                                 disabled={muteMutation.isPending}
@@ -719,7 +747,7 @@ export const ProfilePage = () => {
           open={showReportDialog}
           onOpenChange={setShowReportDialog}
           targetType="user"
-          targetId={profileUserId!}
+          targetId={profile.id}
           targetLabel="user"
         />
 
