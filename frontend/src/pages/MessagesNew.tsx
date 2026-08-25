@@ -463,9 +463,12 @@ const MessagesNew = () => {
   const reactionMutation = useMutation({
     mutationFn: ({ messageId, emoji }: { messageId: string; emoji: string }) =>
       backendApi.messages.toggleReaction(messageId, emoji),
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     onMutate: async ({ messageId, emoji }) => {
       if (!userId) return;
       await queryClient.cancelQueries({ queryKey: ['messages', userId] });
+      const previousMessages = queryClient.getQueryData<MessagesResponse>(['messages', userId]);
       queryClient.setQueryData<MessagesResponse>(['messages', userId], (old) => {
         if (!old?.messages) return old;
         return {
@@ -482,10 +485,18 @@ const MessagesNew = () => {
         };
       });
       setReactionPickerMessageId(null);
+      return { previousMessages };
     },
-    onError: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousMessages) {
+        queryClient.setQueryData(['messages', userId], ctx.previousMessages);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+      }
       toast({ title: "Failed to react", variant: "destructive" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', userId] });
     },
   });
 

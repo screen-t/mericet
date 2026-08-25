@@ -612,7 +612,8 @@ def toggle_reaction(
             return {"action": "removed", "emoji": payload.emoji}
         return {"action": "added", "emoji": payload.emoji, "data": {}}
     except Exception as e:
-        raise HTTPException(status_code=400, detail="Request failed")
+        print(f"Error toggling reaction on {message_id} by {user_id}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/messages/{message_id}/reactions/{emoji}")
