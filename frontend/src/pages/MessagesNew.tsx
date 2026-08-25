@@ -1130,10 +1130,10 @@ const MessagesNew = () => {
                             </div>
                           )}
 
-                          <div className="flex flex-col">
+                          <div className="flex flex-col min-w-0 max-w-[75vw] sm:max-w-md">
                           <div
                             className={cn(
-                              "max-w-md p-3 rounded-lg",
+                              "w-full p-3 rounded-lg break-words",
                               isMyMessage
                                 ? "bg-gradient-primary text-white"
                                 : "bg-muted"
@@ -1188,13 +1188,13 @@ const MessagesNew = () => {
                                 return (
                                   <>
                                     <div className={cn(
-                                      "text-xs px-2 py-1 rounded mb-1 border-l-2",
+                                      "text-xs px-2 py-1 rounded mb-1 border-l-2 min-w-0 overflow-hidden",
                                       isMyMessage
                                         ? "bg-white/10 border-white/40 text-white/80"
                                         : "bg-background/60 border-primary/50 text-muted-foreground"
                                     )}>
                                       <span className="font-medium">{quotedName}</span>
-                                      <p className="truncate">{quotedText}</p>
+                                      <p className="truncate max-w-full">{quotedText}</p>
                                     </div>
                                     <p className="text-sm">{renderWithLinks(actualContent, isMyMessage)}</p>
                                   </>
