@@ -8,8 +8,13 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000"
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 
+function getStoredToken(): string | null {
+  if (typeof localStorage === "undefined") return null;
+  return localStorage.getItem(ACCESS_TOKEN_KEY) || sessionStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
 function getAuthHeaders(): HeadersInit {
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem(ACCESS_TOKEN_KEY) : null;
+  const token = getStoredToken();
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -20,7 +25,7 @@ function getAuthHeaders(): HeadersInit {
 let refreshingPromise: Promise<string | null> | null = null;
 
 async function tryRefreshToken(): Promise<string | null> {
-  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY) || sessionStorage.getItem(REFRESH_TOKEN_KEY);
   if (!refreshToken) return null;
   try {
     // Route through backend — no direct Supabase call needed
@@ -60,6 +65,8 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   if (!newToken) {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
     window.location.href = "/login";
     return res;
   }
@@ -137,6 +144,16 @@ const profile = {
       body: form,
     }).then((r) => handleResponse(r)) as Promise<{ cover_url: string }>;
   },
+  removeAvatar: (): Promise<{ message: string }> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/me/avatar`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  removeCover: (): Promise<{ message: string }> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/me/cover`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
   addWorkExperience: (data: Record<string, unknown>) =>
     fetchWithAuth(`${API_BASE_URL}/profile/work-experience`, {
       method: "POST",
@@ -249,6 +266,11 @@ const posts = {
       method: "DELETE",
       headers: getAuthHeaders(),
     }).then(handleResponse),
+  getLikers: (postId: string, limit = 50, offset = 0) =>
+    fetchWithAuth(
+      `${API_BASE_URL}/posts/${encodeURIComponent(postId)}/likes?limit=${limit}&offset=${offset}`
+    ).then(handleResponse<{ likers: import('@/types/api').User[]; count: number }>),
+
   addComment: (postId: string, content: string) =>
     fetchWithAuth(`${API_BASE_URL}/posts/${postId}/comments`, {
       method: "POST",
@@ -283,13 +305,27 @@ const posts = {
     ).then(handleResponse<import('@/types/api').Post[]>);
     return Array.isArray(list) ? list : [];
   },
+  updateComment: (commentId: string, content: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/comments/${commentId}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ content }),
+    }).then(handleResponse),
+  deleteComment: (commentId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/comments/${commentId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
   getComments: async (postId: string, limit: number, offset: number): Promise<import('@/types/api').CommentsResponse> => {
     const raw = await fetchWithAuth(
       `${API_BASE_URL}/posts/${postId}/comments?limit=${limit}&offset=${offset}`,
       { headers: getAuthHeaders() }
-    ).then(handleResponse<import('@/types/api').Comment[]>);
-    // Backend returns a raw array; wrap to match CommentsResponse shape
-    return { comments: Array.isArray(raw) ? raw : [] };
+    ).then(handleResponse);
+    if (raw && typeof raw === 'object' && 'comments' in (raw as object)) {
+      const page = raw as { comments: import('@/types/api').Comment[]; total: number };
+      return { comments: page.comments ?? [], total: page.total ?? 0 };
+    }
+    return { comments: Array.isArray(raw) ? (raw as import('@/types/api').Comment[]) : [], total: 0 };
   },
   votePoll: (postId: string, optionId: string) =>
     fetchWithAuth(`${API_BASE_URL}/posts/${postId}/poll/vote`, {
@@ -637,6 +673,37 @@ const saves = {
       `${API_BASE_URL}/saves/search?${params.toString()}`,
       { headers: getAuthHeaders() }
     ).then(handleResponse<import('@/types/api').Post[]>);
+    return Array.isArray(list) ? list : [];
+  },
+
+  togglePublic: (folderId: string, isPublic: boolean) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/folders/${folderId}/public`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ is_public: isPublic }),
+    }).then(handleResponse),
+
+  getPublicFolder: (shareToken: string) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/public/${shareToken}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+
+  followFolder: (folderId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/folders/${folderId}/follow`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+
+  unfollowFolder: (folderId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/saves/folders/${folderId}/follow`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+
+  getFollowing: async () => {
+    const list = await fetchWithAuth(`${API_BASE_URL}/saves/following`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse);
     return Array.isArray(list) ? list : [];
   },
 };

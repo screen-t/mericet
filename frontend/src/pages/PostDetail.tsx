@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Navbar } from "@/components/layout/Navbar";
@@ -9,6 +9,8 @@ import { Loader2 } from "lucide-react";
 
 const PostDetail = () => {
   const { postId } = useParams<{ postId: string }>();
+  const [searchParams] = useSearchParams();
+  const highlightCommentId = searchParams.get("comment") ?? undefined;
   const { user, loading: authLoading } = useAuth();
 
   const { data: post, isLoading } = useQuery({
@@ -32,7 +34,7 @@ const PostDetail = () => {
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       ) : post ? (
-        <PostCardNew post={post} />
+        <PostCardNew post={post} highlightCommentId={highlightCommentId} />
       ) : (
         <div className="text-center py-12 text-muted-foreground">Post not found</div>
       )}

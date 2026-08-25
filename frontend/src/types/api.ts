@@ -217,17 +217,23 @@ export interface Conversation {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'like' | 'comment' | 'connection_request' | 'connection_accepted' | 'repost' | 'mention' | 'follow';
-  content: string;
-  message?: string;
-  is_read: boolean;
+  type: 'like' | 'comment' | 'connection' | 'message' | 'system' | 'folder_post' | string;
+  title: string;
+  message: string;
+  link?: string;
   actor_id?: string;
+  actor?: {
+    id: string;
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+    avatar_url?: string;
+  };
   post_id?: string;
   comment_id?: string;
   connection_id?: string;
+  is_read: boolean;
   created_at: string;
-  actor?: User;
-  post_preview?: string;
 }
 
 // API Response wrappers
@@ -237,6 +243,7 @@ export interface PostsResponse {
 
 export interface CommentsResponse {
   comments: Comment[];
+  total: number;
 }
 
 export interface ConnectionsResponse {

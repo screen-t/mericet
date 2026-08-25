@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import React, { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -9,7 +9,7 @@ import { backendApi } from "@/lib/backend-api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
-import { Post, Comment, CommentsResponse } from '@/types/api';
+import { Post, Comment } from '@/types/api';
 import {
   Heart,
   MessageCircle,
@@ -25,6 +25,10 @@ import {
   Image,
   Loader2,
   BarChart3,
+  Play,
+  Volume2,
+  VolumeX,
+  Maximize,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -44,8 +48,134 @@ import { SaveToFolderModal } from "@/components/feed/SaveToFolderModal";
 import { SharePostModal } from "@/components/feed/SharePostModal";
 import { ReportDialog } from "@/components/modals/ReportDialog";
 
+function formatDate(dateString: string) {
+  try {
+    const hasOffset = dateString.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(dateString);
+    const normalized = hasOffset ? dateString : dateString + "Z";
+    return formatDistanceToNow(new Date(normalized), { addSuffix: true });
+  } catch {
+    return "recently";
+  }
+}
+
 interface PostCardNewProps {
   post: Post;
+  highlightCommentId?: string;
+}
+
+interface CommentItemProps {
+  comment: Comment;
+  currentUserId?: string;
+  postAuthorId?: string;
+  postId: string;
+  onChanged: () => void;
+  isHighlighted?: boolean;
+}
+
+function CommentItem({ comment, currentUserId, postAuthorId, postId, onChanged, isHighlighted }: CommentItemProps) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(comment.content ?? "");
+  const [highlighted, setHighlighted] = useState(isHighlighted ?? false);
+  const commentRef = useRef<HTMLDivElement>(null);
+  const isCommentAuthor = comment.author?.id === currentUserId;
+  const isPostOwner = postAuthorId === currentUserId;
+  const canDelete = isCommentAuthor || isPostOwner;
+  const canEdit = isCommentAuthor;
+
+  useEffect(() => {
+    if (isHighlighted && commentRef.current) {
+      commentRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      const timer = setTimeout(() => setHighlighted(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isHighlighted]);
+
+  const updateMutation = useMutation({
+    mutationFn: (content: string) => backendApi.posts.updateComment(comment.id, content),
+    onSuccess: () => {
+      setEditing(false);
+      onChanged();
+    },
+    onError: () => toast({ title: "Failed to update comment", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => backendApi.posts.deleteComment(comment.id),
+    onSuccess: onChanged,
+    onError: () => toast({ title: "Failed to delete comment", variant: "destructive" }),
+  });
+
+  return (
+    <div
+      ref={commentRef}
+      className={cn(
+        "flex gap-2 text-sm rounded-md p-1 -mx-1 transition-colors duration-700",
+        highlighted ? "bg-primary/15" : ""
+      )}
+    >
+      <UserAvatar src={comment.author?.avatar_url} name={comment.author?.first_name} size="sm" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-1">
+          <p className="font-semibold">{comment.author?.first_name} {comment.author?.last_name}</p>
+          {(canDelete || canEdit) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 -mt-0.5">
+                  <MoreHorizontal className="w-3.5 h-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canEdit && (
+                  <DropdownMenuItem onClick={() => { setEditText(comment.content ?? ""); setEditing(true); }}>
+                    Edit
+                  </DropdownMenuItem>
+                )}
+                {canEdit && canDelete && <DropdownMenuSeparator />}
+                {canDelete && (
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => deleteMutation.mutate()}
+                    disabled={deleteMutation.isPending}
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        {editing ? (
+          <div className="mt-1 space-y-1">
+            <Textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              rows={2}
+              className="resize-none text-sm"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => updateMutation.mutate(editText.trim())}
+                disabled={!editText.trim() || updateMutation.isPending}
+              >
+                {updateMutation.isPending ? "Saving..." : "Save"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-muted-foreground">{comment.content}</p>
+        )}
+
+        <span className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</span>
+      </div>
+    </div>
+  );
 }
 
 const visibilityIcons = {
@@ -54,11 +184,117 @@ const visibilityIcons = {
   private: Lock,
 };
 
-export const PostCardNew = ({ post }: PostCardNewProps) => {
+// Tracks whether the user has ever manually unmuted a video this session.
+// Once they have, subsequent videos autoplay unmuted — matching YouTube/Instagram behaviour.
+// Module-level so it's shared across all VideoPlayer instances; resets on page refresh.
+let sessionUnmuted = false;
+
+// Autoplay-on-scroll video player with mute toggle, fullscreen, and click-to-pause.
+// Browsers block autoplay with sound, so the first video always starts muted.
+// React's `muted` prop doesn't update after mount (known React bug), so we
+// control it via the DOM ref directly.
+const VideoPlayer = ({ src }: { src: string }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isMuted, setIsMuted] = useState(!sessionUnmuted);
+  const [isPaused, setIsPaused] = useState(true);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !sessionUnmuted;
+    setIsMuted(!sessionUnmuted);
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          // Honour the session unmute preference on each new autoplay
+          video.muted = !sessionUnmuted;
+          setIsMuted(!sessionUnmuted);
+          video.play().catch(() => {});
+          setIsPaused(false);
+        } else {
+          video.pause();
+          setIsPaused(true);
+        }
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, [src]);
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play().catch(() => {});
+      setIsPaused(false);
+    } else {
+      video.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const toggleMute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
+    // Record that the user has chosen to hear audio — future videos start unmuted
+    if (!video.muted) sessionUnmuted = true;
+  };
+
+  const openFullscreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    videoRef.current?.requestFullscreen?.();
+  };
+
+  return (
+    <div
+      className="relative rounded-lg overflow-hidden bg-black cursor-pointer"
+      onClick={togglePlay}
+    >
+      <video
+        ref={videoRef}
+        src={src}
+        preload="metadata"
+        playsInline
+        loop
+        className="w-full max-h-96 object-cover"
+      />
+      {isPaused && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+          <div className="bg-black/60 rounded-full p-3">
+            <Play className="w-8 h-8 text-white fill-white" />
+          </div>
+        </div>
+      )}
+      <div className="absolute bottom-2 right-2 flex items-center gap-1">
+        <button
+          onClick={toggleMute}
+          className="bg-black/60 text-white rounded-full p-1.5 hover:bg-black/80 transition-colors"
+          aria-label={isMuted ? "Unmute" : "Mute"}
+        >
+          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
+        <button
+          onClick={openFullscreen}
+          className="bg-black/60 text-white rounded-full p-1.5 hover:bg-black/80 transition-colors"
+          aria-label="Full screen"
+        >
+          <Maximize className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(!!highlightCommentId);
   const [commentText, setCommentText] = useState("");
   const [showRepostDialog, setShowRepostDialog] = useState(false);
   const [showUndoRepostDialog, setShowUndoRepostDialog] = useState(false);
@@ -67,6 +303,44 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [showAuthGate, setShowAuthGate] = useState(false);
+  const [showLikers, setShowLikers] = useState(false);
+  const [isVoting, setIsVoting] = useState(false);
+
+  const PAGE_SIZE_LIKERS = 20;
+  const likersSentinelRef = useRef<HTMLDivElement>(null);
+
+  const {
+    data: likersPages,
+    isLoading: likersLoading,
+    isFetchingNextPage: likersFetchingMore,
+    hasNextPage: likersHasMore,
+    fetchNextPage: likersFetchNext,
+  } = useInfiniteQuery({
+    queryKey: ['likers', post.id],
+    queryFn: ({ pageParam = 0 }) =>
+      backendApi.posts.getLikers(post.id, PAGE_SIZE_LIKERS, pageParam as number),
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((s, p) => s + p.likers.length, 0);
+      return lastPage.likers.length === PAGE_SIZE_LIKERS ? loaded : undefined;
+    },
+    initialPageParam: 0,
+    enabled: showLikers,
+    staleTime: 30_000,
+  });
+
+  const likers = likersPages?.pages.flatMap((p) => p.likers) ?? [];
+
+  useEffect(() => {
+    if (!likersHasMore || likersFetchingMore) return;
+    const sentinel = likersSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) likersFetchNext(); },
+      { threshold: 0.1 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [likersHasMore, likersFetchingMore, likersFetchNext]);
   const [optimisticLiked, setOptimisticLiked] = useState(post.is_liked ?? false);
   const [optimisticLikeCount, setOptimisticLikeCount] = useState(post.like_count ?? post.likes_count ?? 0);
   const [editContent, setEditContent] = useState(post.content || "");
@@ -86,6 +360,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     // This avoids stale prop refreshes overwriting the local toggle state mid-interaction.
     setOptimisticLiked(post.is_liked ?? false);
     setOptimisticLikeCount(post.like_count ?? post.likes_count ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [post.id]);
 
   // Like mutation — currentlyLiked is passed explicitly at click time to avoid stale closure bugs
@@ -94,6 +369,8 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
       currentlyLiked
         ? backendApi.posts.unlikePost(post.id)
         : backendApi.posts.likePost(post.id),
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     onMutate: async (currentlyLiked: boolean) => {
       // Cancel any in-flight feed refetches so they don't overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: ['feed'] });
@@ -221,14 +498,27 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     },
   });
 
-  // Fetch comments
-  const { data: commentsData } = useQuery<CommentsResponse>({
+  const PAGE_SIZE = 10;
+
+  const {
+    data: commentsPages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['comments', post.id],
-    queryFn: () => backendApi.posts.getComments(post.id, 10, 0),
+    queryFn: ({ pageParam }) =>
+      backendApi.posts.getComments(post.id, PAGE_SIZE, pageParam as number),
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((s, p) => s + p.comments.length, 0);
+      return loaded < lastPage.total ? loaded : undefined;
+    },
+    initialPageParam: 0,
     enabled: showComments,
   });
 
-  const comments = commentsData?.comments || [];
+  const comments = commentsPages?.pages.flatMap(p => p.comments) ?? [];
+  const commentTotal = commentsPages?.pages[0]?.total ?? 0;
 
   const getPostMediaUrls = (currentPost: Post): string[] => {
     const fromMedia = ((currentPost as { media?: Array<{ url: string }> }).media || []).map((m) => m.url);
@@ -286,18 +576,17 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
 
   const handleVote = (optionIndex: number) => {
     const optionId = (post as { poll?: { options?: Array<{ id: string }> } }).poll?.options?.[optionIndex]?.id;
-    if (!optionId) {
-      toast({ title: "Failed to vote", variant: "destructive" });
-      return;
-    }
+    if (!optionId || isVoting) return;
+    setIsVoting(true);
     backendApi.posts.votePoll(post.id, optionId)
       .then(() => {
-        toast({ title: "Vote recorded!" });
         queryClient.invalidateQueries({ queryKey: ['feed'] });
+        queryClient.invalidateQueries({ queryKey: ['post', post.id] });
       })
-      .catch(() => {
-        toast({ title: "Failed to vote", variant: "destructive" });
-      });
+      .catch((err: Error) => {
+        toast({ title: err.message || "Failed to vote", variant: "destructive" });
+      })
+      .finally(() => setIsVoting(false));
   };
 
   const handleCopyLink = async () => {
@@ -307,6 +596,28 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
       toast({ title: "Post link copied" });
     } catch {
       toast({ title: "Could not copy link", variant: "destructive" });
+    }
+  };
+
+  const handleExternalShare = async () => {
+    const postUrl = `${window.location.origin}/posts/${post.id}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Post on Mericet",
+          text: post.content?.slice(0, 100) ?? "",
+          url: postUrl,
+        });
+      } catch {
+        // User cancelled or share failed — do nothing
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(postUrl);
+        toast({ title: "Link copied to clipboard" });
+      } catch {
+        toast({ title: "Could not copy link", variant: "destructive" });
+      }
     }
   };
 
@@ -381,18 +692,6 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      // Supabase timestamps may omit a timezone suffix, causing JS to parse them
-      // as local time instead of UTC, making posts appear N hours old.
-      // Ensure the string is treated as UTC by appending "Z" if no offset is present.
-      const hasOffset = dateString.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(dateString);
-      const normalized = hasOffset ? dateString : dateString + "Z";
-      return formatDistanceToNow(new Date(normalized), { addSuffix: true });
-    } catch {
-      return "recently";
-    }
-  };
 
   return (
     <motion.article
@@ -403,7 +702,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-start gap-3">
-          <Link to={`/profile/${post.author?.id}`}>
+          <Link to={`/profile/${post.author?.username || post.author?.id}`}>
             <UserAvatar
               src={post.author?.avatar_url}
               name={`${post.author?.first_name} ${post.author?.last_name}`}
@@ -412,7 +711,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <Link to={`/profile/${post.author?.id}`}>
+              <Link to={`/profile/${post.author?.username || post.author?.id}`}>
                 <h4 className="font-semibold hover:text-primary cursor-pointer transition-colors">
                   {post.author?.first_name} {post.author?.last_name}
                 </h4>
@@ -490,12 +789,7 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           <div className="mb-4 space-y-2">
             {mediaItems.map((item, idx) => (
               item.media_type === "video" ? (
-                <video
-                  key={idx}
-                  src={item.url}
-                  controls
-                  className="w-full rounded-lg max-h-96 object-cover"
-                />
+                <VideoPlayer key={idx} src={item.url} />
               ) : (
                 <img
                   key={idx}
@@ -520,6 +814,9 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
         if (pollObj?.options?.length) {
           const totalVotes = pollObj.options.reduce((sum, o) => sum + (o.vote_count || 0), 0);
           const hasVoted = !!pollObj.user_vote;
+          const endsAt = (pollObj as { ends_at?: string }).ends_at;
+          const isExpired = endsAt ? new Date(endsAt.includes('Z') || endsAt.includes('+') ? endsAt : endsAt + 'Z') < new Date() : false;
+          const locked = hasVoted || isExpired || isVoting;
           return (
             <div className="mb-4 space-y-2">
               {pollObj.options.map((option, index) => {
@@ -528,27 +825,28 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
                 return (
                   <button
                     key={option.id}
-                    onClick={() => !hasVoted && handleVote(index)}
-                    disabled={hasVoted}
+                    onClick={() => !locked && handleVote(index)}
+                    disabled={locked}
                     className={cn(
                       "w-full p-3 rounded-lg border text-left relative overflow-hidden transition-colors",
-                      hasVoted ? "cursor-not-allowed" : "hover:border-primary",
+                      locked ? "cursor-not-allowed opacity-90" : "hover:border-primary",
                       isSelected && "border-primary bg-primary/5"
                     )}
                   >
-                    <div className="absolute inset-0 bg-primary/10" style={{ width: `${percentage}%` }} />
+                    <div className="absolute inset-0 bg-primary/10" style={{ width: `${(hasVoted || isExpired) ? percentage : 0}%` }} />
                     <div className="relative flex items-center justify-between">
                       <span className="font-medium">{option.option_text}</span>
-                      {hasVoted && <span className="text-sm text-muted-foreground">{percentage.toFixed(0)}%</span>}
+                      {(hasVoted || isExpired) && <span className="text-sm text-muted-foreground">{percentage.toFixed(0)}%</span>}
                     </div>
                   </button>
                 );
               })}
-              {totalVotes > 0 && (
-                <p className="text-xs text-muted-foreground text-center">
-                  {totalVotes} vote{totalVotes !== 1 ? 's' : ''}
-                </p>
-              )}
+              <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                <span>{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</span>
+                {endsAt && (
+                  <span>{isExpired ? 'Poll ended' : `Ends ${formatDistanceToNow(new Date(endsAt.includes('Z') || endsAt.includes('+') ? endsAt : endsAt + 'Z'), { addSuffix: true })}`}</span>
+                )}
+              </div>
             </div>
           );
         }
@@ -596,18 +894,28 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
 
       {/* Actions */}
       <div className="flex items-center justify-between pt-3 border-t">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleLike}
-          className={cn(
-            "gap-2 transition-colors",
-            displayLiked && "text-red-500 hover:text-red-600"
-          )}
-        >
-          <Heart className={cn("h-4 w-4 transition-all", displayLiked && "fill-current scale-110")} />
-          <span>{displayLikeCount}</span>
-        </Button>
+        <div className="flex items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLike}
+            className={cn(
+              "gap-1 transition-colors pr-1",
+              displayLiked && "text-red-500 hover:text-red-600"
+            )}
+          >
+            <Heart className={cn("h-4 w-4 transition-all", displayLiked && "fill-current scale-110")} />
+          </Button>
+          <button
+            onClick={() => { if (displayLikeCount > 0) setShowLikers(true); }}
+            className={cn(
+              "text-sm px-1 rounded hover:bg-muted transition-colors",
+              displayLikeCount > 0 ? "cursor-pointer hover:underline" : "cursor-default"
+            )}
+          >
+            {displayLikeCount}
+          </button>
+        </div>
 
         <Button
           variant="ghost"
@@ -652,6 +960,9 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
               setShowShareModal(true);
             }}>
               Send in message
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExternalShare}>
+              Share externally
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -738,22 +1049,78 @@ export const PostCardNew = ({ post }: PostCardNewProps) => {
           </div>
 
           {/* Comments List */}
+          {commentTotal > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {comments.length} of {commentTotal} comment{commentTotal !== 1 ? 's' : ''}
+            </p>
+          )}
           {comments.map((comment: Comment) => (
-            <div key={comment.id} className="flex gap-2 text-sm">
-              <UserAvatar
-                src={comment.author?.avatar_url}
-                name={comment.author?.first_name}
-                size="sm"
-              />
-              <div className="flex-1">
-                <p className="font-semibold">{comment.author?.first_name} {comment.author?.last_name}</p>
-                <p className="text-muted-foreground">{comment.content}</p>
-                <span className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</span>
-              </div>
-            </div>
+            <CommentItem
+              key={comment.id}
+              comment={comment}
+              currentUserId={user?.id}
+              postAuthorId={post.author?.id ?? post.author_id}
+              postId={post.id}
+              onChanged={() => queryClient.invalidateQueries({ queryKey: ['comments', post.id] })}
+              isHighlighted={comment.id === highlightCommentId}
+            />
           ))}
+          {hasNextPage && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-muted-foreground text-xs"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+            >
+              {isFetchingNextPage
+                ? "Loading..."
+                : `View ${commentTotal - comments.length} more comment${commentTotal - comments.length !== 1 ? 's' : ''}`}
+            </Button>
+          )}
         </div>
       )}
+
+      {/* Likers Dialog */}
+      <Dialog open={showLikers} onOpenChange={setShowLikers}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Liked by</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto -mx-1 space-y-0.5">
+            {likersLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : likers.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No likes yet.</p>
+            ) : (
+              <>
+                {likers.map((liker) => (
+                  <Link
+                    key={liker.id}
+                    to={`/profile/${liker.username || liker.id}`}
+                    onClick={() => setShowLikers(false)}
+                    className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors"
+                  >
+                    <UserAvatar src={liker.avatar_url} name={`${liker.first_name} ${liker.last_name}`} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{liker.first_name} {liker.last_name}</p>
+                      {liker.username && (
+                        <p className="text-xs text-muted-foreground">@{liker.username}</p>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+                {/* Sentinel — triggers next page load when scrolled into view */}
+                <div ref={likersSentinelRef} className="py-1 flex justify-center">
+                  {likersFetchingMore && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Repost Dialog */}
       <Dialog open={showRepostDialog} onOpenChange={setShowRepostDialog}>

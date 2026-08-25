@@ -67,6 +67,7 @@ export function SaveToFolderModal({ postId, open, onOpenChange, onSaved }: SaveT
       toast({ title: folderName ? `Saved to "${folderName}"` : "Post saved" });
       queryClient.invalidateQueries({ queryKey: ["savedPosts"] });
       queryClient.invalidateQueries({ queryKey: ["allSaved"] });
+      queryClient.invalidateQueries({ queryKey: ["saveFolders"] });
       queryClient.invalidateQueries({ queryKey: ["feed"] });
       onSaved();
       onOpenChange(false);

@@ -47,7 +47,10 @@ def signup(
     try:
         result = auth_service.sign_up(payload.email, payload.password)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Signup failed: {str(e)}")
+        msg = str(e).lower()
+        if "already registered" in msg or "already exists" in msg or "duplicate" in msg:
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
+        raise HTTPException(status_code=500, detail="Signup failed. Please try again.")
 
     if result.user is None:
         raise HTTPException(status_code=409, detail="User with this email already exists")
@@ -145,15 +148,20 @@ def login(
 @router.post("/logout")
 def logout(
     payload: LogoutRequest,
-    user=Depends(require_auth),
     request: Request = None,
     auth_service=Depends(get_auth_service),
     login_repo=Depends(get_login_activity_repo),
 ):
-    auth_service.sign_out(payload.refresh_token)
+    try:
+        auth_service.sign_out(payload.refresh_token)
+    except Exception:
+        pass
     session_token = request.headers.get("Authorization", "").replace("Bearer ", "") if request else ""
     if session_token:
-        login_repo.deactivate_session(session_token)
+        try:
+            login_repo.deactivate_session(session_token)
+        except Exception:
+            pass
     return {"success": True}
 
 
@@ -175,7 +183,12 @@ def forgot_password(request: Request, payload: ForgotPasswordRequest, auth_servi
 @router.post("/reset-password")
 @limiter.limit("5/minute")
 def reset_password(request: Request, payload: ResetPasswordRequest, auth_service=Depends(get_auth_service)):
-    auth_service.update_password(payload.access_token, payload.new_password)
+    try:
+        auth_service.update_password(payload.access_token, payload.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to update password. Please try again.")
     return {"success": True, "message": "Password updated successfully"}
 
 

@@ -121,7 +121,9 @@ def _conversation_sort_key(conv: dict):
 
 
 @router.post("")
+@limiter.limit(WRITE_LIMIT)
 def send_message(
+    request: Request,
     payload: MessageCreate,
     user_id: str = Depends(require_auth),
     msg_repo=Depends(get_message_repo),
@@ -192,7 +194,7 @@ def send_message(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")
 
 
 @router.post("/send")
@@ -253,7 +255,7 @@ def send_message_to_conversation(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")
 
 
 @router.get("/conversations", response_model=List[ConversationResponse])
@@ -399,7 +401,7 @@ def get_conversations(
         enriched.sort(key=lambda c: (c.get("is_pinned", False), _conversation_sort_key(c)), reverse=True)
         return enriched
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")
 
 
 @router.patch("/conversations/{conversation_id}/pin")
@@ -417,7 +419,7 @@ def toggle_pin(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
@@ -466,7 +468,7 @@ def get_conversation_messages(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")
 
 
 @router.put("/conversations/{conversation_id}/read")
@@ -497,9 +499,8 @@ def mark_conversation_as_read(
 
         return {"message": "Messages marked as read"}
     except Exception as e:
-        # Non-critical path: do not break chat UX if read-marking fails intermittently.
-        print(f"Warning: mark_conversation_as_read failed for {conversation_id}, user {user_id}: {e}")
-        return {"message": "Messages marked as read"}
+        print(f"Error: mark_conversation_as_read failed for {conversation_id}, user {user_id}: {e}")
+        raise HTTPException(status_code=503, detail="Could not mark messages as read")
 
 
 @router.put("/messages/{message_id}/read")
@@ -530,7 +531,7 @@ def mark_message_as_read(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")
 
 
 @router.put("/messages/{message_id}")
@@ -594,7 +595,7 @@ def edit_message(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")
 
 
 @router.post("/messages/{message_id}/reactions")
@@ -611,6 +612,7 @@ def toggle_reaction(
             return {"action": "removed", "emoji": payload.emoji}
         return {"action": "added", "emoji": payload.emoji, "data": {}}
     except Exception as e:
+        print(f"Error toggling reaction on {message_id} by {user_id}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -626,7 +628,7 @@ def remove_reaction(
         msg_repo.remove_reaction(message_id, user_id, emoji)
         return {"message": "Reaction removed"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")
 
 
 DELETE_WINDOW_MINUTES = 15
@@ -667,7 +669,7 @@ def delete_message(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")
 
 
 @router.get("/unread-count")
@@ -718,4 +720,4 @@ def delete_conversation(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")

@@ -36,6 +36,10 @@ import {
   Chrome,
   Activity,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { authApi } from "@/lib/api";
+import { PasswordStrength } from "@/components/ui/PasswordStrength";
+import { useToast } from "@/hooks/use-toast";
 
 const loginHistory = [
   {
@@ -84,11 +88,63 @@ const connectedAccounts = [
 ];
 
 const SecuritySettings = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [loginAlerts, setLoginAlerts] = useState(true);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError("");
+
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New passwords do not match.");
+      return;
+    }
+    if (!user?.email) {
+      setPasswordError("Could not determine your account email. Please log in again.");
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      // Step 1: verify current password by re-authenticating
+      let freshToken: string;
+      try {
+        const loginRes = await authApi.login({ email: user.email, password: currentPassword });
+        freshToken = loginRes.session.access_token;
+      } catch {
+        setPasswordError("Current password is incorrect.");
+        return;
+      }
+
+      // Step 2: update to the new password using the fresh token
+      await authApi.resetPassword({ access_token: freshToken, new_password: newPassword });
+
+      toast({ title: "Password updated successfully" });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch {
+      setPasswordError("Failed to update password. Please try again.");
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   return (
     <AppLayout>
@@ -125,55 +181,96 @@ const SecuritySettings = () => {
                   Update your password to keep your account secure
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="current-password">Current Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="current-password"
-                      type={showCurrentPassword ? "text" : "password"}
-                      placeholder="Enter current password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showCurrentPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
+              <CardContent>
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  {passwordError && (
+                    <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                      <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                      <span>{passwordError}</span>
+                    </div>
+                  )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="new-password">New Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="new-password"
-                      type={showNewPassword ? "text" : "password"}
-                      placeholder="Enter new password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showNewPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
+                  <div className="space-y-2">
+                    <Label htmlFor="current-password">Current Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="current-password"
+                        type={showCurrentPassword ? "text" : "password"}
+                        placeholder="Enter current password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Must be at least 8 characters with letters, numbers, and symbols
-                  </p>
-                </div>
 
-                <Button>Update Password</Button>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">New Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="new-password"
+                        type={showNewPassword ? "text" : "password"}
+                        placeholder="Enter new password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {newPassword && <PasswordStrength password={newPassword} />}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password">Confirm New Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="confirm-password"
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="Confirm new password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className={confirmPassword ? (confirmPassword === newPassword ? "border-green-300" : "border-red-300") : ""}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {confirmPassword && confirmPassword !== newPassword && (
+                      <p className="text-sm text-red-600">Passwords do not match</p>
+                    )}
+                    {confirmPassword && confirmPassword === newPassword && (
+                      <p className="text-sm text-green-600 flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        Passwords match
+                      </p>
+                    )}
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={passwordLoading || !currentPassword || newPassword.length < 8 || newPassword !== confirmPassword}
+                  >
+                    {passwordLoading ? "Updating..." : "Update Password"}
+                  </Button>
+                </form>
               </CardContent>
             </Card>
 

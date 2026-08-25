@@ -118,11 +118,26 @@ const NetworkNew = () => {
     },
   });
 
-  // Filter connections based on search
+  const q = searchQuery.toLowerCase();
+
   const filteredConnections = connections.filter((conn) =>
-    `${conn.user?.first_name} ${conn.user?.last_name} ${conn.user?.username}`
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase())
+    `${conn.user?.first_name} ${conn.user?.last_name} ${conn.user?.username}`.toLowerCase().includes(q)
+  );
+
+  const filteredFollowers = followers.filter((u) =>
+    `${u.first_name} ${u.last_name} ${u.username ?? ""}`.toLowerCase().includes(q)
+  );
+
+  const filteredFollowing = following.filter((u) =>
+    `${u.first_name} ${u.last_name} ${u.username ?? ""}`.toLowerCase().includes(q)
+  );
+
+  const filteredReceived = receivedRequests.filter((r) =>
+    `${r.user?.first_name} ${r.user?.last_name} ${r.user?.username ?? ""}`.toLowerCase().includes(q)
+  );
+
+  const filteredSent = sentRequests.filter((r) =>
+    `${r.user?.first_name} ${r.user?.last_name} ${r.user?.username ?? ""}`.toLowerCase().includes(q)
   );
 
   return (
@@ -158,24 +173,24 @@ const NetworkNew = () => {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full max-w-3xl grid-cols-5">
-            <TabsTrigger value="connections" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+          <TabsList className="flex w-full max-w-3xl overflow-x-auto h-auto flex-nowrap justify-start">
+            <TabsTrigger value="connections" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap shrink-0">
               <UserCheck className="w-4 h-4 hidden sm:block" />
               Connections ({connections.length})
             </TabsTrigger>
-            <TabsTrigger value="followers" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+            <TabsTrigger value="followers" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap shrink-0">
               <Heart className="w-4 h-4 hidden sm:block" />
               Followers ({followers.length})
             </TabsTrigger>
-            <TabsTrigger value="following" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+            <TabsTrigger value="following" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap shrink-0">
               <Users className="w-4 h-4 hidden sm:block" />
               Following ({following.length})
             </TabsTrigger>
-            <TabsTrigger value="requests" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+            <TabsTrigger value="requests" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap shrink-0">
               <Clock className="w-4 h-4 hidden sm:block" />
               Requests ({allPendingRequests.length})
             </TabsTrigger>
-            <TabsTrigger value="suggestions" className="flex items-center gap-1 text-xs sm:text-sm px-1 sm:px-3">
+            <TabsTrigger value="suggestions" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 whitespace-nowrap shrink-0">
               <UserPlus className="w-4 h-4 hidden sm:block" />
               Suggestions
             </TabsTrigger>
@@ -190,9 +205,9 @@ const NetworkNew = () => {
             ) : filteredConnections.length === 0 ? (
               <div className="text-center py-12">
                 <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-semibold">No connections yet</p>
+                <p className="text-lg font-semibold">{q ? "No results" : "No connections yet"}</p>
                 <p className="text-muted-foreground mt-2">
-                  Start building your network by connecting with others!
+                  {q ? "No connections match your search." : "Start building your network by connecting with others!"}
                 </p>
               </div>
             ) : (
@@ -206,7 +221,7 @@ const NetworkNew = () => {
                   >
                     <Card className="p-4">
                       <div className="flex items-start gap-3">
-                        <Link to={`/profile/${connection.user?.id}`}>
+                        <Link to={`/profile/${connection.user?.username || connection.user?.id}`}>
                           <UserAvatar
                             src={connection.user?.avatar_url}
                             name={`${connection.user?.first_name} ${connection.user?.last_name}`}
@@ -214,7 +229,7 @@ const NetworkNew = () => {
                           />
                         </Link>
                         <div className="flex-1 min-w-0">
-                          <Link to={`/profile/${connection.user?.id}`}>
+                          <Link to={`/profile/${connection.user?.username || connection.user?.id}`}>
                             <h4 className="font-semibold hover:text-primary truncate">
                               {connection.user?.first_name} {connection.user?.last_name}
                             </h4>
@@ -259,17 +274,17 @@ const NetworkNew = () => {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-            ) : followers.length === 0 ? (
+            ) : filteredFollowers.length === 0 ? (
               <div className="text-center py-12">
                 <Heart className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-semibold">No followers yet</p>
+                <p className="text-lg font-semibold">{q ? "No results" : "No followers yet"}</p>
                 <p className="text-muted-foreground mt-2">
-                  When people follow you, they'll appear here
+                  {q ? "No followers match your search." : "When people follow you, they'll appear here"}
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {followers.map((follower, index) => (
+                {filteredFollowers.map((follower, index) => (
                   <motion.div
                     key={follower.id}
                     initial={{ opacity: 0, y: 20 }}
@@ -278,7 +293,7 @@ const NetworkNew = () => {
                   >
                     <Card className="p-4">
                       <div className="flex items-start gap-3">
-                        <Link to={`/profile/${follower.id}`}>
+                        <Link to={`/profile/${follower.username || follower.id}`}>
                           <UserAvatar
                             src={follower.avatar_url}
                             name={`${follower.first_name} ${follower.last_name}`}
@@ -286,7 +301,7 @@ const NetworkNew = () => {
                           />
                         </Link>
                         <div className="flex-1 min-w-0">
-                          <Link to={`/profile/${follower.id}`}>
+                          <Link to={`/profile/${follower.username || follower.id}`}>
                             <h4 className="font-semibold hover:text-primary truncate">
                               {follower.first_name} {follower.last_name}
                             </h4>
@@ -314,17 +329,17 @@ const NetworkNew = () => {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-            ) : following.length === 0 ? (
+            ) : filteredFollowing.length === 0 ? (
               <div className="text-center py-12">
                 <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-semibold">Not following anyone</p>
+                <p className="text-lg font-semibold">{q ? "No results" : "Not following anyone"}</p>
                 <p className="text-muted-foreground mt-2">
-                  Follow people to see their content in your feed
+                  {q ? "No one you follow matches your search." : "Follow people to see their content in your feed"}
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {following.map((person, index) => (
+                {filteredFollowing.map((person, index) => (
                   <motion.div
                     key={person.id}
                     initial={{ opacity: 0, y: 20 }}
@@ -333,7 +348,7 @@ const NetworkNew = () => {
                   >
                     <Card className="p-4">
                       <div className="flex items-start gap-3">
-                        <Link to={`/profile/${person.id}`}>
+                        <Link to={`/profile/${person.username || person.id}`}>
                           <UserAvatar
                             src={person.avatar_url}
                             name={`${person.first_name} ${person.last_name}`}
@@ -341,7 +356,7 @@ const NetworkNew = () => {
                           />
                         </Link>
                         <div className="flex-1 min-w-0">
-                          <Link to={`/profile/${person.id}`}>
+                          <Link to={`/profile/${person.username || person.id}`}>
                             <h4 className="font-semibold hover:text-primary truncate">
                               {person.first_name} {person.last_name}
                             </h4>
@@ -369,24 +384,24 @@ const NetworkNew = () => {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-            ) : allPendingRequests.length === 0 ? (
+            ) : filteredReceived.length === 0 && filteredSent.length === 0 ? (
               <div className="text-center py-12">
                 <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-semibold">No pending requests</p>
+                <p className="text-lg font-semibold">{q ? "No results" : "No pending requests"}</p>
                 <p className="text-muted-foreground mt-2">
-                  You'll see connection requests here
+                  {q ? "No requests match your search." : "You'll see connection requests here"}
                 </p>
               </div>
             ) : (
               <div className="space-y-8">
                 {/* Received requests */}
-                {receivedRequests.length > 0 && (
+                {filteredReceived.length > 0 && (
                   <div>
                     <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                      Received ({receivedRequests.length})
+                      Received ({filteredReceived.length})
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {receivedRequests.map((request, index: number) => (
+                      {filteredReceived.map((request, index: number) => (
                         <motion.div
                           key={request.id}
                           initial={{ opacity: 0, y: 20 }}
@@ -395,7 +410,7 @@ const NetworkNew = () => {
                         >
                           <Card className="p-4">
                             <div className="flex items-start gap-3">
-                              <Link to={`/profile/${request.user?.id}`}>
+                              <Link to={`/profile/${request.user?.username || request.user?.id}`}>
                                 <UserAvatar
                                   src={request.user?.avatar_url}
                                   name={`${request.user?.first_name} ${request.user?.last_name}`}
@@ -403,7 +418,7 @@ const NetworkNew = () => {
                                 />
                               </Link>
                               <div className="flex-1 min-w-0">
-                                <Link to={`/profile/${request.user?.id}`}>
+                                <Link to={`/profile/${request.user?.username || request.user?.id}`}>
                                   <h4 className="font-semibold hover:text-primary truncate">
                                     {request.user?.first_name} {request.user?.last_name}
                                   </h4>
@@ -451,13 +466,13 @@ const NetworkNew = () => {
                 )}
 
                 {/* Sent requests */}
-                {sentRequests.length > 0 && (
+                {filteredSent.length > 0 && (
                   <div>
                     <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                      Sent ({sentRequests.length})
+                      Sent ({filteredSent.length})
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {sentRequests.map((request, index: number) => (
+                      {filteredSent.map((request, index: number) => (
                         <motion.div
                           key={request.id}
                           initial={{ opacity: 0, y: 20 }}
@@ -466,7 +481,7 @@ const NetworkNew = () => {
                         >
                           <Card className="p-4">
                             <div className="flex items-start gap-3">
-                              <Link to={`/profile/${request.user?.id}`}>
+                              <Link to={`/profile/${request.user?.username || request.user?.id}`}>
                                 <UserAvatar
                                   src={request.user?.avatar_url}
                                   name={`${request.user?.first_name} ${request.user?.last_name}`}
@@ -474,7 +489,7 @@ const NetworkNew = () => {
                                 />
                               </Link>
                               <div className="flex-1 min-w-0">
-                                <Link to={`/profile/${request.user?.id}`}>
+                                <Link to={`/profile/${request.user?.username || request.user?.id}`}>
                                   <h4 className="font-semibold hover:text-primary truncate">
                                     {request.user?.first_name} {request.user?.last_name}
                                   </h4>
@@ -541,7 +556,7 @@ const NetworkNew = () => {
                   >
                     <Card className="p-4">
                       <div className="flex items-start gap-3">
-                        <Link to={`/profile/${suggestion.id}`}>
+                        <Link to={`/profile/${suggestion.username || suggestion.id}`}>
                           <UserAvatar
                             src={suggestion.avatar_url}
                             name={`${suggestion.first_name} ${suggestion.last_name}`}
@@ -549,7 +564,7 @@ const NetworkNew = () => {
                           />
                         </Link>
                         <div className="flex-1 min-w-0">
-                          <Link to={`/profile/${suggestion.id}`}>
+                          <Link to={`/profile/${suggestion.username || suggestion.id}`}>
                             <h4 className="font-semibold hover:text-primary truncate">
                               {suggestion.first_name} {suggestion.last_name}
                             </h4>

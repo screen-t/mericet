@@ -34,10 +34,35 @@ class SupabaseAuthService:
         return self._to_auth_result(res)
 
     def reset_password_email(self, email: str) -> None:
-        self._client.auth.reset_password_email(email)
+        self._client.auth.reset_password_email(
+            email,
+            options={"redirect_to": "https://mericet.vercel.app/reset-password"},
+        )
 
     def update_password(self, access_token: str, new_password: str) -> None:
-        self._client.auth.update_user(access_token, {"password": new_password})
+        try:
+            user_response = self._client.auth.get_user(access_token)
+        except Exception as e:
+            raise ValueError(f"Token validation failed: {e}")
+        if not user_response or not user_response.user:
+            raise ValueError("Token is invalid or expired")
+        user_id = user_response.user.id
+        try:
+            self._client.auth.admin.update_user_by_id(user_id, {"password": new_password})
+        except Exception as e:
+            raise ValueError(f"Failed to update password: {e}")
+
+    def delete_user(self, user_id: str) -> None:
+        import httpx
+        import os
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
+        res = httpx.delete(
+            f"{url}/auth/v1/admin/users/{user_id}",
+            headers={"apikey": key, "Authorization": f"Bearer {key}"},
+        )
+        if not res.is_success:
+            raise Exception(res.text)
 
     def get_user_by_id(self, user_id: str) -> Optional[AuthUser]:
         try:

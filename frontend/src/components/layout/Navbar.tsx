@@ -108,10 +108,10 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
     setShowSearchSuggestions(false);
   };
 
-  const handleSuggestionPick = (suggestion: { text: string; user_id?: string; post_id?: string; type?: string }) => {
+  const handleSuggestionPick = (suggestion: { text: string; user_id?: string; username?: string; post_id?: string; type?: string }) => {
     setSearchQuery(suggestion.text);
     if (suggestion.type === "user" && suggestion.user_id) {
-      navigate(`/profile/${suggestion.user_id}`);
+      navigate(`/profile/${suggestion.username || suggestion.user_id}`);
     } else if (suggestion.type === "company") {
       navigate(`/companies?q=${encodeURIComponent(suggestion.text)}`);
     } else if (suggestion.type === "post" && suggestion.post_id) {
@@ -271,7 +271,14 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                           <DropdownMenuItem
                             key={account.id}
                             className="cursor-pointer"
-                            onClick={() => switchAccount(account)}
+                            onClick={async () => {
+                              try { await switchAccount(account) }
+                              catch (err) {
+                                const msg = err instanceof Error ? err.message : ''
+                                const hint = msg.startsWith('session_expired:') ? msg.slice('session_expired:'.length) : undefined
+                                navigate('/login', { state: { hint } })
+                              }
+                            }}
                           >
                             <UserAvatar
                               src={account.avatar_url}
@@ -477,7 +484,15 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                             key={account.id}
                             variant="outline"
                             className="w-full gap-3 justify-start"
-                            onClick={() => { setIsMobileMenuOpen(false); switchAccount(account); }}
+                            onClick={async () => {
+                              setIsMobileMenuOpen(false)
+                              try { await switchAccount(account) }
+                              catch (err) {
+                                const msg = err instanceof Error ? err.message : ''
+                                const hint = msg.startsWith('session_expired:') ? msg.slice('session_expired:'.length) : undefined
+                                navigate('/login', { state: { hint } })
+                              }
+                            }}
                           >
                             <UserAvatar
                               src={account.avatar_url}

@@ -38,6 +38,7 @@ import {
   Instagram,
   Github,
   StickyNote,
+  Share2,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -46,7 +47,18 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const ProfilePage = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -58,8 +70,30 @@ export const ProfilePage = () => {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [showReportDialog, setShowReportDialog] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteEditing, setNoteEditing] = useState(false);
+
+  const toAbsoluteUrl = (url: string) =>
+    /^https?:\/\//i.test(url) ? url : `https://${url}`;
+
+  const handleShareProfile = async (targetProfile: Profile) => {
+    const shareUrl = `${window.location.origin}/profile/${targetProfile.username || targetProfile.id}`;
+    const name = `${targetProfile.first_name} ${targetProfile.last_name}`.trim();
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: name, text: `Check out ${name}'s profile on Mericet`, url: shareUrl });
+        return;
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+      }
+    }
+    navigator.clipboard.writeText(shareUrl).then(
+      () => toast({ title: "Profile link copied" }),
+      () => toast({ title: "Could not copy link", variant: "destructive" }),
+    );
+  };
 
   const uploadAvatarMutation = useMutation({
     mutationFn: (file: File) => backendApi.profile.uploadAvatar(file),
@@ -79,49 +113,29 @@ export const ProfilePage = () => {
     onError: () => toast({ title: "Failed to upload cover", variant: "destructive" }),
   });
 
+  const removeAvatarMutation = useMutation({
+    mutationFn: () => backendApi.profile.removeAvatar(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      toast({ title: "Profile photo removed" });
+    },
+    onError: () => toast({ title: "Failed to remove photo", variant: "destructive" }),
+  });
+
+  const removeCoverMutation = useMutation({
+    mutationFn: () => backendApi.profile.removeCover(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+      toast({ title: "Cover photo removed" });
+    },
+    onError: () => toast({ title: "Failed to remove cover", variant: "destructive" }),
+  });
+
   // Determine which user profile to show
   const profileUserId = userId || user?.id;
   const isOwnProfile = !userId || userId === user?.id;
 
-  const { data: muteStatus } = useQuery({
-    queryKey: ['muteStatus', profileUserId],
-    queryFn: () => backendApi.notifications.getMuteStatus(profileUserId!),
-    enabled: !isOwnProfile && !!profileUserId,
-  });
-
-  const muteMutation = useMutation({
-    mutationFn: () =>
-      muteStatus?.is_muted
-        ? backendApi.notifications.unmuteUser(profileUserId!)
-        : backendApi.notifications.muteUser(profileUserId!),
-    onSuccess: () => {
-      toast({ title: muteStatus?.is_muted ? "User unmuted" : "User muted" });
-      queryClient.invalidateQueries({ queryKey: ['muteStatus', profileUserId] });
-    },
-    onError: () => toast({ title: "Failed to update mute status", variant: "destructive" }),
-  });
-
-  const { data: noteData } = useQuery({
-    queryKey: ['connectionNote', profileUserId],
-    queryFn: () => backendApi.connections.getConnectionNote(profileUserId!),
-    enabled: !isOwnProfile && !!profileUserId,
-  });
-
-  useEffect(() => {
-    if (noteData?.note !== undefined) setNoteText(noteData.note || "");
-  }, [noteData]);
-
-  const saveNoteMutation = useMutation({
-    mutationFn: (note: string) => backendApi.connections.saveConnectionNote(profileUserId!, note),
-    onSuccess: () => {
-      toast({ title: noteText.trim() ? "Note saved" : "Note removed" });
-      setNoteEditing(false);
-      queryClient.invalidateQueries({ queryKey: ['connectionNote', profileUserId] });
-    },
-    onError: () => toast({ title: "Failed to save note", variant: "destructive" }),
-  });
-
-  // Fetch profile data
+  // Fetch profile first — dependent queries need profile.id (UUID) not the URL param (may be a username)
   const { data: profile, isLoading, error } = useQuery<Profile>({
     queryKey: ['profile', profileUserId],
     queryFn: async () => {
@@ -133,28 +147,74 @@ export const ProfilePage = () => {
     enabled: !!profileUserId,
   });
 
+  const profileId = profile?.id ?? profileUserId;
+
+  const { data: muteStatus } = useQuery({
+    queryKey: ['muteStatus', profileId],
+    queryFn: () => backendApi.notifications.getMuteStatus(profile!.id),
+    enabled: !isOwnProfile && !!profile?.id,
+  });
+
+  const muteMutation = useMutation({
+    mutationFn: () =>
+      muteStatus?.is_muted
+        ? backendApi.notifications.unmuteUser(profile?.id ?? profileUserId!)
+        : backendApi.notifications.muteUser(profile?.id ?? profileUserId!),
+    onSuccess: () => {
+      toast({ title: muteStatus?.is_muted ? "User unmuted" : "User muted" });
+      queryClient.invalidateQueries({ queryKey: ['muteStatus', profileId] });
+    },
+    onError: () => toast({ title: "Failed to update mute status", variant: "destructive" }),
+  });
+
+  const { data: noteData } = useQuery({
+    queryKey: ['connectionNote', profileId],
+    queryFn: () => backendApi.connections.getConnectionNote(profile!.id),
+    enabled: !isOwnProfile && !!profile?.id,
+  });
+
+  useEffect(() => {
+    if (noteData?.note !== undefined) setNoteText(noteData.note || "");
+  }, [noteData]);
+
+  const saveNoteMutation = useMutation({
+    mutationFn: (note: string) => backendApi.connections.saveConnectionNote(profile?.id ?? profileUserId!, note),
+    onSuccess: () => {
+      toast({ title: noteText.trim() ? "Note saved" : "Note removed" });
+      setNoteEditing(false);
+      queryClient.invalidateQueries({ queryKey: ['connectionNote', profileId] });
+    },
+    onError: () => toast({ title: "Failed to save note", variant: "destructive" }),
+  });
+
   // Fetch connection status if viewing another user's profile
-  const { data: connectionStatus } = useQuery({
+  // Note: getConnectionStatus accepts username; followStatus needs UUID
+  const { data: connectionStatus, isLoading: connectionStatusLoading } = useQuery({
     queryKey: ['connectionStatus', profileUserId],
     queryFn: () => backendApi.connections.getConnectionStatus(profileUserId!),
     enabled: !isOwnProfile && !!profileUserId,
   });
 
   const { data: followStatus } = useQuery({
-    queryKey: ['followStatus', profileUserId],
-    queryFn: () => backendApi.follows.status(profileUserId!),
-    enabled: !isOwnProfile && !!profileUserId,
+    queryKey: ['followStatus', profileId],
+    queryFn: () => backendApi.follows.status(profile!.id),
+    enabled: !isOwnProfile && !!profile?.id,
   });
 
   // Connection actions
   const sendConnectionRequest = useMutation({
-    mutationFn: () => backendApi.connections.sendRequest(profileUserId!),
+    mutationFn: () => backendApi.connections.sendRequest(profile?.id ?? profileUserId!),
     onSuccess: () => {
       toast({ title: "Connection request sent!" });
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
     },
-    onError: () => {
-      toast({ title: "Failed to send request", variant: "destructive" });
+    onError: (error: Error) => {
+      // 409 means the request already exists — treat as success and refresh
+      if (error.message?.toLowerCase().includes('already')) {
+        queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
+        return;
+      }
+      toast({ title: "Couldn't send request. Please try again.", variant: "destructive" });
     },
   });
 
@@ -165,41 +225,54 @@ export const ProfilePage = () => {
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
     },
     onError: () => {
-      toast({ title: "Failed to remove connection", variant: "destructive" });
+      // Refresh anyway — the connection may have already been removed
+      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
     },
   });
 
   const respondToRequest = useMutation({
-    mutationFn: (accept: boolean) =>
-      backendApi.connections.respondToRequest(connectionStatus?.connection_id ?? "", accept),
+    mutationFn: (accept: boolean) => {
+      const connectionId = connectionStatus?.connection_id;
+      if (!connectionId) throw new Error('Connection ID not found');
+      return backendApi.connections.respondToRequest(connectionId, accept);
+    },
     onSuccess: (_, accept) => {
       toast({ title: accept ? "Connection accepted!" : "Request declined" });
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
       queryClient.invalidateQueries({ queryKey: ['connections'] });
     },
     onError: () => {
-      toast({ title: "Failed to respond to request", variant: "destructive" });
+      // Refresh status silently — the action may have gone through
+      queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
     },
   });
 
   const followMutation = useMutation({
-    mutationFn: () => backendApi.follows.follow(profileUserId!),
+    mutationFn: () => backendApi.follows.follow(profile?.id ?? profileUserId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileId] });
       queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+    },
+    onError: () => {
+      // Refresh silently — backend returns 200 for "already following" so a
+      // real error here is a network blip; let the UI self-correct
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileId] });
     },
   });
 
   const unfollowMutation = useMutation({
-    mutationFn: () => backendApi.follows.unfollow(profileUserId!),
+    mutationFn: () => backendApi.follows.unfollow(profile?.id ?? profileUserId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['followStatus', profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileId] });
       queryClient.invalidateQueries({ queryKey: ['profile', profileUserId] });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ['followStatus', profileId] });
     },
   });
 
   const blockMutation = useMutation({
-    mutationFn: () => backendApi.connections.blockUser(profileUserId!),
+    mutationFn: () => backendApi.connections.blockUser(profile?.id ?? profileUserId!),
     onSuccess: () => {
       toast({ title: "User blocked" });
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
@@ -210,7 +283,7 @@ export const ProfilePage = () => {
   });
 
   const unblockMutation = useMutation({
-    mutationFn: () => backendApi.connections.unblockUser(profileUserId!),
+    mutationFn: () => backendApi.connections.unblockUser(profile?.id ?? profileUserId!),
     onSuccess: () => {
       toast({ title: "User unblocked" });
       queryClient.invalidateQueries({ queryKey: ['connectionStatus', profileUserId] });
@@ -271,19 +344,33 @@ export const ProfilePage = () => {
                   e.target.value = "";
                 }}
               />
-              <button
-                onClick={() => coverInputRef.current?.click()}
-                className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-              >
-                {uploadCoverMutation.isPending ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                {uploadCoverMutation.isPending || removeCoverMutation.isPending ? (
                   <Loader2 className="w-8 h-8 text-white animate-spin" />
                 ) : (
-                  <div className="flex items-center gap-2 text-white">
-                    <Camera className="w-6 h-6" />
-                    <span className="text-sm font-medium">Change Cover</span>
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex items-center gap-2 text-white cursor-pointer">
+                        <Camera className="w-6 h-6" />
+                        <span className="text-sm font-medium">Edit Cover</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => coverInputRef.current?.click()}>
+                        Change cover photo
+                      </DropdownMenuItem>
+                      {profile.cover_url && (
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => removeCoverMutation.mutate()}
+                        >
+                          Remove cover photo
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
-              </button>
+              </div>
             </>
           )}
         </motion.div>
@@ -317,16 +404,32 @@ export const ProfilePage = () => {
                         e.target.value = "";
                       }}
                     />
-                    <button
-                      onClick={() => avatarInputRef.current?.click()}
-                      className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer"
-                    >
-                      {uploadAvatarMutation.isPending ? (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover/avatar:opacity-100 transition-opacity">
+                      {uploadAvatarMutation.isPending || removeAvatarMutation.isPending ? (
                         <Loader2 className="w-6 h-6 text-white animate-spin" />
                       ) : (
-                        <Camera className="w-6 h-6 text-white" />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="flex items-center justify-center w-full h-full rounded-full cursor-pointer">
+                              <Camera className="w-6 h-6 text-white" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem onClick={() => avatarInputRef.current?.click()}>
+                              Change profile photo
+                            </DropdownMenuItem>
+                            {profile.avatar_url && (
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => removeAvatarMutation.mutate()}
+                              >
+                                Remove profile photo
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
-                    </button>
+                    </div>
                   </>
                 )}
               </div>
@@ -355,7 +458,7 @@ export const ProfilePage = () => {
                       )}
                       {profile.website && (
                         <a
-                          href={profile.website}
+                          href={toAbsoluteUrl(profile.website)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 hover:text-primary"
@@ -376,22 +479,22 @@ export const ProfilePage = () => {
                     {(profile.linkedin_url || profile.twitter_url || profile.instagram_url || profile.github_url) && (
                       <div className="flex flex-wrap gap-3 mt-2">
                         {profile.linkedin_url && (
-                          <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                          <a href={toAbsoluteUrl(profile.linkedin_url)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
                             <Linkedin className="w-5 h-5" />
                           </a>
                         )}
                         {profile.twitter_url && (
-                          <a href={profile.twitter_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                          <a href={toAbsoluteUrl(profile.twitter_url)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
                             <Twitter className="w-5 h-5" />
                           </a>
                         )}
                         {profile.instagram_url && (
-                          <a href={profile.instagram_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                          <a href={toAbsoluteUrl(profile.instagram_url)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
                             <Instagram className="w-5 h-5" />
                           </a>
                         )}
                         {profile.github_url && (
-                          <a href={profile.github_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                          <a href={toAbsoluteUrl(profile.github_url)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
                             <Github className="w-5 h-5" />
                           </a>
                         )}
@@ -471,13 +574,18 @@ export const ProfilePage = () => {
                           Edit Profile
                         </Link>
                       </Button>
+                    ) : connectionStatusLoading ? (
+                      <div className="flex gap-2">
+                        <div className="h-10 w-24 rounded-md bg-muted animate-pulse" />
+                        <div className="h-10 w-24 rounded-md bg-muted animate-pulse" />
+                      </div>
                     ) : (
                       <>
                         {connectionStatus?.status === 'accepted' ? (
                           <>
                             <Button
                               variant="default"
-                              onClick={() => navigate(`/messages/${profileUserId}`)}
+                              onClick={() => navigate(`/messages/${profile.id}`)}
                               className="w-full sm:w-auto"
                             >
                               <MessageSquare className="w-4 h-4 mr-2" />
@@ -503,7 +611,7 @@ export const ProfilePage = () => {
                             )}
                             <Button
                               variant="outline"
-                              onClick={() => removeConnection.mutate()}
+                              onClick={() => setShowRemoveConfirm(true)}
                               className="w-full sm:w-auto"
                             >
                               <UserCheck className="w-4 h-4 mr-2" />
@@ -578,6 +686,21 @@ export const ProfilePage = () => {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleShareProfile(profile)}>
+                                <Share2 className="w-4 h-4 mr-2" />
+                                Share profile
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => muteMutation.mutate()}
+                                disabled={muteMutation.isPending}
+                              >
+                                {muteStatus?.is_muted ? "Unmute notifications" : "Mute notifications"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
+                                Report user
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
                               {connectionStatus?.status === 'blocked' ? (
                                 connectionStatus.is_requester ? (
                                   <DropdownMenuItem
@@ -595,21 +718,12 @@ export const ProfilePage = () => {
                               ) : (
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
-                                  onClick={() => blockMutation.mutate()}
+                                  onClick={() => setShowBlockConfirm(true)}
                                   disabled={blockMutation.isPending}
                                 >
                                   Block
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuItem
-                                onClick={() => muteMutation.mutate()}
-                                disabled={muteMutation.isPending}
-                              >
-                                {muteStatus?.is_muted ? "Unmute notifications" : "Mute notifications"}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
-                                Report user
-                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         )}
@@ -633,18 +747,60 @@ export const ProfilePage = () => {
           open={showReportDialog}
           onOpenChange={setShowReportDialog}
           targetType="user"
-          targetId={profileUserId!}
+          targetId={profile.id}
           targetLabel="user"
         />
 
+        <AlertDialog open={showRemoveConfirm} onOpenChange={setShowRemoveConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove connection?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {profile?.first_name ?? "This user"} will be removed from your connections. You can always reconnect later.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => removeConnection.mutate()}
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={showBlockConfirm} onOpenChange={setShowBlockConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Block {profile?.first_name ?? "this user"}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                They won't be able to see your profile or send you connection requests. You can unblock them at any time.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => blockMutation.mutate()}
+              >
+                Block
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* Profile Tabs */}
         <Tabs defaultValue="about" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 h-auto gap-0">
-            <TabsTrigger value="about" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">About</TabsTrigger>
-            <TabsTrigger value="posts" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Posts</TabsTrigger>
-            <TabsTrigger value="experience" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Experience</TabsTrigger>
-            <TabsTrigger value="education" className="text-xs md:text-sm py-2 md:py-3 px-1 md:px-4">Education</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto">
+            <TabsList className="grid grid-cols-4 w-full min-w-[360px] h-auto gap-0">
+              <TabsTrigger value="about" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">About</TabsTrigger>
+              <TabsTrigger value="posts" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Posts</TabsTrigger>
+              <TabsTrigger value="experience" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Experience</TabsTrigger>
+              <TabsTrigger value="education" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Education</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="about" className="space-y-6">
             <motion.div

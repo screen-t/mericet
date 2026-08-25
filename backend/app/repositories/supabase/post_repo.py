@@ -9,7 +9,7 @@ class SupabasePostRepository:
 
     def get_by_id(self, post_id: str) -> Optional[dict]:
         result = self._client.table("posts").select("*") \
-            .eq("id", post_id).single().execute()
+            .eq("id", post_id).maybe_single().execute()
         return result.data if result.data else None
 
     def get_feed(self, visibility: str, limit: int, offset: int) -> list[dict]:
@@ -159,6 +159,18 @@ class SupabasePostRepository:
             .eq("user_id", user_id).in_("post_id", post_ids).execute()
         return {r["post_id"] for r in (result.data or [])}
 
+    def get_likers(self, post_id: str, limit: int = 50, offset: int = 0) -> list[dict]:
+        result = self._client.table("post_likes") \
+            .select("liker:user_id(id, first_name, last_name, username, avatar_url, headline)") \
+            .eq("post_id", post_id) \
+            .limit(limit).offset(offset).execute()
+        likers = []
+        for row in (result.data or []):
+            user = row.get("liker")
+            if user:
+                likers.append(user)
+        return likers
+
     def get_like_counts(self, post_ids: list[str]) -> dict[str, int]:
         result = self._client.table("post_likes").select("post_id") \
             .in_("post_id", post_ids).execute()
@@ -239,10 +251,18 @@ class SupabasePostRepository:
         if polls_by_id:
             options_resp = self._client.table("post_poll_options") \
                 .select("*").in_("poll_id", list(polls_by_id.keys())) \
-                .order("display_order").execute()
+                .execute()
             for opt in (options_resp.data or []):
                 polls_by_id[opt["poll_id"]].setdefault("options", []).append(opt)
+            for poll in polls_by_id.values():
+                if "options" in poll:
+                    poll["options"].sort(key=lambda o: o.get("display_order", 0))
         return polls_map
+
+    def get_poll_by_id(self, poll_id: str) -> Optional[dict]:
+        result = self._client.table("post_polls").select("id, ends_at") \
+            .eq("id", poll_id).maybe_single().execute()
+        return result.data if result.data else None
 
     def get_poll_user_vote(self, poll_id: str, user_id: str) -> Optional[str]:
         result = self._client.table("post_poll_votes").select("option_id") \

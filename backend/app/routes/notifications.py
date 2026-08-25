@@ -8,7 +8,7 @@ from typing import List
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
-@router.get("/", response_model=List[NotificationResponse])
+@router.get("", response_model=List[NotificationResponse])
 def get_notifications(
     user_id: str = Depends(require_auth),
     notif_repo: NotificationRepository = Depends(get_notification_repo),
@@ -89,10 +89,17 @@ def mute_user_notifications(
     user_id: str = Depends(require_auth),
     notif_repo: NotificationRepository = Depends(get_notification_repo),
 ):
-    if notif_repo.is_muted(user_id, target_user_id):
-        return {"message": "Already muted"}
-    notif_repo.mute_user(user_id, target_user_id)
-    return {"message": "User muted"}
+    try:
+        if notif_repo.is_muted(user_id, target_user_id):
+            return {"message": "Already muted"}
+        notif_repo.mute_user(user_id, target_user_id)
+        return {"message": "User muted"}
+    except Exception as e:
+        print(f"Error muting user {target_user_id} for {user_id}: {e}")
+        # Treat duplicate key as success — the mute exists either way
+        if "duplicate" in str(e).lower() or "unique" in str(e).lower():
+            return {"message": "Already muted"}
+        raise HTTPException(status_code=500, detail="Failed to mute user")
 
 
 @router.delete("/mute/{target_user_id}")
@@ -101,8 +108,12 @@ def unmute_user_notifications(
     user_id: str = Depends(require_auth),
     notif_repo: NotificationRepository = Depends(get_notification_repo),
 ):
-    notif_repo.unmute_user(user_id, target_user_id)
-    return {"message": "User unmuted"}
+    try:
+        notif_repo.unmute_user(user_id, target_user_id)
+        return {"message": "User unmuted"}
+    except Exception as e:
+        print(f"Error unmuting user {target_user_id} for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to unmute user")
 
 
 @router.get("/mute/status/{target_user_id}")

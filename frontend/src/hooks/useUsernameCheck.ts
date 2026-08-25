@@ -32,9 +32,10 @@ export const useUsernameCheck = (username: string, debounceMs: number = 500): Us
         const result = await authApi.checkUsername(username)
         setIsAvailable(result.available)
         setError(null)
-      } catch (err: unknown) {
-        setError((err as Error).message || "Failed to check username")
+      } catch {
+        // Check failed — don't block the form, let signup validate it
         setIsAvailable(null)
+        setError(null)
       } finally {
         setIsChecking(false)
       }

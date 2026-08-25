@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -31,7 +31,6 @@ import { ConversationsResponse, MessagesResponse, User, MessageReaction } from '
 import {
   Search,
   Send,
-  Paperclip,
   Loader2,
   MessageSquare,
   ArrowLeft,
@@ -55,6 +54,38 @@ type ConfirmAction =
   | { type: "delete-message"; messageId: string }
   | { type: "delete-conversation" }
   | null;
+
+const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+
+function renderWithLinks(text: string, isMyMessage: boolean) {
+  return text.split('\n').map((line, lineIdx) => {
+    const parts = line.split(URL_REGEX);
+    return (
+      <span key={lineIdx}>
+        {lineIdx > 0 && <br />}
+        {parts.map((part, partIdx) =>
+          partIdx % 2 === 1 ? (
+            <a
+              key={partIdx}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                "underline break-all",
+                isMyMessage ? "text-white/90 hover:text-white" : "text-primary hover:text-primary/80"
+              )}
+            >
+              {part}
+            </a>
+          ) : (
+            <span key={partIdx}>{part}</span>
+          )
+        )}
+      </span>
+    );
+  });
+}
 
 const MessagesNew = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -432,9 +463,12 @@ const MessagesNew = () => {
   const reactionMutation = useMutation({
     mutationFn: ({ messageId, emoji }: { messageId: string; emoji: string }) =>
       backendApi.messages.toggleReaction(messageId, emoji),
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     onMutate: async ({ messageId, emoji }) => {
       if (!userId) return;
       await queryClient.cancelQueries({ queryKey: ['messages', userId] });
+      const previousMessages = queryClient.getQueryData<MessagesResponse>(['messages', userId]);
       queryClient.setQueryData<MessagesResponse>(['messages', userId], (old) => {
         if (!old?.messages) return old;
         return {
@@ -451,10 +485,18 @@ const MessagesNew = () => {
         };
       });
       setReactionPickerMessageId(null);
+      return { previousMessages };
     },
-    onError: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousMessages) {
+        queryClient.setQueryData(['messages', userId], ctx.previousMessages);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['messages', userId] });
+      }
       toast({ title: "Failed to react", variant: "destructive" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', userId] });
     },
   });
 
@@ -467,27 +509,42 @@ const MessagesNew = () => {
     },
   });
 
-  // Also mark the whole conversation as read when opening it, then refresh unread badge
+  // Mark the whole conversation as read when opening it or when new messages arrive.
+  // Retries once on failure so a transient Supabase error doesn't leave stale badges.
   useEffect(() => {
-    if (resolvedConversationId && messagesData?.messages?.length) {
-      backendApi.messages.markConversationAsReadById(resolvedConversationId)
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
-          // Optimistically clear unread count in the conversations cache
-          queryClient.setQueryData<ConversationsResponse>(['conversations'], (old) => {
-            if (!old?.conversations) return old;
-            return {
-              conversations: old.conversations.map((c) =>
-                c.id === resolvedConversationId ? { ...c, unread_count: 0 } : c
-              ),
-            };
-          });
-        })
-        .catch(() => {
-          // Read-marking is best-effort and should not interrupt chat flow.
-        });
-    }
-  }, [resolvedConversationId, messagesData?.messages?.length]);
+    if (!resolvedConversationId || !messagesData?.messages?.length) return;
+
+    const convId = resolvedConversationId;
+
+    const applyRead = () => {
+      // Refresh the navbar badge immediately — simple count query, no race risk
+      queryClient.invalidateQueries({ queryKey: ['unreadMessages'] });
+      // Optimistic patch on the conversations list for instant badge clear.
+      // Do NOT invalidate ['conversations'] here: an immediate refetch races with
+      // any in-flight 10s-interval refetch and can overwrite this patch with
+      // stale data from before the mark_read DB write, causing the badge to flicker.
+      // The 10s poll will sync the correct server state naturally.
+      queryClient.setQueryData<ConversationsResponse>(['conversations'], (old) => {
+        if (!old?.conversations) return old;
+        return {
+          conversations: old.conversations.map((c) =>
+            c.id === convId ? { ...c, unread_count: 0 } : c
+          ),
+        };
+      });
+    };
+
+    backendApi.messages.markConversationAsReadById(convId)
+      .then(applyRead)
+      .catch(() => {
+        // Retry once after 2 s — covers transient Supabase errors
+        setTimeout(() => {
+          backendApi.messages.markConversationAsReadById(convId)
+            .then(applyRead)
+            .catch(() => {});
+        }, 2000);
+      });
+  }, [resolvedConversationId, messagesData?.messages?.length, queryClient]);
 
   // Guard against malformed URLs like /messages/undefined
   useEffect(() => {
@@ -529,7 +586,7 @@ const MessagesNew = () => {
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setMessageText("");
     setReplyTo(null);
-    sendMessageMutation.mutate({ recipientId: userId, content, tempId, conversationId: resolvedConversationId });
+    sendMessageMutation.mutate({ recipientId: otherUser?.id || userId, content, tempId, conversationId: resolvedConversationId });
   };
 
   const handleSelectConversation = (convUserId?: string | null) => {
@@ -643,7 +700,7 @@ const MessagesNew = () => {
 
   const { data: connectionsData, isFetching: loadingConnections } = useQuery<import('@/types/api').ConnectionsResponse>({
     queryKey: ['connections', 'accepted'],
-    queryFn: () => backendApi.connections.getConnections('accepted', 200, 0),
+    queryFn: () => backendApi.connections.getConnections('accepted', 100, 0),
     enabled: true,
     staleTime: 30000,
   });
@@ -680,6 +737,7 @@ const MessagesNew = () => {
     queryFn: () => backendApi.profile.getProfile(userId!) as Promise<User>,
     enabled: !!userId,
     staleTime: 60000,
+    refetchInterval: 60000,
   });
 
   // A placeholder is what the backend injects when the real profile lookup times out.
@@ -693,6 +751,14 @@ const MessagesNew = () => {
     (!isPlaceholderUser(otherUserFromConversations) ? otherUserFromConversations : null) ??
     newConvProfile ??
     otherUserFromConversations;
+
+  // Self-heal non-canonical URLs (e.g. a username instead of the UUID) once the
+  // real profile resolves — every internal comparison above assumes userId is a UUID.
+  useEffect(() => {
+    if (otherUser?.id && userId && otherUser.id !== userId) {
+      navigate(`/messages/${otherUser.id}`, { replace: true });
+    }
+  }, [otherUser?.id, userId, navigate]);
 
   return (
     <AppLayout>
@@ -925,21 +991,46 @@ const MessagesNew = () => {
                   >
                     <ArrowLeft className="w-5 h-5" />
                   </Button>
-                  <UserAvatar
-                    src={otherUser.avatar_url}
-                    name={`${otherUser.first_name} ${otherUser.last_name}`}
-                    size="md"
-                  />
-                  <div>
-                    <h3 className="font-semibold">
-                      {otherUser.first_name} {otherUser.last_name}
-                    </h3>
-                    {otherUser.headline && (
-                      <p className="text-sm text-muted-foreground">
-                        {otherUser.headline}
-                      </p>
-                    )}
-                  </div>
+                  <Link
+                    to={`/profile/${otherUser.username || otherUser.id}`}
+                    className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                  >
+                    <UserAvatar
+                      src={otherUser.avatar_url}
+                      name={`${otherUser.first_name} ${otherUser.last_name}`}
+                      size="md"
+                    />
+                    <div>
+                      <h3 className="font-semibold">
+                        {otherUser.first_name} {otherUser.last_name}
+                      </h3>
+                      {(() => {
+                        const rawTs = otherUser.last_active_at;
+                        const lastActive = rawTs ? new Date(rawTs.includes('Z') || rawTs.includes('+') ? rawTs : rawTs + 'Z') : null;
+                        if (lastActive) {
+                          const diffMin = Math.floor((Date.now() - lastActive.getTime()) / 60000);
+                          if (diffMin < 5) {
+                            return (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                Active now
+                              </span>
+                            );
+                          }
+                          const timeAgo = diffMin < 60
+                            ? `${diffMin}m ago`
+                            : diffMin < 1440
+                            ? `${Math.floor(diffMin / 60)}h ago`
+                            : `${Math.floor(diffMin / 1440)}d ago`;
+                          return <p className="text-xs text-muted-foreground">Last seen {timeAgo}</p>;
+                        }
+                        if (otherUser.headline) {
+                          return <p className="text-sm text-muted-foreground">{otherUser.headline}</p>;
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </Link>
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1047,10 +1138,10 @@ const MessagesNew = () => {
                             </div>
                           )}
 
-                          <div className="flex flex-col">
+                          <div className="flex flex-col min-w-0 max-w-[75vw] sm:max-w-md">
                           <div
                             className={cn(
-                              "max-w-md p-3 rounded-lg",
+                              "w-full p-3 rounded-lg break-words",
                               isMyMessage
                                 ? "bg-gradient-primary text-white"
                                 : "bg-muted"
@@ -1105,15 +1196,15 @@ const MessagesNew = () => {
                                 return (
                                   <>
                                     <div className={cn(
-                                      "text-xs px-2 py-1 rounded mb-1 border-l-2",
+                                      "text-xs px-2 py-1 rounded mb-1 border-l-2 min-w-0 overflow-hidden",
                                       isMyMessage
                                         ? "bg-white/10 border-white/40 text-white/80"
                                         : "bg-background/60 border-primary/50 text-muted-foreground"
                                     )}>
                                       <span className="font-medium">{quotedName}</span>
-                                      <p className="truncate">{quotedText}</p>
+                                      <p className="truncate max-w-full">{quotedText}</p>
                                     </div>
-                                    <p className="text-sm">{actualContent}</p>
+                                    <p className="text-sm">{renderWithLinks(actualContent, isMyMessage)}</p>
                                   </>
                                 );
                               }
@@ -1137,7 +1228,7 @@ const MessagesNew = () => {
                                   />
                                 );
                               }
-                              return <p className="text-sm">{message.content}</p>;
+                              return <p className="text-sm">{renderWithLinks(message.content, isMyMessage)}</p>;
                             })()}
                             <p
                               className={cn(
@@ -1310,9 +1401,6 @@ const MessagesNew = () => {
                   </div>
                 )}
                 <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-                  <Button type="button" variant="ghost" size="icon">
-                    <Paperclip className="w-5 h-5" />
-                  </Button>
                   <Input
                     placeholder="Type a message..."
                     value={messageText}

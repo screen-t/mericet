@@ -23,4 +23,16 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    // shadcn/ui generated files and context/provider files export both components
+    // and constants/context — the fast-refresh rule doesn't apply to them.
+    files: [
+      "src/components/ui/**/*.{ts,tsx}",
+      "src/lib/auth.tsx",
+      "src/lib/theme.tsx",
+    ],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
 );

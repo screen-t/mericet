@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { useAuth } from "@/lib/auth";
+import { authApi } from "@/lib/api";
 import { backendApi } from "@/lib/backend-api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -28,8 +29,9 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/lib/theme";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Link } from "react-router-dom";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Link, useNavigate } from "react-router-dom";
 import { Connection } from "@/types/api";
 
 const BlockedUsersSection = () => {
@@ -88,7 +90,7 @@ const BlockedUsersSection = () => {
               blocked.map((conn: Connection) => (
                 <div key={conn.id} className="flex items-center justify-between p-3 rounded-lg border">
                   <Link
-                    to={`/profile/${conn.user?.id}`}
+                    to={`/profile/${conn.user?.username || conn.user?.id}`}
                     onClick={() => setOpen(false)}
                     className="flex items-center gap-3 min-w-0 flex-1"
                   >
@@ -127,6 +129,7 @@ const BlockedUsersSection = () => {
 const Settings = () => {
   const { toast } = useToast();
   const { logout, refreshUser, savedAccounts, switchAccount, removeAccount } = useAuth();
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -142,6 +145,11 @@ const Settings = () => {
     email: "",
     username: "",
     headline: "",
+    bio: "",
+    location: "",
+    currentPosition: "",
+    currentCompany: "",
+    website: "",
     linkedinUrl: "",
     twitterUrl: "",
     instagramUrl: "",
@@ -149,6 +157,9 @@ const Settings = () => {
   });
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const [usernameError, setUsernameError] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Update local state when profile data loads
   useEffect(() => {
@@ -159,6 +170,11 @@ const Settings = () => {
         email: profileData.email || "",
         username: profileData.username || "",
         headline: profileData.headline || "",
+        bio: profileData.bio || "",
+        location: profileData.location || "",
+        currentPosition: profileData.current_position || "",
+        currentCompany: profileData.current_company || "",
+        website: profileData.website || "",
         linkedinUrl: profileData.linkedin_url || "",
         twitterUrl: profileData.twitter_url || "",
         instagramUrl: profileData.instagram_url || "",
@@ -248,11 +264,32 @@ const Settings = () => {
     onError: () => toast({ title: "Failed to upload cover", variant: "destructive" }),
   });
 
+  const removeAvatarMutation = useMutation({
+    mutationFn: () => backendApi.profile.removeAvatar(),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+      await refreshUser();
+      toast({ title: "Profile photo removed" });
+    },
+    onError: () => toast({ title: "Failed to remove photo", variant: "destructive" }),
+  });
+
+  const removeCoverMutation = useMutation({
+    mutationFn: () => backendApi.profile.removeCover(),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+      await refreshUser();
+      toast({ title: "Cover photo removed" });
+    },
+    onError: () => toast({ title: "Failed to remove cover", variant: "destructive" }),
+  });
+
   // Mutation to update profile
   const updateProfileMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => backendApi.profile.updateProfile(data),
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
       await refreshUser();
       toast({
         title: "Profile updated",
@@ -287,6 +324,9 @@ const Settings = () => {
       connections_visible?: boolean;
       work_history_visible?: boolean;
       activity_status_visible?: boolean;
+      allow_messages_from_anyone?: boolean;
+      show_typing_indicator?: boolean;
+      notification_preferences?: Record<string, boolean>;
     }) => backendApi.profile.updatePrivacy(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
@@ -335,6 +375,11 @@ const Settings = () => {
       last_name: profile.lastName,
       username: normalizedUsername,
       headline: profile.headline,
+      bio: profile.bio.trim() || null,
+      location: profile.location.trim() || null,
+      current_position: profile.currentPosition.trim() || null,
+      current_company: profile.currentCompany.trim() || null,
+      website: profile.website.trim() || null,
       linkedin_url: profile.linkedinUrl.trim() || null,
       twitter_url: profile.twitterUrl.trim() || null,
       instagram_url: profile.instagramUrl.trim() || null,
@@ -372,6 +417,23 @@ const Settings = () => {
       });
     }
   };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== "DELETE") return;
+    setIsDeleting(true);
+    try {
+      await authApi.deleteAccount();
+      await logout();
+    } catch {
+      toast({
+        title: "Failed to delete account",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <AppLayout>
       {isLoading ? (
@@ -388,24 +450,26 @@ const Settings = () => {
         </div>
 
         <Tabs defaultValue="account" className="space-y-6">
-          <TabsList className="bg-card border border-border">
-            <TabsTrigger value="account" className="gap-2">
-              <User className="h-4 w-4" />
-              Account
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-2">
-              <Bell className="h-4 w-4" />
-              Notifications
-            </TabsTrigger>
-            <TabsTrigger value="privacy" className="gap-2">
-              <Shield className="h-4 w-4" />
-              Privacy
-            </TabsTrigger>
-            <TabsTrigger value="appearance" className="gap-2">
-              <Palette className="h-4 w-4" />
-              Appearance
-            </TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto sm:overflow-visible">
+            <TabsList className="bg-card border border-border flex flex-nowrap w-max sm:grid sm:grid-cols-4 sm:w-full">
+              <TabsTrigger value="account" className="gap-2 whitespace-nowrap">
+                <User className="h-4 w-4" />
+                Account
+              </TabsTrigger>
+              <TabsTrigger value="notifications" className="gap-2 whitespace-nowrap">
+                <Bell className="h-4 w-4" />
+                Notifications
+              </TabsTrigger>
+              <TabsTrigger value="privacy" className="gap-2 whitespace-nowrap">
+                <Shield className="h-4 w-4" />
+                Privacy
+              </TabsTrigger>
+              <TabsTrigger value="appearance" className="gap-2 whitespace-nowrap">
+                <Palette className="h-4 w-4" />
+                Appearance
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Account Tab */}
           <TabsContent value="account">
@@ -419,12 +483,12 @@ const Settings = () => {
                 const fields = [
                   !!profileData?.avatar_url,
                   !!profileData?.cover_url,
-                  !!profileData?.headline,
-                  !!profileData?.bio,
-                  !!profileData?.location,
-                  !!profileData?.current_position,
-                  !!profileData?.current_company,
-                  !!profileData?.website || !!profileData?.linkedin_url || !!profileData?.twitter_url,
+                  !!profile.headline,
+                  !!profile.bio,
+                  !!profile.location,
+                  !!profile.currentPosition,
+                  !!profile.currentCompany,
+                  !!(profile.website || profile.linkedinUrl || profile.twitterUrl || profile.instagramUrl || profile.githubUrl),
                 ];
                 const filled = fields.filter(Boolean).length;
                 const pct = Math.round((filled / fields.length) * 100);
@@ -471,16 +535,37 @@ const Settings = () => {
                       e.target.value = "";
                     }}
                   />
-                  <button
-                    onClick={() => avatarInputRef.current?.click()}
-                    className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:bg-primary/90 transition-colors"
-                  >
-                    {uploadAvatarMutation.isPending ? (
+                  {uploadAvatarMutation.isPending || removeAvatarMutation.isPending ? (
+                    <div className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
+                    </div>
+                  ) : profileData?.avatar_url ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:bg-primary/90 transition-colors">
+                          <Camera className="h-4 w-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => avatarInputRef.current?.click()}>
+                          Change profile photo
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => removeAvatarMutation.mutate()}
+                        >
+                          Remove profile photo
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <button
+                      onClick={() => avatarInputRef.current?.click()}
+                      className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:bg-primary/90 transition-colors"
+                    >
                       <Camera className="h-4 w-4" />
-                    )}
-                  </button>
+                    </button>
+                  )}
                 </div>
                 <div>
                   <h3 className="font-semibold">Profile Photo</h3>
@@ -508,19 +593,43 @@ const Settings = () => {
                       e.target.value = "";
                     }}
                   />
-                  <button
-                    onClick={() => coverInputRef.current?.click()}
-                    className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors cursor-pointer"
-                  >
-                    {uploadCoverMutation.isPending ? (
+                  {uploadCoverMutation.isPending || removeCoverMutation.isPending ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                       <Loader2 className="w-6 h-6 text-white animate-spin" />
-                    ) : (
+                    </div>
+                  ) : profileData?.cover_url ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors cursor-pointer">
+                          <div className="flex items-center gap-2 text-white">
+                            <Camera className="w-5 h-5" />
+                            <span className="text-sm font-medium">Edit Cover</span>
+                          </div>
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => coverInputRef.current?.click()}>
+                          Change cover photo
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => removeCoverMutation.mutate()}
+                        >
+                          Remove cover photo
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <button
+                      onClick={() => coverInputRef.current?.click()}
+                      className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors cursor-pointer"
+                    >
                       <div className="flex items-center gap-2 text-white">
                         <Camera className="w-5 h-5" />
-                        <span className="text-sm font-medium">Change Cover</span>
+                        <span className="text-sm font-medium">Add Cover</span>
                       </div>
-                    )}
-                  </button>
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">JPG, PNG or GIF. Max 5MB. Recommended: 1500×500px</p>
               </div>
@@ -607,6 +716,64 @@ const Settings = () => {
                     }
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currentPosition">Current Position</Label>
+                  <Input
+                    id="currentPosition"
+                    placeholder="e.g. Software Engineer"
+                    value={profile.currentPosition}
+                    onChange={(e) =>
+                      setProfile({ ...profile, currentPosition: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currentCompany">Current Company</Label>
+                  <Input
+                    id="currentCompany"
+                    placeholder="e.g. Acme Inc."
+                    value={profile.currentCompany}
+                    onChange={(e) =>
+                      setProfile({ ...profile, currentCompany: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="location">Location</Label>
+                  <Input
+                    id="location"
+                    placeholder="e.g. Nairobi, Kenya"
+                    value={profile.location}
+                    onChange={(e) =>
+                      setProfile({ ...profile, location: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="website">Website</Label>
+                  <Input
+                    id="website"
+                    placeholder="https://yoursite.com"
+                    value={profile.website}
+                    onChange={(e) =>
+                      setProfile({ ...profile, website: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="bio">Bio</Label>
+                  <textarea
+                    id="bio"
+                    rows={3}
+                    maxLength={2000}
+                    placeholder="Tell people a bit about yourself"
+                    value={profile.bio}
+                    onChange={(e) =>
+                      setProfile({ ...profile, bio: e.target.value })
+                    }
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                  />
+                </div>
               </div>
 
               <Separator />
@@ -679,18 +846,72 @@ const Settings = () => {
 
               <Separator />
 
+              {/* Security & Login */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    Security & Login
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Change your password and manage login activity
+                  </p>
+                </div>
+                <Link to="/settings/security">
+                  <Button variant="outline" size="sm">Manage</Button>
+                </Link>
+              </div>
+
+              <Separator />
+
               {/* Danger Zone */}
               <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/5">
                 <h3 className="font-semibold text-destructive mb-2">
                   Danger Zone
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Once you delete your account, there is no going back.
+                  Once you delete your account, there is no going back. All your data will be permanently removed.
                 </p>
-                <Button variant="destructive" size="sm">
+                <Button variant="destructive" size="sm" onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}>
                   Delete Account
                 </Button>
               </div>
+
+              {/* Delete Account Confirmation Dialog */}
+              <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="text-destructive">Delete Account</DialogTitle>
+                    <DialogDescription>
+                      This will permanently delete your account, profile, posts, messages, and all associated data. This action cannot be undone.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 py-2">
+                    <p className="text-sm text-muted-foreground">
+                      Type <span className="font-mono font-bold text-foreground">DELETE</span> to confirm.
+                    </p>
+                    <Input
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      placeholder="DELETE"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleDeleteAccount}
+                      disabled={deleteConfirmText !== "DELETE" || isDeleting}
+                    >
+                      {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Delete My Account
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </motion.div>
           </TabsContent>
 
@@ -713,12 +934,11 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={notifications.connectionRequests}
-                      onCheckedChange={(checked) =>
-                        setNotifications({
-                          ...notifications,
-                          connectionRequests: checked,
-                        })
-                      }
+                      onCheckedChange={(checked) => {
+                        const updated = { ...notifications, connectionRequests: checked };
+                        setNotifications(updated);
+                        updatePrivacyMutation.mutate({ notification_preferences: { connection_requests: updated.connectionRequests, mentions: updated.mentions, new_followers: updated.newFollowers, post_engagement: updated.postEngagement, show_preview: updated.showPreview } });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -730,9 +950,11 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={notifications.mentions}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, mentions: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        const updated = { ...notifications, mentions: checked };
+                        setNotifications(updated);
+                        updatePrivacyMutation.mutate({ notification_preferences: { connection_requests: updated.connectionRequests, mentions: updated.mentions, new_followers: updated.newFollowers, post_engagement: updated.postEngagement, show_preview: updated.showPreview } });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -744,9 +966,11 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={notifications.newFollowers}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, newFollowers: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        const updated = { ...notifications, newFollowers: checked };
+                        setNotifications(updated);
+                        updatePrivacyMutation.mutate({ notification_preferences: { connection_requests: updated.connectionRequests, mentions: updated.mentions, new_followers: updated.newFollowers, post_engagement: updated.postEngagement, show_preview: updated.showPreview } });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -758,12 +982,11 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={notifications.postEngagement}
-                      onCheckedChange={(checked) =>
-                        setNotifications({
-                          ...notifications,
-                          postEngagement: checked,
-                        })
-                      }
+                      onCheckedChange={(checked) => {
+                        const updated = { ...notifications, postEngagement: checked };
+                        setNotifications(updated);
+                        updatePrivacyMutation.mutate({ notification_preferences: { connection_requests: updated.connectionRequests, mentions: updated.mentions, new_followers: updated.newFollowers, post_engagement: updated.postEngagement, show_preview: updated.showPreview } });
+                      }}
                     />
                   </div>
                 </div>
@@ -783,9 +1006,11 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={notifications.showPreview}
-                      onCheckedChange={(checked) =>
-                        setNotifications({ ...notifications, showPreview: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        const updated = { ...notifications, showPreview: checked };
+                        setNotifications(updated);
+                        updatePrivacyMutation.mutate({ notification_preferences: { connection_requests: updated.connectionRequests, mentions: updated.mentions, new_followers: updated.newFollowers, post_engagement: updated.postEngagement, show_preview: updated.showPreview } });
+                      }}
                     />
                   </div>
                 </div>
@@ -812,9 +1037,10 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={privacy.showEmail}
-                      onCheckedChange={(checked) =>
-                        setPrivacy({ ...privacy, showEmail: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        setPrivacy({ ...privacy, showEmail: checked });
+                        updatePrivacyMutation.mutate({ email_visible: checked });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -826,9 +1052,10 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={privacy.showConnections}
-                      onCheckedChange={(checked) =>
-                        setPrivacy({ ...privacy, showConnections: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        setPrivacy({ ...privacy, showConnections: checked });
+                        updatePrivacyMutation.mutate({ connections_visible: checked });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -840,9 +1067,10 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={privacy.allowMessages}
-                      onCheckedChange={(checked) =>
-                        setPrivacy({ ...privacy, allowMessages: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        setPrivacy({ ...privacy, allowMessages: checked });
+                        updatePrivacyMutation.mutate({ allow_messages_from_anyone: checked });
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -854,9 +1082,10 @@ const Settings = () => {
                     </div>
                     <Switch
                       checked={privacy.showTypingIndicator}
-                      onCheckedChange={(checked) =>
-                        setPrivacy({ ...privacy, showTypingIndicator: checked })
-                      }
+                      onCheckedChange={(checked) => {
+                        setPrivacy({ ...privacy, showTypingIndicator: checked });
+                        updatePrivacyMutation.mutate({ show_typing_indicator: checked });
+                      }}
                     />
                   </div>
                 </div>
@@ -895,7 +1124,14 @@ const Settings = () => {
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
-                                onClick={() => switchAccount(account)}
+                                onClick={async () => {
+                                  try { await switchAccount(account) }
+                                  catch (err) {
+                                    const msg = err instanceof Error ? err.message : ''
+                                    const hint = msg.startsWith('session_expired:') ? msg.slice('session_expired:'.length) : undefined
+                                    navigate('/login', { state: { hint } })
+                                  }
+                                }}
                               >
                                 Switch
                               </Button>

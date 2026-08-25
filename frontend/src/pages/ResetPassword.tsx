@@ -6,11 +6,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PasswordStrength } from '@/components/ui/PasswordStrength'
 import { Shield, Eye, EyeOff, CheckCircle } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const token = searchParams.get('token') || ''
+  const [token, setToken] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -20,17 +21,30 @@ const ResetPassword = () => {
   const [error, setError] = useState('')
   const [passwordsMatch, setPasswordsMatch] = useState(false)
 
-  // Validate that passwords match
   useEffect(() => {
     setPasswordsMatch(password === confirm && password.length > 0)
   }, [password, confirm])
 
-  // Redirect to login if no token
+  // Resolve the access token from either PKCE (?code=) or implicit (#access_token=) flow
   useEffect(() => {
-    if (!token) {
+    const code = searchParams.get('code')
+    const hashParams = new URLSearchParams(window.location.hash.substring(1))
+    const hashToken = hashParams.get('access_token')
+
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+        if (error || !data.session) {
+          navigate('/login')
+        } else {
+          setToken(data.session.access_token)
+        }
+      })
+    } else if (hashToken) {
+      setToken(hashToken)
+    } else {
       navigate('/login')
     }
-  }, [token, navigate])
+  }, [navigate, searchParams])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,7 +75,11 @@ const ResetPassword = () => {
   }
 
   if (!token) {
-    return null // Will redirect
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+      </div>
+    )
   }
 
   return (

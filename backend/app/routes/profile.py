@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request
 from app.middleware.auth import require_auth, optional_auth
+from app.middleware.rate_limit import limiter, UPLOAD_LIMIT
 from app.deps import (
     get_user_repo, get_work_experience_repo, get_education_repo,
     get_skill_repo, get_storage_service, get_auth_service,
@@ -99,7 +100,11 @@ def update_my_profile(
     user_repo=Depends(get_user_repo),
 ):
     """Update current user's profile"""
-    update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    # exclude_unset so Pydantic defaults (None) don't wipe fields the client didn't touch.
+    # Fields that CAN be explicitly cleared (set to null) are allowed through even when None.
+    _CLEARABLE = {'linkedin_url', 'twitter_url', 'instagram_url', 'github_url', 'website', 'bio', 'location', 'current_position', 'current_company'}
+    raw = payload.model_dump(exclude_unset=True)
+    update_data = {k: v for k, v in raw.items() if v is not None or k in _CLEARABLE}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
 
@@ -127,57 +132,108 @@ def update_my_profile(
             if "email" in str(e).lower():
                 raise HTTPException(status_code=409, detail="Email already in use")
             raise HTTPException(status_code=409, detail="Username already taken")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to update profile")
 
     if not updated:
         raise HTTPException(status_code=404, detail="Profile not found")
     return {"message": "Profile updated successfully", "data": updated}
 
 
+@router.delete("/me")
+def delete_my_account(
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+    auth_service=Depends(get_auth_service),
+):
+    """Permanently delete the current user's account and all associated data."""
+    user_repo.delete(user_id)
+    try:
+        auth_service.delete_user(user_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete auth user: {e}")
+    return {"message": "Account deleted successfully"}
+
+
 # ==================== IMAGE UPLOADS ====================
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 
+def _detect_image_type(contents: bytes) -> tuple[str, str] | None:
+    """Return (mime, ext) by inspecting magic bytes. Never trusts browser content-type."""
+    if contents[:3] == b"\xff\xd8\xff":
+        return ("image/jpeg", "jpg")
+    if contents[:8] == b"\x89PNG\r\n\x1a\n":
+        return ("image/png", "png")
+    if contents[:4] == b"RIFF" and contents[8:12] == b"WEBP":
+        return ("image/webp", "webp")
+    if contents[:6] in (b"GIF87a", b"GIF89a"):
+        return ("image/gif", "gif")
+    return None
+
+
+def _validate_image(file: UploadFile, contents: bytes) -> tuple[str, str]:
+    """Detect image type from magic bytes; return (mime, ext). Raises 400 on bad input."""
+    if len(contents) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail="Image must be smaller than 5 MB")
+    result = _detect_image_type(contents)
+    if result is None:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are allowed")
+    return result
+
+
 @router.post("/upload-avatar")
+@limiter.limit(UPLOAD_LIMIT)
 async def upload_avatar(
+    request: Request,
     file: UploadFile = File(...),
     user_id: str = Depends(require_auth),
     user_repo=Depends(get_user_repo),
     storage=Depends(get_storage_service),
 ):
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are allowed")
     contents = await file.read()
-    if len(contents) > MAX_IMAGE_SIZE:
-        raise HTTPException(status_code=400, detail="Image must be smaller than 5 MB")
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    mime, ext = _validate_image(file, contents)
     path = f"{user_id}/avatar.{ext}"
-    public_url = storage.upload("avatars", path, contents, file.content_type)
+    public_url = storage.upload("avatars", path, contents, mime)
     public_url = f"{public_url}?t={int(time.time())}"
     user_repo.update(user_id, {"avatar_url": public_url})
     return {"avatar_url": public_url}
 
 
 @router.post("/upload-cover")
+@limiter.limit(UPLOAD_LIMIT)
 async def upload_cover(
+    request: Request,
     file: UploadFile = File(...),
     user_id: str = Depends(require_auth),
     user_repo=Depends(get_user_repo),
     storage=Depends(get_storage_service),
 ):
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP and GIF images are allowed")
     contents = await file.read()
-    if len(contents) > MAX_IMAGE_SIZE:
-        raise HTTPException(status_code=400, detail="Image must be smaller than 5 MB")
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    mime, ext = _validate_image(file, contents)
     path = f"{user_id}/cover.{ext}"
-    public_url = storage.upload("covers", path, contents, file.content_type)
+    public_url = storage.upload("covers", path, contents, mime)
     public_url = f"{public_url}?t={int(time.time())}"
     user_repo.update(user_id, {"cover_url": public_url})
     return {"cover_url": public_url}
+
+
+@router.delete("/me/avatar")
+def remove_avatar(
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+):
+    user_repo.update(user_id, {"avatar_url": None})
+    return {"message": "Profile photo removed"}
+
+
+@router.delete("/me/cover")
+def remove_cover(
+    user_id: str = Depends(require_auth),
+    user_repo=Depends(get_user_repo),
+):
+    user_repo.update(user_id, {"cover_url": None})
+    return {"message": "Cover photo removed"}
 
 
 @router.put("/privacy")
@@ -371,7 +427,7 @@ def add_skill(
     except Exception as e:
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
             raise HTTPException(status_code=409, detail="Skill already exists")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to add skill")
 
 
 @router.delete("/skills/{skill_id}")

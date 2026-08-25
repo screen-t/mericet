@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>mericet - Professional Network | Connect, Collaborate & Grow</title>
     <meta name="description" content="Join mericet, the exclusive professional network where industry leaders, professionals, and innovators connect and build meaningful business relationships." />
+
+    <!-- PWA -->
+    <meta name="theme-color" content="#1a66ff" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Mericet" />
+    <link rel="apple-touch-icon" href="/pwa-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" media="(prefers-color-scheme: dark)" />
+    <link rel="manifest" href="/manifest-light.webmanifest" media="(prefers-color-scheme: light)" />
+
+    <!-- OG / Social -->
     <meta property="og:title" content="mericet - Professional Network" />
     <meta property="og:description" content="Connect with industry leaders, professionals, and innovators on mericet." />
     <meta property="og:type" content="website" />
@@ -14,5 +26,12 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator && location.hostname !== 'localhost' && !location.hostname.startsWith('127.')) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js');
+        });
+      }
+    </script>
   </body>
 </html>

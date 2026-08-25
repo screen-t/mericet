@@ -1,8 +1,14 @@
+import re
 from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from app.middleware.auth import require_auth
 from app.deps import get_connection_repo, get_user_repo
 from app.models.connection import ConnectionRequest, ConnectionUpdate, ConnectionResponse
 from typing import List
+
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
 
 router = APIRouter(prefix="/connections", tags=["Connections"])
 
@@ -32,9 +38,11 @@ def send_connection_request(
     conn_repo=Depends(get_connection_repo),
     user_repo=Depends(get_user_repo),
 ):
+    if conn_repo.either_blocked(user_id, payload.receiver_id):
+        raise HTTPException(status_code=403, detail="Cannot send a connection request to this user")
     existing = conn_repo.get_between(user_id, payload.receiver_id)
     if existing:
-        raise HTTPException(status_code=409, detail="Connection request already exists")
+        return {"message": "Connection request already exists", "data": _enrich_connection(existing, user_repo)}
     data = {"requester_id": user_id, "receiver_id": payload.receiver_id, "status": "pending"}
     created = conn_repo.create(data)
     from app.routes.notifications import create_notification
@@ -127,7 +135,14 @@ def check_connection_status_by_id(
     other_user_id: str,
     user_id: str = Depends(require_auth),
     conn_repo=Depends(get_connection_repo),
+    user_repo=Depends(get_user_repo),
 ):
+    # Despite the route name, callers sometimes pass a username instead of a UUID
+    if not _UUID_RE.match(other_user_id):
+        user = user_repo.get_by_username(other_user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        other_user_id = user["id"]
     conn = conn_repo.get_between(user_id, other_user_id)
     if not conn:
         return {"status": "none", "can_connect": True}
@@ -147,6 +162,8 @@ def check_connection_status(
 ):
     user = user_repo.get_by_username(username)
     if not user:
+        user = user_repo.get_by_id(username)
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
     other_user_id = user["id"]
     conn = conn_repo.get_between(user_id, other_user_id)
@@ -165,6 +182,8 @@ def get_mutual_connections(
 ):
     user = user_repo.get_by_username(username)
     if not user:
+        user = user_repo.get_by_id(username)
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
     other_user_id = user["id"]
     my_ids = set(conn_repo.get_connected_ids(user_id))
@@ -180,10 +199,18 @@ def get_mutual_connections(
 def get_connection_suggestions(
     user_id: str = Depends(require_auth),
     conn_repo=Depends(get_connection_repo),
+    user_repo=Depends(get_user_repo),
     limit: int = Query(10, ge=1, le=50),
 ):
     excluded = conn_repo.get_excluded_ids(user_id)
-    suggestions = conn_repo.get_suggestions(user_id, list(excluded), limit)
+    my_connected_ids = conn_repo.get_connected_ids(user_id)
+    me = user_repo.get_by_id(user_id, "industry")
+    my_industry = (me or {}).get("industry")
+    suggestions = conn_repo.get_suggestions(
+        user_id, list(excluded), limit,
+        my_connected_ids=my_connected_ids,
+        my_industry=my_industry,
+    )
     return {"suggestions": suggestions}
 
 

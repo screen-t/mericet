@@ -4,7 +4,7 @@ from app.deps import get_post_repo, get_user_repo, get_auth_service, get_follow_
 from app.middleware.rate_limit import limiter, WRITE_LIMIT
 from app.models.post import (
     PostCreate, PostUpdate, PostResponse,
-    CommentCreate, CommentUpdate, CommentResponse,
+    CommentCreate, CommentUpdate, CommentResponse, CommentsPageResponse,
     PollVote
 )
 from typing import List, Optional
@@ -155,6 +155,55 @@ def create_post(
     return {"message": "Post created", "data": enriched}
 
 
+def _rank_posts(posts: list, social_ids: set) -> list:
+    """Score and sort posts by engagement, freshness, and social proximity."""
+    import math
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+
+    def _score(post: dict) -> float:
+        created_raw = post.get("created_at", "")
+        try:
+            created = datetime.fromisoformat(
+                created_raw.replace("Z", "+00:00") if created_raw else ""
+            )
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            hours_old = max((now - created).total_seconds() / 3600, 0)
+        except Exception:
+            hours_old = 48
+
+        is_social = post.get("author_id") in social_ids
+
+        # Engagement: log-scaled, NO social multiplier here so old connected
+        # posts don't permanently dominate just because of relationship
+        likes = post.get("like_count", 0) or 0
+        comments = post.get("comment_count", 0) or 0
+        reposts = post.get("repost_count", 0) or 0
+        engagement = math.log1p(likes) * 2 + math.log1p(comments) * 3 + math.log1p(reposts) * 2
+
+        # Poll votes count as engagement so polls aren't always last
+        poll = post.get("poll")
+        if poll and isinstance(poll, dict):
+            options = poll.get("options") or []
+            poll_votes = sum(o.get("vote_count", 0) for o in options)
+            engagement += math.log1p(poll_votes) * 2
+
+        # Freshness: social posts decay half as fast so they stay visible longer
+        decay = 0.035 if is_social else 0.07
+        freshness = math.exp(-decay * hours_old) * 4
+
+        # Recency bonus: only for connections/follows and only within 24h
+        recency_bonus = 0.0
+        if is_social and hours_old < 24:
+            recency_bonus = 4.0 * math.exp(-0.08 * hours_old)
+
+        return engagement + freshness + recency_bonus
+
+    return sorted(posts, key=_score, reverse=True)
+
+
 @router.get("", response_model=List[PostResponse])
 def get_feed(
     user_id: str = Depends(require_auth),
@@ -165,18 +214,25 @@ def get_feed(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
+    from app.deps import get_connection_repo
+    conn_repo = get_connection_repo()
+    following_ids = set(follow_repo.get_following_ids(user_id, 1000, 0))
+    connected_ids = set(conn_repo.get_connected_ids(user_id))
+    social_ids = following_ids | connected_ids
+
     if feed_type == "following":
-        from app.deps import get_connection_repo
-        conn_repo = get_connection_repo()
-        following_ids = set(follow_repo.get_following_ids(user_id, 1000, 0))
-        connected_ids = set(conn_repo.get_connected_ids(user_id))
-        all_ids = list(following_ids | connected_ids)
+        # Chronological — you chose this tab to see your network in order
+        all_ids = list(social_ids)
         if not all_ids:
             return []
         posts = post_repo.get_by_author_ids(all_ids, limit, offset)
+        return bulk_enrich_posts(posts, user_id, post_repo, user_repo)
     else:
-        posts = post_repo.get_feed("public", limit, offset)
-    return bulk_enrich_posts(posts, user_id, post_repo, user_repo)
+        # For You: fetch a large pool, rank, then paginate
+        pool = post_repo.get_feed("public", limit * 3, 0)
+        enriched = bulk_enrich_posts(pool, user_id, post_repo, user_repo)
+        ranked = _rank_posts(enriched, social_ids)
+        return ranked[offset:offset + limit]
 
 
 @router.get("/{post_id}", response_model=PostResponse)
@@ -270,7 +326,9 @@ def delete_post(
 # ==================== ENGAGEMENT ====================
 
 @router.post("/{post_id}/like")
+@limiter.limit(WRITE_LIMIT)
 def like_post(
+    request: Request,
     post_id: str,
     user_id: str = Depends(require_auth),
     post_repo=Depends(get_post_repo),
@@ -284,7 +342,7 @@ def like_post(
     except Exception as e:
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
             raise HTTPException(status_code=409, detail="Already liked")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to like post")
     post_repo.increment_likes(post_id)
     post = post_repo.get_by_id(post_id)
     if post:
@@ -300,6 +358,18 @@ def like_post(
     return {"message": "Post liked"}
 
 
+@router.get("/{post_id}/likes")
+def get_post_likers(
+    post_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user_id: str = Depends(require_auth),
+    post_repo=Depends(get_post_repo),
+):
+    likers = post_repo.get_likers(post_id, limit, offset)
+    return {"likers": likers, "count": len(likers)}
+
+
 @router.delete("/{post_id}/like")
 def unlike_post(
     post_id: str,
@@ -312,7 +382,9 @@ def unlike_post(
 
 
 @router.post("/{post_id}/repost")
+@limiter.limit(WRITE_LIMIT)
 def repost(
+    request: Request,
     post_id: str,
     user_id: str = Depends(require_auth),
     post_repo=Depends(get_post_repo),
@@ -339,7 +411,7 @@ def repost(
     except Exception as e:
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
             raise HTTPException(status_code=409, detail="Already reposted")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to repost")
 
 
 @router.delete("/{post_id}/repost")
@@ -369,7 +441,7 @@ def save_post(
     except Exception as e:
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
             raise HTTPException(status_code=409, detail="Already saved")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to save post")
 
 
 @router.delete("/{post_id}/save")
@@ -401,30 +473,32 @@ def get_saved_posts(
 
 # ==================== COMMENTS ====================
 
-@router.get("/{post_id}/comments", response_model=List[CommentResponse])
+@router.get("/{post_id}/comments", response_model=CommentsPageResponse)
 def get_comments(
     post_id: str,
     user_id: Optional[str] = Depends(optional_auth),
     post_repo=Depends(get_post_repo),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
+    total = post_repo.count_comments(post_id)
     comments = post_repo.get_comments(post_id, limit, offset)
-    if not comments:
-        return []
-    if user_id:
-        comment_ids = [c["id"] for c in comments]
-        liked_set = post_repo.get_liked_comment_ids(user_id, comment_ids)
-        for comment in comments:
-            comment["is_liked"] = comment["id"] in liked_set
-    else:
-        for comment in comments:
-            comment["is_liked"] = False
-    return comments
+    if comments:
+        if user_id:
+            comment_ids = [c["id"] for c in comments]
+            liked_set = post_repo.get_liked_comment_ids(user_id, comment_ids)
+            for comment in comments:
+                comment["is_liked"] = comment["id"] in liked_set
+        else:
+            for comment in comments:
+                comment["is_liked"] = False
+    return {"comments": comments or [], "total": total}
 
 
 @router.post("/{post_id}/comments")
+@limiter.limit(WRITE_LIMIT)
 def create_comment(
+    request: Request,
     post_id: str,
     payload: CommentCreate,
     user_id: str = Depends(require_auth),
@@ -477,7 +551,12 @@ def delete_comment(
     post_repo=Depends(get_post_repo),
 ):
     owner_data = post_repo.get_comment_owner(comment_id)
-    if not owner_data or owner_data["author_id"] != user_id:
+    if not owner_data:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    is_comment_author = owner_data["author_id"] == user_id
+    post = post_repo.get_by_id(owner_data["post_id"], "author_id")
+    is_post_owner = post and post.get("author_id") == user_id
+    if not is_comment_author and not is_post_owner:
         raise HTTPException(status_code=403, detail="Not authorized")
     post_repo.delete_comment(comment_id)
     post_repo.decrement_comments(owner_data["post_id"])
@@ -487,7 +566,9 @@ def delete_comment(
 # ==================== POLLS ====================
 
 @router.post("/{post_id}/poll/vote")
+@limiter.limit(WRITE_LIMIT)
 def vote_on_poll(
+    request: Request,
     post_id: str,
     payload: PollVote,
     user_id: str = Depends(require_auth),
@@ -496,6 +577,17 @@ def vote_on_poll(
     poll_id = post_repo.get_poll_id_for_post(post_id)
     if not poll_id:
         raise HTTPException(status_code=404, detail="Poll not found")
+
+    poll = post_repo.get_poll_by_id(poll_id)
+    if poll and poll.get("ends_at"):
+        from datetime import datetime, timezone
+        ends_at = poll["ends_at"]
+        if isinstance(ends_at, str):
+            ends_at = datetime.fromisoformat(ends_at.replace("Z", "+00:00"))
+        if ends_at.tzinfo is None:
+            ends_at = ends_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > ends_at:
+            raise HTTPException(status_code=400, detail="This poll has ended")
 
     existing = post_repo.get_existing_vote(poll_id, user_id)
     if existing:

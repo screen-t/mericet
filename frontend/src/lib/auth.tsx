@@ -50,19 +50,28 @@ function removeSavedAccount(accountId: string) {
 
 function getStoredTokens(): Session {
   return {
-    access_token: localStorage.getItem(ACCESS_TOKEN_KEY) || undefined,
-    refresh_token: localStorage.getItem(REFRESH_TOKEN_KEY) || undefined,
+    access_token:
+      localStorage.getItem(ACCESS_TOKEN_KEY) ||
+      sessionStorage.getItem(ACCESS_TOKEN_KEY) ||
+      undefined,
+    refresh_token:
+      localStorage.getItem(REFRESH_TOKEN_KEY) ||
+      sessionStorage.getItem(REFRESH_TOKEN_KEY) ||
+      undefined,
   }
 }
 
-function setStoredTokens(session?: Session) {
+function setStoredTokens(session?: Session, persist = true) {
   if (!session) {
     localStorage.removeItem(ACCESS_TOKEN_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY)
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY)
     return
   }
-  if (session.access_token) localStorage.setItem(ACCESS_TOKEN_KEY, session.access_token)
-  if (session.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, session.refresh_token)
+  const storage = persist ? localStorage : sessionStorage
+  if (session.access_token) storage.setItem(ACCESS_TOKEN_KEY, session.access_token)
+  if (session.refresh_token) storage.setItem(REFRESH_TOKEN_KEY, session.refresh_token)
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -73,42 +82,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    // Attempt to restore session using stored tokens — no Supabase client needed
-    (async () => {
+    let cancelled = false
+    ;(async () => {
       const tokens = getStoredTokens()
       if (tokens.access_token) {
+        // Snapshot the token so we can detect if login() ran concurrently and
+        // stored new tokens before this restore finishes — if so, bail out.
+        const startToken = tokens.access_token
+        let networkFail = false
         try {
           let me: User | null = null
           try {
-            // Try with stored access token
             me = await authApi.me(tokens.access_token)
-          } catch {
-            // Token may be expired — try refreshing via backend
-            if (tokens.refresh_token) {
-              const refreshed = await authApi.refresh({ refresh_token: tokens.refresh_token })
-              if (refreshed.session) {
-                setStoredTokens(refreshed.session)
-                me = await authApi.me(refreshed.session.access_token)
+          } catch (err) {
+            if (err instanceof TypeError) {
+              // Network error — backend is cold-starting. Keep the session alive
+              // so the user isn't logged out just because Render is waking up.
+              networkFail = true
+            } else {
+              // HTTP error (likely 401) — try to get a fresh token before giving up.
+              try {
+                const { supabase } = await import('./supabase')
+                const { data } = await supabase.auth.getSession()
+                if (data.session?.access_token) {
+                  setStoredTokens({
+                    access_token: data.session.access_token,
+                    refresh_token: data.session.refresh_token ?? undefined,
+                  })
+                  me = await authApi.me(data.session.access_token)
+                }
+              } catch { /* fall through to backend refresh */ }
+
+              if (!me && tokens.refresh_token) {
+                try {
+                  const refreshed = await authApi.refresh({ refresh_token: tokens.refresh_token })
+                  if (refreshed.session) {
+                    setStoredTokens(refreshed.session)
+                    me = await authApi.me(refreshed.session.access_token)
+                  }
+                } catch { /* all refresh paths exhausted */ }
               }
             }
           }
+
+          // If login() ran while we were awaiting, the stored token has changed.
+          // Don't clobber the new session — just leave everything as login() left it.
+          if (cancelled || getStoredTokens().access_token !== startToken) return
+
           if (me) setUser(me)
-          else setStoredTokens(undefined)
+          else if (!networkFail) setStoredTokens(undefined)
         } catch {
+          if (cancelled || getStoredTokens().access_token !== startToken) return
           setStoredTokens(undefined)
           setUser(null)
         }
       }
-      setLoading(false)
+      if (!cancelled) setLoading(false)
     })()
+    return () => { cancelled = true }
   }, [])
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, rememberMe = false) => {
     setLoading(true)
     try {
       const res = await authApi.login({ email, password })
       if (res.session) {
-        setStoredTokens(res.session)
+        setStoredTokens(res.session, rememberMe)
         const profile = await authApi.me(res.session.access_token)
         setUser(profile)
         if (profile) {
@@ -143,13 +182,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const tokens = getStoredTokens()
     try {
       await authApi.logout({ refresh_token: tokens.refresh_token })
-    } catch (e) {
+    } catch {
       // ignore
+    }
+    // Remove this account from the saved list — its session is now invalid
+    if (user) {
+      removeSavedAccount(user.id)
+      setSavedAccountsState(getSavedAccounts())
     }
     setStoredTokens(undefined)
     setUser(null)
-    // Wipe the entire React Query cache so the next user starts with a clean slate.
-    // Without this, User B would see User A's cached messages/profiles on login.
     queryClient.clear()
     navigate('/login')
   }
@@ -177,8 +219,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (user) {
         saveCurrentAccount(user, getStoredTokens())
       }
-      queryClient.clear()
       setStoredTokens({ access_token: account.access_token, refresh_token: account.refresh_token })
+      queryClient.clear()
       try {
         const profile = await authApi.me(account.access_token)
         setUser(profile)
@@ -186,22 +228,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           saveCurrentAccount(profile, { access_token: account.access_token, refresh_token: account.refresh_token })
           setSavedAccountsState(getSavedAccounts())
         }
+        navigate('/feed')
       } catch {
-        const refreshed = await authApi.refresh({ refresh_token: account.refresh_token })
-        if (refreshed.session) {
-          setStoredTokens(refreshed.session)
-          const profile = await authApi.me(refreshed.session.access_token)
-          setUser(profile)
-          if (profile) {
-            saveCurrentAccount(profile, refreshed.session)
-            setSavedAccountsState(getSavedAccounts())
+        // Token expired — try to refresh it
+        try {
+          const refreshed = await authApi.refresh({ refresh_token: account.refresh_token })
+          if (refreshed.session) {
+            setStoredTokens(refreshed.session)
+            const profile = await authApi.me(refreshed.session.access_token)
+            setUser(profile)
+            if (profile) {
+              saveCurrentAccount(profile, refreshed.session)
+              setSavedAccountsState(getSavedAccounts())
+            }
+            navigate('/feed')
+            return
           }
-        }
+        } catch { /* refresh also failed — session is fully expired */ }
+
+        // Session is dead — clean up and let the caller handle navigation
+        removeSavedAccount(account.id)
+        setSavedAccountsState(getSavedAccounts())
+        setStoredTokens(undefined)
+        setUser(null)
+        throw new Error(`session_expired:${account.email}`)
       }
-      navigate('/feed')
-    } catch {
-      removeSavedAccount(account.id)
-      setSavedAccountsState(getSavedAccounts())
     } finally {
       setLoading(false)
     }

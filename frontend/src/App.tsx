@@ -11,6 +11,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import  Onboarding from "./pages/Onboarding";
 import { AuthProvider, RequireAuth } from "@/lib/auth";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Feed from "./pages/Feed";
 import FeedNew from "./pages/FeedNew";
 import ProfileNew from "./pages/ProfileNew";
@@ -24,10 +25,12 @@ import SearchPage from "./pages/SearchPage";
 import PostDetail from "./pages/PostDetail";
 import ModerationQueue from "./pages/ModerationQueue";
 import Settings from "./pages/Settings";
+import SecuritySettings from "./pages/SecuritySettings";
 import NotFound from "./pages/NotFound";
 import OAuthCallback from "./pages/OAuthCallBack";
 import Companies from "./pages/Companies";
 import Saved from "./pages/SavedNew";
+import PublicFolderPage from "./pages/PublicFolderPage";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Contact from "./pages/Contact";
@@ -52,6 +55,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <ErrorBoundary>
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
@@ -76,12 +80,15 @@ const App = () => (
             <Route path="/posts/:postId" element={<PostDetail />} />
             <Route path="/moderation" element={<RequireAuth><ModerationQueue /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+            <Route path="/settings/security" element={<RequireAuth><SecuritySettings /></RequireAuth>} />
             <Route path="/companies" element={<RequireAuth><Companies /></RequireAuth>} />
             <Route path="/saved" element={<RequireAuth><Saved /></RequireAuth>} />
             <Route path="/saved/:folderId" element={<RequireAuth><Saved /></RequireAuth>} />
+            <Route path="/collections/:shareToken" element={<PublicFolderPage />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </ErrorBoundary>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

@@ -27,6 +27,12 @@ class SupabaseUserRepository:
                     time.sleep(0.1 * (attempt + 1))
         return None
 
+    def get_by_ids(self, user_ids: list[str], fields: str = "id, first_name, last_name, username, avatar_url") -> list[dict]:
+        if not user_ids:
+            return []
+        result = self._client.table("users").select(fields).in_("id", user_ids).execute()
+        return result.data or []
+
     def get_by_username(self, username: str) -> Optional[dict]:
         cache_key = f"username:{username}"
         cached = user_cache.get(cache_key)
@@ -67,6 +73,10 @@ class SupabaseUserRepository:
         result = self._client.table("users").insert(data).execute()
         return result.data[0]
 
+    def delete(self, user_id: str) -> None:
+        self._client.table("users").delete().eq("id", user_id).execute()
+        user_cache.invalidate_prefix(f"user:{user_id}")
+
     def upsert(self, data: dict) -> dict:
         result = self._client.table("users").upsert(data).execute()
         row = result.data[0]
@@ -82,14 +92,11 @@ class SupabaseUserRepository:
         return result.data[0] if result.data else None
 
     def check_username_available(self, username: str) -> bool:
-        try:
-            result = self._client.table("users").select("id") \
-                .eq("username", username.lower()).execute()
-            if hasattr(result, 'data') and result.data is not None:
-                return len(result.data) == 0
-            return False
-        except Exception:
-            return False
+        result = self._client.table("users").select("id") \
+            .eq("username", username.lower()).execute()
+        if hasattr(result, 'data') and result.data is not None:
+            return len(result.data) == 0
+        return True
 
     def check_email_available(self, email: str) -> bool:
         result = self._client.table("users").select("id") \
@@ -97,11 +104,30 @@ class SupabaseUserRepository:
         return not bool(result.data)
 
     def search(self, query: str, limit: int = 20) -> list[dict]:
+        # Use individual .ilike() calls instead of .or_() string interpolation to
+        # prevent PostgREST filter injection via metacharacters like `,`, `(`, `)`.
+        term = f"%{query}%"
         result = self._client.table("users") \
             .select("id, username, first_name, last_name, avatar_url, headline") \
-            .or_(f"username.ilike.%{query}%,first_name.ilike.%{query}%,last_name.ilike.%{query}%") \
+            .ilike("username", term) \
             .limit(limit).execute()
-        return result.data or []
+        rows_by_username = {r["id"]: r for r in (result.data or [])}
+
+        result2 = self._client.table("users") \
+            .select("id, username, first_name, last_name, avatar_url, headline") \
+            .ilike("first_name", term) \
+            .limit(limit).execute()
+        for r in (result2.data or []):
+            rows_by_username.setdefault(r["id"], r)
+
+        result3 = self._client.table("users") \
+            .select("id, username, first_name, last_name, avatar_url, headline") \
+            .ilike("last_name", term) \
+            .limit(limit).execute()
+        for r in (result3.data or []):
+            rows_by_username.setdefault(r["id"], r)
+
+        return list(rows_by_username.values())[:limit]
 
     def get_connections_count(self, user_id: str) -> int:
         try:
