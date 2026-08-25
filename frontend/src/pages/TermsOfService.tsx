@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 export default function TermsOfService() {
   return (
@@ -10,7 +11,7 @@ export default function TermsOfService() {
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>Introduction</h2>
         <p>Welcome to Mericet, a professional networking and knowledge platform developed and operated by Puteware. Mericet is designed to provide high-utility tools, AI-powered features, and a high-signal environment for professionals, students, creators, founders, and businesses across India and beyond.</p>
         <p>These Terms of Service ("Terms") govern your access to and use of the Mericet platform, including its website, mobile application, desktop application, and all features, tools, and services offered within it. Please read these Terms carefully before creating an account or using any part of the platform.</p>
-        <p>By registering an account, logging in, or otherwise accessing or using Mericet in any capacity, you confirm that you have read, understood, and agreed to be bound by these Terms and our Privacy Policy. If you do not agree with any part of these Terms, you must stop using the platform immediately.</p>
+        <p>By registering an account, logging in, or otherwise accessing or using Mericet in any capacity, you confirm that you have read, understood, and agreed to be bound by these Terms and our <Link to="/privacy-policy" style={{ color: '#3b82f6', textDecoration: 'none' }}>Privacy Policy</Link>. If you do not agree with any part of these Terms, you must stop using the platform immediately.</p>
         <p>These Terms constitute a legally binding agreement between you ("User," "you," or "your") and Puteware ("Company," "we," "us," or "our"). If you are accessing Mericet on behalf of a business, organization, or any other legal entity, you represent and warrant that you have the authority to bind that entity to these Terms, and the word "you" refers to that entity.</p>
 
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>1. Acceptance of Terms</h2>
@@ -41,7 +42,7 @@ export default function TermsOfService() {
         <p>Mericet allows users to manage and switch between multiple accounts using the Switch Account feature. This is intended for users who maintain separate personal and professional identities. Creating multiple accounts to evade a ban, inflate engagement metrics, or misrepresent the scale of your influence is strictly prohibited.</p>
         
         <h3 style={{ fontSize: '1.15rem', color: '#f1f5f9', marginTop: '1.5rem' }}>3.4 Suspicious Activity and Auto-Logout</h3>
-        <p>Mericet implements an automatic logout system that will terminate your session if our security systems detect suspicious login behavior, unusual access patterns, or potential unauthorized use. You agree to cooperate with our security systems and to notify Puteware immediately if you suspect your account has been compromised by contacting security@puteware.com.</p>
+        <p>Mericet implements an automatic logout system that will terminate your session if our security systems detect suspicious login behavior, unusual access patterns, or potential unauthorized use. You agree to cooperate with our security systems and to notify Puteware immediately if you suspect your account has been compromised by contacting <a href="mailto:mericet.team+support@gmail.com" style={{ color: '#3b82f6', textDecoration: 'none' }}>mericet.team+support@gmail.com</a>.</p>
         
         <h3 style={{ fontSize: '1.15rem', color: '#f1f5f9', marginTop: '1.5rem' }}>3.5 Remember Me Feature</h3>
         <p>If you activate the "Remember Me for 30 Days" option, your session will remain active on that specific device for up to 30 days. You are responsible for all activity that occurs during that session. Puteware is not liable for unauthorized use resulting from a shared or unattended device with an active remembered session.</p>
@@ -151,7 +152,7 @@ export default function TermsOfService() {
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>14. Contact for Legal Matters</h2>
         <p>For all Terms-related queries, notices, or legal correspondence:</p>
         <ul style={{ paddingLeft: '20px' }}>
-          <li><strong>Email:</strong> legal@puteware.com</li>
+          <li><strong>Email:</strong> <a href="mailto:mericet.team+support@gmail.com" style={{ color: '#3b82f6', textDecoration: 'none' }}>mericet.team+support@gmail.com</a></li>
           <li><strong>Platform:</strong> Mericet by Puteware</li>
           <li><strong>Response Time:</strong> Within 30 business days</li>
         </ul>

@@ -332,23 +332,26 @@ const Landing = () => {
       {/* Footer */}
       <footer className="py-12 border-t border-border">
         <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
               <img src="/logo.png" alt="Mericet" className="h-8" />
             </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <Link to="#" className="hover:text-foreground transition-colors">
-                About
-              </Link>
+            <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
               <Link to="/privacy-policy" className="hover:text-foreground transition-colors">
                 Privacy
               </Link>
               <Link to="/terms-of-service" className="hover:text-foreground transition-colors">
                 Terms
               </Link>
-              <Link to="#" className="hover:text-foreground transition-colors">
+              <Link to="/contact" className="hover:text-foreground transition-colors">
                 Contact
               </Link>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <a href="https://x.com/MericetCorp" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">X</a>
+              <a href="https://www.instagram.com/mericet_hq/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Instagram</a>
+              <a href="https://www.linkedin.com/company/mericetapp/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">LinkedIn</a>
+              <a href="https://www.youtube.com/@mericetapp" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">YouTube</a>
             </div>
             <p className="text-sm text-muted-foreground">
               © 2026 Mericet. All rights reserved.

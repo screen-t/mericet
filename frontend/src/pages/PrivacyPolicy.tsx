@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 export default function PrivacyPolicy() {
   return (
@@ -10,8 +11,8 @@ export default function PrivacyPolicy() {
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>Introduction</h2>
         <p>At Puteware, we believe that privacy is not a feature — it is a foundation. Mericet is built from the ground up with the principle that your data belongs to you, and our job is to be transparent stewards of the information you trust us with.</p>
         <p>This Privacy Policy explains in clear, plain language what personal data we collect, why we collect it, how we use and store it, who we share it with (and who we never share it with), and what rights you have over your own information.</p>
-        <p>This Policy applies to all users of the Mericet platform, including the mobile application, web platform, desktop application, and any associated tools and services. It should be read alongside our Terms of Service.</p>
-        <p>If you have any questions about this Policy, you can reach us directly at privacy@puteware.com. We are real people and we respond to every genuine inquiry.</p>
+        <p>This Policy applies to all users of the Mericet platform, including the mobile application, web platform, desktop application, and any associated tools and services. It should be read alongside our <Link to="/terms-of-service" style={{ color: '#3b82f6', textDecoration: 'none' }}>Terms of Service</Link>.</p>
+        <p>If you have any questions about this Policy, you can reach us directly at <a href="mailto:mericet.team+support@gmail.com" style={{ color: '#3b82f6', textDecoration: 'none' }}>mericet.team+support@gmail.com</a>. We are real people and we respond to every genuine inquiry.</p>
 
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>1. Who We Are</h2>
         <p>Mericet is a professional networking and knowledge platform operated by Puteware. We are headquartered in India. As the operator of this platform, Puteware acts as the data controller for personal data collected through Mericet. You can contact our team at any time using the details provided at the end of this Policy.</p>
@@ -54,11 +55,11 @@ export default function PrivacyPolicy() {
         <h3 style={{ fontSize: '1.15rem', color: '#f1f5f9', marginTop: '1.5rem' }}>3.4 For Identity and Trust Verification</h3>
         <p>Verification document data is used solely to determine whether your account qualifies for a verified badge. This data is reviewed securely, stored with enhanced encryption, and is never shared with other users, third parties, or advertisers.</p>
         <h3 style={{ fontSize: '1.15rem', color: '#f1f5f9', marginTop: '1.5rem' }}>3.5 For Platform Security</h3>
-        <p>We use technical data, login patterns, and behavioral signals to detect fraud, identify suspicious account activity, enforce our Terms of Service, prevent abuse, and protect the safety of all users. This includes our automated logout system for suspicious logins.</p>
+        <p>We use technical data, login patterns, and behavioral signals to detect fraud, identify suspicious account activity, enforce our <Link to="/terms-of-service" style={{ color: '#3b82f6', textDecoration: 'none' }}>Terms of Service</Link>, prevent abuse, and protect the safety of all users. This includes our automated logout system for suspicious logins.</p>
         <h3 style={{ fontSize: '1.15rem', color: '#f1f5f9', marginTop: '1.5rem' }}>3.6 For Communication</h3>
         <p>We use your email address and phone number (if provided) to send you OTP codes for login, account security alerts, platform update notifications, and — if you opt in — periodic newsletters or product updates from Puteware. You can unsubscribe from non-essential communications at any time.</p>
         <h3 style={{ fontSize: '1.15rem', color: '#f1f5f9', marginTop: '1.5rem' }}>3.7 For Legal and Compliance Purposes</h3>
-        <p>We may use or retain your data as required to comply with applicable Indian laws, respond to lawful government requests, enforce our Terms of Service, and protect the legal rights of Puteware and its users.</p>
+        <p>We may use or retain your data as required to comply with applicable Indian laws, respond to lawful government requests, enforce our <Link to="/terms-of-service" style={{ color: '#3b82f6', textDecoration: 'none' }}>Terms of Service</Link>, and protect the legal rights of Puteware and its users.</p>
 
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>4. What We Never Do With Your Data</h2>
         <p>We want to be explicitly clear about the boundaries of how we use your data:</p>
@@ -106,21 +107,21 @@ export default function PrivacyPolicy() {
         <h3 style={{ fontSize: '1.15rem', color: '#f1f5f9', marginTop: '1.5rem' }}>7.3 Security Monitoring</h3>
         <p>Mericet continuously monitors for suspicious login activity, unauthorized access attempts, and unusual behavioral patterns. Our automated security system will force-logout any session that appears to be compromised and notify you immediately.</p>
         <h3 style={{ fontSize: '1.15rem', color: '#f1f5f9', marginTop: '1.5rem' }}>7.4 Vulnerability Management</h3>
-        <p>We conduct regular security audits and respond to responsible vulnerability disclosures from the security community. If you discover a security vulnerability, please report it to security@puteware.com rather than disclosing it publicly.</p>
+        <p>We conduct regular security audits and respond to responsible vulnerability disclosures from the security community. If you discover a security vulnerability, please report it to <a href="mailto:mericet.team+support@gmail.com" style={{ color: '#3b82f6', textDecoration: 'none' }}>mericet.team+support@gmail.com</a> rather than disclosing it publicly.</p>
         <h3 style={{ fontSize: '1.15rem', color: '#f1f5f9', marginTop: '1.5rem' }}>7.5 Breach Notification</h3>
         <p>In the unlikely event of a data breach that affects your personal data, Puteware will notify you within 72 hours of becoming aware of the breach, as required under applicable data protection law. We will inform you of the nature of the breach, the data affected, and the steps we are taking to address it.</p>
 
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>8. Your Rights Over Your Data</h2>
         <p>You have strong rights over your personal data on Mericet. We have designed the platform to make it easy to exercise these rights without friction.</p>
         <ul style={{ paddingLeft: '20px' }}>
-          <li><strong>Right to Access:</strong> You can request a complete copy of all personal data we hold about you at any time by emailing privacy@puteware.com. We will provide this within 30 days.</li>
+          <li><strong>Right to Access:</strong> You can request a complete copy of all personal data we hold about you at any time by emailing <a href="mailto:mericet.team+support@gmail.com" style={{ color: '#3b82f6', textDecoration: 'none' }}>mericet.team+support@gmail.com</a>. We will provide this within 30 days.</li>
           <li><strong>Right to Correction:</strong> You can update or correct your personal information directly from your Profile and Settings at any time. If you believe we hold inaccurate data about you that you cannot correct yourself, contact us and we will correct it promptly.</li>
           <li><strong>Right to Deletion:</strong> You have the right to request the permanent deletion of your account and all associated personal data. You can initiate this from Settings or by emailing us. Full deletion is completed within 30 days, except for data we are legally required to retain.</li>
           <li><strong>Right to Data Portability:</strong> You may request an export of your personal data in a machine-readable format (JSON or CSV), including your posts, saved Vault content, connection list, and profile data.</li>
           <li><strong>Right to Restrict Processing:</strong> You can request that we restrict certain categories of data processing, such as disabling AI personalization, opting out of the Focus Mode intent system, or turning off Digest summary generation. These can be managed from your Settings panel.</li>
           <li><strong>Right to Withdraw Consent:</strong> Where our data processing is based on your consent, you may withdraw that consent at any time. Withdrawal of consent does not affect the lawfulness of processing conducted before withdrawal.</li>
         </ul>
-        <p>To exercise any of the rights above, contact privacy@puteware.com. We do not charge fees for data requests. We respond to all requests within 30 calendar days. For complex or multiple simultaneous requests, we may extend this by an additional 30 days and will inform you accordingly.</p>
+        <p>To exercise any of the rights above, contact <a href="mailto:mericet.team+support@gmail.com" style={{ color: '#3b82f6', textDecoration: 'none' }}>mericet.team+support@gmail.com</a>. We do not charge fees for data requests. We respond to all requests within 30 calendar days. For complex or multiple simultaneous requests, we may extend this by an additional 30 days and will inform you accordingly.</p>
 
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>9. Cookies and Tracking Technologies</h2>
         <h3 style={{ fontSize: '1.15rem', color: '#f1f5f9', marginTop: '1.5rem' }}>9.1 What Are Cookies</h3>
@@ -137,7 +138,7 @@ export default function PrivacyPolicy() {
         <p>You can manage or delete cookies through your browser settings or your Mericet Settings panel at any time. Note that disabling essential cookies may affect platform functionality.</p>
 
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>10. Children's Privacy</h2>
-        <p>Mericet is not intended for use by children under the age of 16. We do not knowingly collect personal data from children. If we become aware that an account has been created by someone under 16 without verified parental consent, we will immediately suspend the account and delete the associated data. If you believe a child under 16 is using Mericet without parental consent, please contact us at privacy@puteware.com.</p>
+        <p>Mericet is not intended for use by children under the age of 16. We do not knowingly collect personal data from children. If we become aware that an account has been created by someone under 16 without verified parental consent, we will immediately suspend the account and delete the associated data. If you believe a child under 16 is using Mericet without parental consent, please contact us at <a href="mailto:mericet.team+support@gmail.com" style={{ color: '#3b82f6', textDecoration: 'none' }}>mericet.team+support@gmail.com</a>.</p>
 
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>11. International Users</h2>
         <p>Mericet is based in India and operated under Indian law, including the Digital Personal Data Protection Act, 2023 (DPDP Act). If you are accessing Mericet from outside India, your personal data will be processed in India. By using the platform, you consent to the transfer and processing of your data in India in accordance with this Privacy Policy.</p>
@@ -148,9 +149,9 @@ export default function PrivacyPolicy() {
         <h2 style={{ fontSize: '1.5rem', marginTop: '2.5rem', color: '#ffffff', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>13. Contact Us</h2>
         <p>For all privacy-related questions, data requests, or concerns:</p>
         <ul style={{ paddingLeft: '20px' }}>
-          <li><strong>Privacy Team:</strong> privacy@puteware.com</li>
-          <li><strong>Legal Team:</strong> legal@puteware.com</li>
-          <li><strong>Security Reports:</strong> security@puteware.com</li>
+          <li><strong>Support & Privacy Team:</strong> <a href="mailto:mericet.team+support@gmail.com" style={{ color: '#3b82f6', textDecoration: 'none' }}>mericet.team+support@gmail.com</a></li>
+          <li><strong>Legal Team:</strong> <a href="mailto:mericet.team+support@gmail.com" style={{ color: '#3b82f6', textDecoration: 'none' }}>mericet.team+support@gmail.com</a></li>
+          <li><strong>Security Reports:</strong> <a href="mailto:mericet.team+support@gmail.com" style={{ color: '#3b82f6', textDecoration: 'none' }}>mericet.team+support@gmail.com</a></li>
         </ul>
         <p>Response Time: Within 30 calendar days for all general inquiries; within 72 hours for security-related concerns. If you are not satisfied with how we have handled your concern, you have the right to escalate your complaint to the appropriate data protection authority under Indian law.</p>
       </div>
