@@ -96,6 +96,13 @@ class SupabaseConnectionRepository:
             .eq("status", "blocked").limit(1).execute()
         return bool(result.data)
 
+    def either_blocked(self, user1_id: str, user2_id: str) -> bool:
+        result = self._client.table("connections").select("id").or_(
+            f"and(requester_id.eq.{user1_id},receiver_id.eq.{user2_id}),"
+            f"and(requester_id.eq.{user2_id},receiver_id.eq.{user1_id})"
+        ).eq("status", "blocked").limit(1).execute()
+        return bool(result.data)
+
     def count_accepted(self, user_id: str) -> int:
         result = self._client.table("connections") \
             .select("id", count="exact") \
