@@ -30,6 +30,7 @@ import {
   Bookmark,
   FileText,
   ShieldAlert,
+  UserCog,
   Sun,
   Moon,
   ArrowLeftRight,
@@ -85,6 +86,13 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
   const { data: moderatorStatus } = useQuery({
     queryKey: ['moderatorStatus'],
     queryFn: () => backendApi.reports.moderatorStatus(),
+    enabled: isAuthenticated,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: adminStatus } = useQuery({
+    queryKey: ['adminStatus'],
+    queryFn: () => backendApi.admin.getStatus(),
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
   });
@@ -259,6 +267,14 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                       </Link>
                     </DropdownMenuItem>
                   )}
+                  {adminStatus?.is_admin && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/moderators" className="cursor-pointer">
+                        <UserCog className="mr-2 h-4 w-4" />
+                        Manage Moderators
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   {savedAccounts.filter(a => a.id !== user?.id).length > 0 && (
                     <>
@@ -424,6 +440,7 @@ export const Navbar = ({ isAuthenticated = false }: NavbarProps) => {
                       { icon: Settings, label: "Settings", href: "/settings" },
                       { icon: User, label: "Profile", href: "/profile" },
                       ...(moderatorStatus?.can_moderate ? [{ icon: ShieldAlert, label: "Moderation", href: "/moderation" }] : []),
+                      ...(adminStatus?.is_admin ? [{ icon: UserCog, label: "Manage Moderators", href: "/admin/moderators" }] : []),
                     ].map(({ icon: Icon, label, href }) => (
                       <Button
                         key={href}

@@ -91,6 +91,13 @@ class SupabaseUserRepository:
         user_cache.invalidate_prefix(f"username:")
         return result.data[0] if result.data else None
 
+    def get_by_role(self, roles: list[str]) -> list[dict]:
+        result = self._client.table("users") \
+            .select("id, username, first_name, last_name, avatar_url, headline, role") \
+            .in_("role", roles) \
+            .order("username").execute()
+        return result.data or []
+
     def check_username_available(self, username: str) -> bool:
         result = self._client.table("users").select("id") \
             .eq("username", username.lower()).execute()

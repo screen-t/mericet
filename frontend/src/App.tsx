@@ -24,6 +24,7 @@ import NotificationsNew from "./pages/NotificationsNew";
 import SearchPage from "./pages/SearchPage";
 import PostDetail from "./pages/PostDetail";
 import ModerationQueue from "./pages/ModerationQueue";
+import AdminModerators from "./pages/AdminModerators";
 import Settings from "./pages/Settings";
 import SecuritySettings from "./pages/SecuritySettings";
 import NotFound from "./pages/NotFound";
@@ -77,6 +78,7 @@ const App = () => (
             <Route path="/search" element={<RequireAuth><SearchPage /></RequireAuth>} />
             <Route path="/posts/:postId" element={<PostDetail />} />
             <Route path="/moderation" element={<RequireAuth><ModerationQueue /></RequireAuth>} />
+            <Route path="/admin/moderators" element={<RequireAuth><AdminModerators /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             <Route path="/settings/security" element={<RequireAuth><SecuritySettings /></RequireAuth>} />
             <Route path="/companies" element={<RequireAuth><Companies /></RequireAuth>} />

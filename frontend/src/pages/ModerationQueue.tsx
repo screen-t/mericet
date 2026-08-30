@@ -7,8 +7,9 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ShieldAlert, User, FileText, ExternalLink } from "lucide-react";
-import { backendApi } from "@/lib/backend-api";
+import { UserAvatar } from "@/components/ui/UserAvatar";
+import { Loader2, ShieldAlert, User, FileText, ExternalLink, Star } from "lucide-react";
+import { backendApi, type Review } from "@/lib/backend-api";
 import { useToast } from "@/hooks/use-toast";
 
 interface ReportItem {
@@ -24,11 +25,14 @@ interface ReportItem {
 }
 
 const statusOptions: Array<ReportItem["status"]> = ["pending", "reviewed", "resolved", "dismissed"];
+const reviewStatusOptions: Array<Review["status"]> = ["pending", "approved", "rejected"];
 
 const ModerationQueue = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [queueKind, setQueueKind] = useState<"reports" | "reviews">("reports");
   const [activeStatus, setActiveStatus] = useState<ReportItem["status"]>("pending");
+  const [activeReviewStatus, setActiveReviewStatus] = useState<Review["status"]>("pending");
 
   const { data: moderatorStatus, isLoading: loadingModerator } = useQuery({
     queryKey: ["moderatorStatus"],
@@ -38,7 +42,7 @@ const ModerationQueue = () => {
   const { data: queueData, isLoading } = useQuery({
     queryKey: ["reports", "queue", activeStatus],
     queryFn: () => backendApi.reports.getQueue(activeStatus, 50, 0),
-    enabled: !!moderatorStatus?.can_moderate,
+    enabled: !!moderatorStatus?.can_moderate && queueKind === "reports",
   });
 
   const updateStatusMutation = useMutation({
@@ -49,6 +53,28 @@ const ModerationQueue = () => {
       queryClient.invalidateQueries({ queryKey: ["reports", "queue"] });
     },
     onError: () => toast({ title: "Failed to update report", variant: "destructive" }),
+  });
+
+  const { data: reviewQueueData, isLoading: loadingReviews } = useQuery({
+    queryKey: ["reviews", "queue", activeReviewStatus],
+    queryFn: () => backendApi.reviews.getQueue(activeReviewStatus, 50, 0),
+    enabled: !!moderatorStatus?.can_moderate && queueKind === "reviews",
+  });
+
+  const updateReviewMutation = useMutation({
+    mutationFn: ({ reviewId, data }: { reviewId: string; data: { status?: "approved" | "rejected"; is_featured?: boolean } }) =>
+      backendApi.reviews.updateStatus(reviewId, data),
+    onSuccess: (_, vars) => {
+      const label = vars.data.status
+        ? `Review ${vars.data.status}`
+        : vars.data.is_featured
+        ? "Featured on landing page"
+        : "Removed from landing page";
+      toast({ title: label });
+      queryClient.invalidateQueries({ queryKey: ["reviews", "queue"] });
+      queryClient.invalidateQueries({ queryKey: ["reviews", "public"] });
+    },
+    onError: () => toast({ title: "Failed to update review", variant: "destructive" }),
   });
 
   if (loadingModerator) {
@@ -83,10 +109,138 @@ const ModerationQueue = () => {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold">Moderation Queue</h1>
-            <p className="text-muted-foreground mt-2">Review user reports and update their status.</p>
+            <p className="text-muted-foreground mt-2">
+              {queueKind === "reports"
+                ? "Review user reports and update their status."
+                : "Approve or reject submitted reviews, and choose which ones appear on the landing page."}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant={queueKind === "reports" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setQueueKind("reports")}
+            >
+              Reports
+            </Button>
+            <Button
+              variant={queueKind === "reviews" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setQueueKind("reviews")}
+            >
+              Reviews
+            </Button>
           </div>
         </div>
 
+        {queueKind === "reviews" ? (
+          <Tabs value={activeReviewStatus} onValueChange={(value) => setActiveReviewStatus(value as Review["status"])}>
+            <TabsList className="flex flex-wrap gap-2 h-auto w-fit">
+              {reviewStatusOptions.map((status) => (
+                <TabsTrigger key={status} value={status} className="capitalize">
+                  {status}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            {reviewStatusOptions.map((status) => (
+              <TabsContent key={status} value={status} className="mt-6">
+                {loadingReviews ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : reviewQueueData && reviewQueueData.length > 0 ? (
+                  <div className="space-y-4">
+                    {reviewQueueData.map((review, index) => {
+                      const author = review.user;
+                      const authorName = author
+                        ? `${author.first_name ?? ""} ${author.last_name ?? ""}`.trim() || author.username || "Unknown user"
+                        : "Unknown user";
+                      return (
+                        <motion.div
+                          key={review.id}
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.04 }}
+                        >
+                          <Card className="p-5">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                              <div className="space-y-3 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Badge variant="secondary" className="capitalize">{review.status}</Badge>
+                                  {review.is_featured && <Badge variant="default">Featured</Badge>}
+                                  <span className="text-sm text-muted-foreground">{new Date(review.created_at).toLocaleString()}</span>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                  <UserAvatar src={author?.avatar_url ?? undefined} name={authorName} size="sm" />
+                                  <div>
+                                    <Link
+                                      to={`/profile/${author?.username || author?.id || ""}`}
+                                      className="font-medium hover:underline inline-flex items-center gap-1"
+                                    >
+                                      {authorName}
+                                      <ExternalLink className="h-3 w-3" />
+                                    </Link>
+                                    <div className="flex items-center gap-0.5">
+                                      {[1, 2, 3, 4, 5].map((i) => (
+                                        <Star
+                                          key={i}
+                                          className={`h-3.5 w-3.5 ${i <= review.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{review.content}</p>
+                              </div>
+
+                              <div className="flex flex-wrap gap-2 md:justify-end md:flex-col">
+                                {review.status !== "approved" && (
+                                  <Button
+                                    onClick={() => updateReviewMutation.mutate({ reviewId: review.id, data: { status: "approved" } })}
+                                    disabled={updateReviewMutation.isPending}
+                                  >
+                                    Approve
+                                  </Button>
+                                )}
+                                {review.status !== "rejected" && (
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => updateReviewMutation.mutate({ reviewId: review.id, data: { status: "rejected" } })}
+                                    disabled={updateReviewMutation.isPending}
+                                  >
+                                    Reject
+                                  </Button>
+                                )}
+                                {review.status === "approved" && (
+                                  <Button
+                                    variant={review.is_featured ? "secondary" : "outline"}
+                                    onClick={() => updateReviewMutation.mutate({ reviewId: review.id, data: { is_featured: !review.is_featured } })}
+                                    disabled={updateReviewMutation.isPending}
+                                  >
+                                    {review.is_featured ? "Remove from landing page" : "Feature on landing page"}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </Card>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <Card className="p-8 text-center">
+                    <ShieldAlert className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
+                    <p className="font-semibold">No reviews in this bucket</p>
+                    <p className="text-sm text-muted-foreground mt-1">You're all caught up.</p>
+                  </Card>
+                )}
+              </TabsContent>
+            ))}
+          </Tabs>
+        ) : (
         <Tabs value={activeStatus} onValueChange={(value) => setActiveStatus(value as ReportItem["status"])}>
           <TabsList className="flex flex-wrap gap-2 h-auto w-fit">
             {statusOptions.map((status) => (
@@ -174,6 +328,7 @@ const ModerationQueue = () => {
             </TabsContent>
           ))}
         </Tabs>
+        )}
       </div>
     </AppLayout>
   );

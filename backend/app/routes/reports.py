@@ -24,6 +24,12 @@ def _require_moderator(user_id: str, report_repo: ReportRepository) -> None:
     if not profile:
         raise HTTPException(status_code=403, detail="Moderator access required")
 
+    # Primary, scalable path: a DB role, grantable without a redeploy.
+    if (profile.get("role") or "user") in ("moderator", "admin"):
+        return
+
+    # Fallback bootstrap path: an env var allowlist, kept only so access can
+    # never be fully locked out by a misconfigured role.
     email = (profile.get("email") or "").strip().lower()
     username = (profile.get("username") or "").strip().lower()
     email_allowlist = _moderator_email_allowlist()
@@ -47,22 +53,28 @@ def create_report(
     if payload.target_id == user_id and payload.target_type == "user":
         raise HTTPException(status_code=400, detail="Cannot report yourself")
 
-    if not report_repo.target_exists(payload.target_type.value, payload.target_id):
-        raise HTTPException(status_code=404, detail="Target not found")
+    try:
+        if not report_repo.target_exists(payload.target_type.value, payload.target_id):
+            raise HTTPException(status_code=404, detail="Target not found")
 
-    existing = report_repo.get_existing(
-        user_id, payload.target_type.value, payload.target_id
-    )
-    if existing:
-        return existing
+        existing = report_repo.get_existing(
+            user_id, payload.target_type.value, payload.target_id
+        )
+        if existing:
+            return existing
 
-    return report_repo.create({
-        "reporter_id": user_id,
-        "target_type": payload.target_type.value,
-        "target_id": payload.target_id,
-        "reason": payload.reason.strip(),
-        "details": payload.details.strip() if payload.details else None,
-    })
+        return report_repo.create({
+            "reporter_id": user_id,
+            "target_type": payload.target_type.value,
+            "target_id": payload.target_id,
+            "reason": payload.reason.strip(),
+            "details": payload.details.strip() if payload.details else None,
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating report ({payload.target_type.value}/{payload.target_id}) by {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/mine", response_model=List[ReportResponse])

@@ -1,6 +1,10 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/layout/Navbar";
 import {
   Users,
@@ -12,8 +16,12 @@ import {
   ArrowRight,
   CheckCircle2,
   Star,
+  Loader2,
 } from "lucide-react";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { useAuth } from "@/lib/auth";
+import { backendApi, type Review } from "@/lib/backend-api";
+import { useToast } from "@/hooks/use-toast";
 
 const features = [
   {
@@ -42,29 +50,46 @@ const features = [
   },
 ];
 
-const testimonials = [
-  {
-    name: "Sarah Chen",
-    role: "CEO at TechVentures",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100",
-    content:
-      "Mericet transformed how we connect with partners. We've closed 3 major deals in just 2 months!",
-  },
-  {
-    name: "Marcus Johnson",
-    role: "Founder at StartupLab",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100",
-    content:
-      "The quality of connections here is unmatched. It's like LinkedIn but actually useful for professionals.",
-  },
-  {
-    name: "Emily Rodriguez",
-    role: "VP Sales at CloudScale",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100",
-    content:
-      "Finally, a platform where conversations lead to real business outcomes. Highly recommended!",
-  },
-];
+interface DisplayTestimonial {
+  id: string;
+  name: string;
+  role: string;
+  avatar?: string;
+  content: string;
+  rating: number;
+}
+
+function toDisplayTestimonial(review: Review): DisplayTestimonial {
+  const name = review.user
+    ? `${review.user.first_name ?? ""} ${review.user.last_name ?? ""}`.trim() || review.user.username || "Mericet user"
+    : "Mericet user";
+  return {
+    id: review.id,
+    name,
+    role: review.user?.headline || "",
+    avatar: review.user?.avatar_url ?? undefined,
+    content: review.content,
+    rating: review.rating,
+  };
+}
+
+const ROTATE_INTERVAL_MS = 7000;
+
+function useRotatingWindow<T>(pool: T[], windowSize: number) {
+  const [start, setStart] = useState(0);
+
+  useEffect(() => {
+    setStart(0);
+    if (pool.length <= windowSize) return;
+    const timer = setInterval(() => {
+      setStart((s) => (s + windowSize) % pool.length);
+    }, ROTATE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [pool.length, windowSize]);
+
+  if (pool.length <= windowSize) return pool;
+  return Array.from({ length: windowSize }, (_, i) => pool[(start + i) % pool.length]);
+}
 
 const stats = [
   { value: "50K+", label: "Professionals" },
@@ -74,6 +99,58 @@ const stats = [
 ];
 
 const Landing = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: featuredReviews } = useQuery({
+    queryKey: ["reviews", "public"],
+    queryFn: () => backendApi.reviews.getPublic(12),
+    staleTime: 60_000,
+  });
+
+  const displayPool: DisplayTestimonial[] = (featuredReviews ?? []).map(toDisplayTestimonial);
+
+  const visibleTestimonials = useRotatingWindow(displayPool, 3);
+
+  const { data: myReview } = useQuery({
+    queryKey: ["reviews", "mine"],
+    queryFn: () => backendApi.reviews.getMine(),
+    enabled: !!user,
+  });
+
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewContent, setReviewContent] = useState("");
+  const [hoverRating, setHoverRating] = useState(0);
+
+  useEffect(() => {
+    if (myReview) {
+      setReviewRating(myReview.rating);
+      setReviewContent(myReview.content);
+    }
+  }, [myReview]);
+
+  const submitReviewMutation = useMutation({
+    mutationFn: () => backendApi.reviews.submit(reviewRating, reviewContent.trim()),
+    onSuccess: () => {
+      toast({ title: "Thanks for your review!", description: "It'll appear on the site once approved." });
+      queryClient.invalidateQueries({ queryKey: ["reviews", "mine"] });
+    },
+    onError: () => toast({ title: "Couldn't submit your review", variant: "destructive" }),
+  });
+
+  const handleSubmitReview = () => {
+    if (reviewRating < 1) {
+      toast({ title: "Pick a star rating first", variant: "destructive" });
+      return;
+    }
+    if (!reviewContent.trim()) {
+      toast({ title: "Write a few words about your experience", variant: "destructive" });
+      return;
+    }
+    submitReviewMutation.mutate();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-hero">
       <Navbar />
@@ -258,41 +335,158 @@ const Landing = () => {
             </motion.h2>
           </div>
 
+          {visibleTestimonials.length === 0 ? (
+            <p className="text-center text-muted-foreground mb-4">
+              Be the first to share your experience below.
+            </p>
+          ) : (
           <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((testimonial, index) => (
-              <motion.div
-                key={testimonial.name}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="p-6 rounded-2xl bg-card border border-border"
-              >
-                <div className="flex items-center gap-1 mb-4">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Star
-                      key={i}
-                      className="h-4 w-4 fill-yellow-400 text-yellow-400"
+            <AnimatePresence mode="popLayout">
+              {visibleTestimonials.map((testimonial, index) => (
+                <motion.div
+                  key={testimonial.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="p-6 rounded-2xl bg-card border border-border"
+                >
+                  <div className="flex items-center gap-1 mb-4">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <Star
+                        key={i}
+                        className={`h-4 w-4 ${i <= testimonial.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-foreground mb-6">"{testimonial.content}"</p>
+                  <div className="flex items-center gap-3">
+                    <UserAvatar
+                      name={testimonial.name}
+                      src={testimonial.avatar}
+                      size="md"
                     />
-                  ))}
-                </div>
-                <p className="text-foreground mb-6">"{testimonial.content}"</p>
-                <div className="flex items-center gap-3">
+                    <div>
+                      <p className="font-semibold">{testimonial.name}</p>
+                      {testimonial.role && (
+                        <p className="text-sm text-muted-foreground">
+                          {testimonial.role}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+          )}
+
+          {/* Write a review */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="max-w-xl mx-auto mt-12 p-6 rounded-2xl bg-card border border-border"
+          >
+            {!user ? (
+              <div className="text-center">
+                <p className="font-semibold mb-1">Used Mericet? Leave a review.</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Log in to share your experience — it'll show here once approved.
+                </p>
+                <Button asChild variant="outline">
+                  <Link to="/login">Log in to review</Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 pb-1 border-b border-border/60">
                   <UserAvatar
-                    name={testimonial.name}
-                    src={testimonial.avatar}
-                    size="md"
+                    name={`${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || user.email || "You"}
+                    src={user.avatar_url}
+                    size="sm"
                   />
-                  <div>
-                    <p className="font-semibold">{testimonial.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {testimonial.role}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {`${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || user.email}
                     </p>
+                    <p className="text-xs text-muted-foreground">Posting as this account</p>
                   </div>
                 </div>
-              </motion.div>
-            ))}
-          </div>
+
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold">
+                    {myReview ? "Your review" : "Share your experience"}
+                  </p>
+                  {myReview && (
+                    <Badge
+                      variant={
+                        myReview.status === "approved"
+                          ? "default"
+                          : myReview.status === "rejected"
+                          ? "destructive"
+                          : "secondary"
+                      }
+                      className="capitalize"
+                    >
+                      {myReview.status}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setReviewRating(i)}
+                      onMouseEnter={() => setHoverRating(i)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      className="p-0.5"
+                    >
+                      <Star
+                        className={`h-6 w-6 transition-colors ${
+                          i <= (hoverRating || reviewRating)
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "text-muted-foreground/30"
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+
+                <Textarea
+                  placeholder="What was your experience like on Mericet?"
+                  value={reviewContent}
+                  onChange={(e) => setReviewContent(e.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  className="resize-none"
+                />
+
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    {myReview
+                      ? "Editing will require re-approval before it shows again."
+                      : "Reviews are checked before appearing publicly."}
+                  </p>
+                  <Button
+                    onClick={handleSubmitReview}
+                    disabled={submitReviewMutation.isPending}
+                    size="sm"
+                  >
+                    {submitReviewMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : myReview ? (
+                      "Update review"
+                    ) : (
+                      "Submit review"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </motion.div>
         </div>
       </section>
 
