@@ -122,6 +122,14 @@ def login(
         else:
             raise HTTPException(status_code=500, detail="Login failed. Please try again or contact support if the problem persists.")
 
+    profile = user_repo.get_by_id(result.user.id, "id, suspended_at")
+    if profile and profile.get("suspended_at"):
+        try:
+            auth_service.sign_out(result.session.access_token if result.session else "")
+        except Exception:
+            pass
+        raise HTTPException(status_code=403, detail="Your account has been suspended.")
+
     try:
         user_repo.update(result.user.id, {"last_active_at": "now()"})
     except Exception:

@@ -52,7 +52,7 @@ class SupabaseReportRepository:
     def get_user_profile(self, user_id: str) -> Optional[dict]:
         try:
             result = self._client.table("users") \
-                .select("id, username, email") \
+                .select("id, username, email, role") \
                 .eq("id", user_id).limit(1).execute()
             return result.data[0] if result.data else None
         except Exception:

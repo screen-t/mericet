@@ -33,3 +33,7 @@ class ReportResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    # Live state of the target, so the UI can show Hide vs Unhide / Suspend vs
+    # Restore correctly even when reviewing an already-resolved report.
+    target_is_hidden: Optional[bool] = None
+    target_is_suspended: Optional[bool] = None

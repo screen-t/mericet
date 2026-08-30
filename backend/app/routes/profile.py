@@ -89,6 +89,13 @@ def get_profile_by_username(
     if not profile_data:
         raise HTTPException(status_code=404, detail="User not found")
     profile_user_id = profile_data["id"]
+
+    if profile_data.get("suspended_at") and viewer_id != profile_user_id:
+        viewer_profile = user_repo.get_by_id(viewer_id, "role") if viewer_id else None
+        is_moderator = bool(viewer_profile and (viewer_profile.get("role") or "user") in ("moderator", "admin"))
+        if not is_moderator:
+            raise HTTPException(status_code=403, detail="This account has been suspended.")
+
     _enrich_profile(profile_data, profile_user_id, user_repo, work_repo, edu_repo, skill_repo)
     return _apply_privacy_filters(profile_data, viewer_id)
 

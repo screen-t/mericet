@@ -85,6 +85,18 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
+    // Sentinel from require_auth: the CALLER's own account is suspended (not
+    // to be confused with viewing someone else's suspended profile, which
+    // returns a normal human-readable message and shouldn't log anyone out).
+    if (err.detail === "ACCOUNT_SUSPENDED") {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+      sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+      if (window.location.pathname !== "/suspended") {
+        window.location.href = "/suspended";
+      }
+    }
     throw new Error(typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail));
   }
   const text = await res.text();
@@ -254,6 +266,26 @@ const posts = {
   deletePost: (postId: string) =>
     fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  hidePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}/hide`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  unhidePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}/hide`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  moderatorHidePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}/moderate/hide`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  moderatorUnhidePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}/moderate/unhide`, {
+      method: "POST",
       headers: getAuthHeaders(),
     }).then(handleResponse),
   likePost: (postId: string) =>
@@ -767,6 +799,97 @@ const reports = {
     }).then(handleResponse),
 };
 
+// --- Reviews ---
+export interface ReviewAuthor {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  username?: string | null;
+  avatar_url?: string | null;
+  headline?: string | null;
+}
+export interface Review {
+  id: string;
+  user_id: string;
+  rating: number;
+  content: string;
+  status: "pending" | "approved" | "rejected";
+  is_featured: boolean;
+  created_at: string;
+  updated_at: string;
+  user?: ReviewAuthor | null;
+}
+
+const reviews = {
+  submit: (rating: number, content: string) =>
+    fetchWithAuth(`${API_BASE_URL}/reviews`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ rating, content }),
+    }).then(handleResponse<Review>),
+  getMine: () =>
+    fetchWithAuth(`${API_BASE_URL}/reviews/mine`, {
+      headers: getAuthHeaders(),
+    }).then((res) => (res.status === 404 ? null : handleResponse<Review>(res))),
+  getPublic: (limit = 12) =>
+    fetch(`${API_BASE_URL}/reviews/public?limit=${limit}`).then(handleResponse<Review[]>),
+  getQueue: (status: "pending" | "approved" | "rejected" = "pending", limit = 50, offset = 0) =>
+    fetchWithAuth(`${API_BASE_URL}/reviews/queue?status=${status}&limit=${limit}&offset=${offset}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<Review[]>),
+  updateStatus: (reviewId: string, data: { status?: "approved" | "rejected"; is_featured?: boolean }) =>
+    fetchWithAuth(`${API_BASE_URL}/reviews/${encodeURIComponent(reviewId)}`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse<Review>),
+};
+
+// --- Admin (role management) ---
+export interface AdminUser {
+  id: string;
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar_url?: string | null;
+  headline?: string | null;
+  role?: "user" | "moderator" | "admin";
+  suspended_at?: string | null;
+  suspended_reason?: string | null;
+}
+
+const admin = {
+  getStatus: () =>
+    fetchWithAuth(`${API_BASE_URL}/admin/status`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ is_admin: boolean }>),
+  getModerators: () =>
+    fetchWithAuth(`${API_BASE_URL}/admin/moderators`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<AdminUser[]>),
+  updateRole: (userId: string, role: "user" | "moderator" | "admin") =>
+    fetchWithAuth(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}/role`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ role }),
+    }).then(handleResponse<AdminUser>),
+  getSuspended: () =>
+    fetchWithAuth(`${API_BASE_URL}/admin/suspended`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<AdminUser[]>),
+  suspendUser: (userId: string, reason?: string) =>
+    fetchWithAuth(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}/suspend`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ reason }),
+    }).then(handleResponse<AdminUser>),
+  unsuspendUser: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}/unsuspend`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse<AdminUser>),
+};
+
 const media = {
   upload: async (file: File): Promise<{ url: string }> => {
     const formData = new FormData();
@@ -792,5 +915,7 @@ export const backendApi = {
   saves,
   follows,
   reports,
+  reviews,
+  admin,
   media,
 };

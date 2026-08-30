@@ -2,7 +2,7 @@ import os
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List
 from app.middleware.auth import require_auth
-from app.deps import get_report_repo
+from app.deps import get_report_repo, get_post_repo, get_user_repo
 from app.repositories.protocols import ReportRepository
 from app.models.report import ReportCreate, ReportResponse, ReportStatus
 
@@ -24,6 +24,12 @@ def _require_moderator(user_id: str, report_repo: ReportRepository) -> None:
     if not profile:
         raise HTTPException(status_code=403, detail="Moderator access required")
 
+    # Primary, scalable path: a DB role, grantable without a redeploy.
+    if (profile.get("role") or "user") in ("moderator", "admin"):
+        return
+
+    # Fallback bootstrap path: an env var allowlist, kept only so access can
+    # never be fully locked out by a misconfigured role.
     email = (profile.get("email") or "").strip().lower()
     username = (profile.get("username") or "").strip().lower()
     email_allowlist = _moderator_email_allowlist()
@@ -47,22 +53,28 @@ def create_report(
     if payload.target_id == user_id and payload.target_type == "user":
         raise HTTPException(status_code=400, detail="Cannot report yourself")
 
-    if not report_repo.target_exists(payload.target_type.value, payload.target_id):
-        raise HTTPException(status_code=404, detail="Target not found")
+    try:
+        if not report_repo.target_exists(payload.target_type.value, payload.target_id):
+            raise HTTPException(status_code=404, detail="Target not found")
 
-    existing = report_repo.get_existing(
-        user_id, payload.target_type.value, payload.target_id
-    )
-    if existing:
-        return existing
+        existing = report_repo.get_existing(
+            user_id, payload.target_type.value, payload.target_id
+        )
+        if existing:
+            return existing
 
-    return report_repo.create({
-        "reporter_id": user_id,
-        "target_type": payload.target_type.value,
-        "target_id": payload.target_id,
-        "reason": payload.reason.strip(),
-        "details": payload.details.strip() if payload.details else None,
-    })
+        return report_repo.create({
+            "reporter_id": user_id,
+            "target_type": payload.target_type.value,
+            "target_id": payload.target_id,
+            "reason": payload.reason.strip(),
+            "details": payload.details.strip() if payload.details else None,
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating report ({payload.target_type.value}/{payload.target_id}) by {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/mine", response_model=List[ReportResponse])
@@ -92,13 +104,38 @@ def moderator_status(
 def get_report_queue(
     user_id: str = Depends(require_auth),
     report_repo: ReportRepository = Depends(get_report_repo),
+    post_repo=Depends(get_post_repo),
+    user_repo=Depends(get_user_repo),
     status: ReportStatus = Query(ReportStatus.PENDING),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    """Get moderation queue items."""
+    """Get moderation queue items, enriched with the target's current
+    hidden/suspended state so the UI can offer the right action either way,
+    even when reviewing an already-resolved report."""
     _require_moderator(user_id, report_repo)
-    return report_repo.get_queue(status.value, limit, offset)
+    reports = report_repo.get_queue(status.value, limit, offset)
+
+    post_ids = [r["target_id"] for r in reports if r["target_type"] == "post"]
+    user_ids = [r["target_id"] for r in reports if r["target_type"] == "user"]
+
+    hidden_map = {}
+    if post_ids:
+        posts = post_repo.get_by_ids(post_ids)
+        hidden_map = {p["id"]: bool(p.get("is_hidden")) for p in posts}
+
+    suspended_map = {}
+    if user_ids:
+        users = user_repo.get_by_ids(user_ids, "id, suspended_at")
+        suspended_map = {u["id"]: bool(u.get("suspended_at")) for u in users}
+
+    for r in reports:
+        if r["target_type"] == "post":
+            r["target_is_hidden"] = hidden_map.get(r["target_id"], False)
+        elif r["target_type"] == "user":
+            r["target_is_suspended"] = suspended_map.get(r["target_id"], False)
+
+    return reports
 
 
 @router.patch("/{report_id}", response_model=ReportResponse)

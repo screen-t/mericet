@@ -30,6 +30,7 @@ def get_storage_service():
 from app.repositories.supabase.follow_repo import SupabaseFollowRepository
 from app.repositories.supabase.notification_repo import SupabaseNotificationRepository
 from app.repositories.supabase.report_repo import SupabaseReportRepository
+from app.repositories.supabase.review_repo import SupabaseReviewRepository
 
 
 @lru_cache(maxsize=1)
@@ -45,6 +46,11 @@ def get_notification_repo():
 @lru_cache(maxsize=1)
 def get_report_repo():
     return SupabaseReportRepository(supabase)
+
+
+@lru_cache(maxsize=1)
+def get_review_repo():
+    return SupabaseReviewRepository(supabase)
 
 
 from app.repositories.supabase.user_repo import (

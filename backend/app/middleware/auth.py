@@ -29,6 +29,13 @@ def require_auth(request: Request, auth=Depends(get_auth_service)):
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    # A JWT stays valid until it expires even if the account is suspended
+    # afterward, so this must be checked on every request, not just at login.
+    repo = get_user_repo()
+    profile = repo.get_by_id(user_id, "id, suspended_at")
+    if profile and profile.get("suspended_at"):
+        raise HTTPException(status_code=403, detail="ACCOUNT_SUSPENDED")
+
     _touch_activity(user_id)
     return user_id
 
