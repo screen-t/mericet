@@ -35,6 +35,7 @@ import Saved from "./pages/SavedNew";
 import PublicFolderPage from "./pages/PublicFolderPage";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import Contact from "./pages/Contact";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,6 +69,7 @@ const App = () => (
             <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/suspended" element={<Suspended />} />
+            <Route path="/contact" element={<Contact />} />
 
             {/* Protected routes */}
             <Route path="/feed" element={<RequireAuth><FeedNew /></RequireAuth>} />
