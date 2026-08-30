@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -39,6 +39,29 @@ export interface CreatePostModalProps {
   onPostCreated?: () => void;
 }
 
+type PostDraft = {
+  content: string;
+  mediaUrls: string[];
+  showPoll: boolean;
+  pollOptions: string[];
+  pollDuration: number;
+};
+
+const draftKey = (userId?: string) => `post_draft_${userId ?? "anon"}`;
+
+function loadDraft(userId?: string): PostDraft | null {
+  try {
+    const raw = localStorage.getItem(draftKey(userId));
+    return raw ? (JSON.parse(raw) as PostDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function isDraftEmpty(draft: PostDraft) {
+  return !draft.content.trim() && draft.mediaUrls.length === 0 && draft.pollOptions.every((o) => !o.trim());
+}
+
 export const CreatePostModalNew = ({
   isOpen,
   onClose,
@@ -48,13 +71,45 @@ export const CreatePostModalNew = ({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [content, setContent] = useState("");
-  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
-  const [showPoll, setShowPoll] = useState(false);
-  const [pollOptions, setPollOptions] = useState(["", ""]);
-  const [pollDuration, setPollDuration] = useState(24);
+  const initialDraft = useRef<PostDraft | null | undefined>(undefined);
+  if (initialDraft.current === undefined) {
+    initialDraft.current = loadDraft(user?.id);
+  }
+  const restoredDraft = initialDraft.current;
+
+  const [content, setContent] = useState(restoredDraft?.content ?? "");
+  const [mediaUrls, setMediaUrls] = useState<string[]>(restoredDraft?.mediaUrls ?? []);
+  const [showPoll, setShowPoll] = useState(restoredDraft?.showPoll ?? false);
+  const [pollOptions, setPollOptions] = useState(restoredDraft?.pollOptions ?? ["", ""]);
+  const [pollDuration, setPollDuration] = useState(restoredDraft?.pollDuration ?? 24);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Notify once, on mount, if a non-empty draft was restored
+  useEffect(() => {
+    if (restoredDraft && !isDraftEmpty(restoredDraft)) {
+      toast({ title: "Draft restored", description: "Picked up where you left off." });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Autosave the in-progress post to localStorage so it survives a reload,
+  // app close, or crash. Debounced to avoid writing on every keystroke.
+  useEffect(() => {
+    const draft: PostDraft = { content, mediaUrls, showPoll, pollOptions, pollDuration };
+    const timer = setTimeout(() => {
+      try {
+        if (isDraftEmpty(draft)) {
+          localStorage.removeItem(draftKey(user?.id));
+        } else {
+          localStorage.setItem(draftKey(user?.id), JSON.stringify(draft));
+        }
+      } catch {
+        // localStorage unavailable (private mode, quota) — autosave is best-effort
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [content, mediaUrls, showPoll, pollOptions, pollDuration, user?.id]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -138,6 +193,11 @@ export const CreatePostModalNew = ({
     setShowPoll(false);
     setPollOptions(["", ""]);
     setPollDuration(24);
+    try {
+      localStorage.removeItem(draftKey(user?.id));
+    } catch {
+      // best-effort
+    }
   };
 
   const handleSubmit = () => {
@@ -252,6 +312,18 @@ export const CreatePostModalNew = ({
             rows={6}
             className="resize-none text-lg"
           />
+          {!isDraftEmpty({ content, mediaUrls, showPoll, pollOptions, pollDuration }) && (
+            <button
+              type="button"
+              onClick={() => {
+                resetForm();
+                toast({ title: "Draft discarded" });
+              }}
+              className="text-xs text-muted-foreground hover:text-destructive transition-colors -mt-2"
+            >
+              Discard draft
+            </button>
+          )}
 
           {/* Media preview grid */}
           {mediaUrls.length > 0 && (
