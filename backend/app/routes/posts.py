@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from app.middleware.auth import require_auth, optional_auth
-from app.deps import get_post_repo, get_user_repo, get_auth_service, get_follow_repo
+from app.deps import get_post_repo, get_user_repo, get_auth_service, get_follow_repo, get_report_repo
+from app.routes.reports import _require_moderator
 from app.middleware.rate_limit import limiter, WRITE_LIMIT
 from app.models.post import (
     PostCreate, PostUpdate, PostResponse,
@@ -220,19 +221,28 @@ def get_feed(
     connected_ids = set(conn_repo.get_connected_ids(user_id))
     social_ids = following_ids | connected_ids
 
+    hidden_ids = post_repo.get_hidden_post_ids(user_id)
+
     if feed_type == "following":
         # Chronological — you chose this tab to see your network in order
         all_ids = list(social_ids)
         if not all_ids:
             return []
-        posts = post_repo.get_by_author_ids(all_ids, limit, offset)
+        posts = [p for p in post_repo.get_by_author_ids(all_ids, limit, offset) if p["id"] not in hidden_ids]
         return bulk_enrich_posts(posts, user_id, post_repo, user_repo)
     else:
         # For You: fetch a large pool, rank, then paginate
-        pool = post_repo.get_feed("public", limit * 3, 0)
+        pool = [p for p in post_repo.get_feed("public", limit * 3, 0) if p["id"] not in hidden_ids]
         enriched = bulk_enrich_posts(pool, user_id, post_repo, user_repo)
         ranked = _rank_posts(enriched, social_ids)
         return ranked[offset:offset + limit]
+
+
+def _is_moderator(user_id: Optional[str], user_repo) -> bool:
+    if not user_id:
+        return False
+    profile = user_repo.get_by_id(user_id, "role")
+    return bool(profile and (profile.get("role") or "user") in ("moderator", "admin"))
 
 
 @router.get("/{post_id}", response_model=PostResponse)
@@ -245,6 +255,10 @@ def get_post(
     post = post_repo.get_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+
+    if post.get("is_hidden") and post.get("author_id") != user_id and not _is_moderator(user_id, user_repo):
+        raise HTTPException(status_code=404, detail="Post not found")
+
     return enrich_post(post, user_id, post_repo, user_repo)
 
 
@@ -321,6 +335,64 @@ def delete_post(
         raise HTTPException(status_code=403, detail="Not authorized")
     post_repo.delete(post_id)
     return {"message": "Post deleted"}
+
+
+# ==================== HIDE / MODERATE ====================
+
+@router.post("/{post_id}/hide")
+def hide_post_for_me(
+    post_id: str,
+    user_id: str = Depends(require_auth),
+    post_repo=Depends(get_post_repo),
+):
+    """Personal preference — removes this post from the caller's own feed only."""
+    owner = post_repo.get_owner(post_id)
+    if owner is None:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if owner == user_id:
+        raise HTTPException(status_code=400, detail="Cannot hide your own post")
+    post_repo.hide_for_user(user_id, post_id)
+    return {"message": "Post hidden"}
+
+
+@router.delete("/{post_id}/hide")
+def unhide_post_for_me(
+    post_id: str,
+    user_id: str = Depends(require_auth),
+    post_repo=Depends(get_post_repo),
+):
+    post_repo.unhide_for_user(user_id, post_id)
+    return {"message": "Post unhidden"}
+
+
+@router.post("/{post_id}/moderate/hide")
+def moderator_hide_post(
+    post_id: str,
+    user_id: str = Depends(require_auth),
+    post_repo=Depends(get_post_repo),
+    report_repo=Depends(get_report_repo),
+):
+    """Moderator-only soft removal — hides the post from everyone except the
+    author and other moderators. Reversible; nothing is deleted."""
+    _require_moderator(user_id, report_repo)
+    updated = post_repo.moderator_hide(post_id, user_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return {"message": "Post hidden by moderator", "data": updated}
+
+
+@router.post("/{post_id}/moderate/unhide")
+def moderator_unhide_post(
+    post_id: str,
+    user_id: str = Depends(require_auth),
+    post_repo=Depends(get_post_repo),
+    report_repo=Depends(get_report_repo),
+):
+    _require_moderator(user_id, report_repo)
+    updated = post_repo.moderator_unhide(post_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return {"message": "Post restored", "data": updated}
 
 
 # ==================== ENGAGEMENT ====================

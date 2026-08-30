@@ -76,6 +76,21 @@ const AdminModerators = () => {
       toast({ title: "Couldn't update role", description: err.message, variant: "destructive" }),
   });
 
+  const { data: suspended, isLoading: loadingSuspended } = useQuery({
+    queryKey: ["admin", "suspended"],
+    queryFn: () => backendApi.admin.getSuspended(),
+    enabled: !!adminStatus?.is_admin,
+  });
+
+  const unsuspendMutation = useMutation({
+    mutationFn: (userId: string) => backendApi.admin.unsuspendUser(userId),
+    onSuccess: () => {
+      toast({ title: "Account restored" });
+      queryClient.invalidateQueries({ queryKey: ["admin", "suspended"] });
+    },
+    onError: () => toast({ title: "Couldn't restore account", variant: "destructive" }),
+  });
+
   if (loadingStatus) {
     return (
       <AppLayout>
@@ -211,11 +226,11 @@ const AdminModerators = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={roleBadgeVariant[person.role]} className="capitalize">
-                        {roleLabel[person.role]}
+                      <Badge variant={roleBadgeVariant[person.role ?? "user"]} className="capitalize">
+                        {roleLabel[person.role ?? "user"]}
                       </Badge>
                       <Select
-                        value={person.role}
+                        value={person.role ?? "user"}
                         onValueChange={(value) =>
                           updateRoleMutation.mutate({ userId: person.id, role: value as Role })
                         }
@@ -239,6 +254,55 @@ const AdminModerators = () => {
               <ShieldAlert className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
               <p className="font-semibold">No moderators yet</p>
               <p className="text-sm text-muted-foreground mt-1">Search above to promote someone.</p>
+            </Card>
+          )}
+        </div>
+
+        {/* Suspended accounts */}
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Suspended accounts</h2>
+          {loadingSuspended ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : suspended && suspended.length > 0 ? (
+            <div className="space-y-3">
+              {suspended.map((person, index) => (
+                <motion.div
+                  key={person.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.03 }}
+                >
+                  <Card className="p-4 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <UserAvatar src={person.avatar_url} name={displayName(person)} size="md" />
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{displayName(person)}</p>
+                        {person.username && (
+                          <p className="text-sm text-muted-foreground truncate">@{person.username}</p>
+                        )}
+                        {person.suspended_reason && (
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">{person.suspended_reason}</p>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => unsuspendMutation.mutate(person.id)}
+                      disabled={unsuspendMutation.isPending}
+                    >
+                      Restore account
+                    </Button>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <Card className="p-8 text-center">
+              <ShieldAlert className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
+              <p className="font-semibold">No suspended accounts</p>
             </Card>
           )}
         </div>

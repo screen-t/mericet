@@ -141,6 +141,10 @@ def send_message(
             if participant_other:
                 other_user_id = participant_other
 
+        receiver_profile = user_repo.get_by_id(other_user_id, "id, suspended_at")
+        if receiver_profile and receiver_profile.get("suspended_at"):
+            raise HTTPException(status_code=403, detail="This account is currently unavailable")
+
         # If either party has blocked the other, forbid messaging.
         block_detail = _blocked_message_detail(conn_repo, user_id, other_user_id)
         if block_detail:

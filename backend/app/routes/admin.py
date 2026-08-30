@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.middleware.auth import require_auth
-from app.deps import get_user_repo
-from app.routes.reports import _moderator_email_allowlist, _moderator_username_allowlist
+from app.deps import get_user_repo, get_report_repo
+from app.routes.reports import _moderator_email_allowlist, _moderator_username_allowlist, _require_moderator
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -66,6 +66,63 @@ def update_user_role(
         raise HTTPException(status_code=400, detail="Use another admin account to change your own role")
 
     updated = user_repo.update(target_user_id, {"role": role})
+    if not updated:
+        raise HTTPException(status_code=404, detail="User not found")
+    return updated
+
+
+# ==================== SUSPEND / UNSUSPEND ====================
+# Gated by _require_moderator (not admin-only) — moderators are the ones
+# triaging reports and need to be able to act on them directly.
+
+@router.get("/suspended")
+def list_suspended(
+    user_id: str = Depends(require_auth),
+    report_repo=Depends(get_report_repo),
+    user_repo=Depends(get_user_repo),
+):
+    _require_moderator(user_id, report_repo)
+    return user_repo.get_suspended()
+
+
+@router.post("/users/{target_user_id}/suspend")
+def suspend_user(
+    target_user_id: str,
+    payload: dict,
+    user_id: str = Depends(require_auth),
+    report_repo=Depends(get_report_repo),
+    user_repo=Depends(get_user_repo),
+):
+    _require_moderator(user_id, report_repo)
+
+    if target_user_id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot suspend your own account")
+
+    reason = (payload.get("reason") or "").strip() or None
+    updated = user_repo.update(target_user_id, {
+        "suspended_at": "now()",
+        "suspended_by": user_id,
+        "suspended_reason": reason,
+    })
+    if not updated:
+        raise HTTPException(status_code=404, detail="User not found")
+    return updated
+
+
+@router.post("/users/{target_user_id}/unsuspend")
+def unsuspend_user(
+    target_user_id: str,
+    user_id: str = Depends(require_auth),
+    report_repo=Depends(get_report_repo),
+    user_repo=Depends(get_user_repo),
+):
+    _require_moderator(user_id, report_repo)
+
+    updated = user_repo.update(target_user_id, {
+        "suspended_at": None,
+        "suspended_by": None,
+        "suspended_reason": None,
+    })
     if not updated:
         raise HTTPException(status_code=404, detail="User not found")
     return updated

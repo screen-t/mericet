@@ -25,6 +25,7 @@ import SearchPage from "./pages/SearchPage";
 import PostDetail from "./pages/PostDetail";
 import ModerationQueue from "./pages/ModerationQueue";
 import AdminModerators from "./pages/AdminModerators";
+import Suspended from "./pages/Suspended";
 import Settings from "./pages/Settings";
 import SecuritySettings from "./pages/SecuritySettings";
 import NotFound from "./pages/NotFound";
@@ -66,6 +67,7 @@ const App = () => (
             <Route path="/auth/callback" element={<OAuthCallback />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/suspended" element={<Suspended />} />
 
             {/* Protected routes */}
             <Route path="/feed" element={<RequireAuth><FeedNew /></RequireAuth>} />

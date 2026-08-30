@@ -2,7 +2,7 @@ import os
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List
 from app.middleware.auth import require_auth
-from app.deps import get_report_repo
+from app.deps import get_report_repo, get_post_repo, get_user_repo
 from app.repositories.protocols import ReportRepository
 from app.models.report import ReportCreate, ReportResponse, ReportStatus
 
@@ -104,13 +104,38 @@ def moderator_status(
 def get_report_queue(
     user_id: str = Depends(require_auth),
     report_repo: ReportRepository = Depends(get_report_repo),
+    post_repo=Depends(get_post_repo),
+    user_repo=Depends(get_user_repo),
     status: ReportStatus = Query(ReportStatus.PENDING),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    """Get moderation queue items."""
+    """Get moderation queue items, enriched with the target's current
+    hidden/suspended state so the UI can offer the right action either way,
+    even when reviewing an already-resolved report."""
     _require_moderator(user_id, report_repo)
-    return report_repo.get_queue(status.value, limit, offset)
+    reports = report_repo.get_queue(status.value, limit, offset)
+
+    post_ids = [r["target_id"] for r in reports if r["target_type"] == "post"]
+    user_ids = [r["target_id"] for r in reports if r["target_type"] == "user"]
+
+    hidden_map = {}
+    if post_ids:
+        posts = post_repo.get_by_ids(post_ids)
+        hidden_map = {p["id"]: bool(p.get("is_hidden")) for p in posts}
+
+    suspended_map = {}
+    if user_ids:
+        users = user_repo.get_by_ids(user_ids, "id, suspended_at")
+        suspended_map = {u["id"]: bool(u.get("suspended_at")) for u in users}
+
+    for r in reports:
+        if r["target_type"] == "post":
+            r["target_is_hidden"] = hidden_map.get(r["target_id"], False)
+        elif r["target_type"] == "user":
+            r["target_is_suspended"] = suspended_map.get(r["target_id"], False)
+
+    return reports
 
 
 @router.patch("/{report_id}", response_model=ReportResponse)

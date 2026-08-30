@@ -15,6 +15,7 @@ class SupabasePostRepository:
     def get_feed(self, visibility: str, limit: int, offset: int) -> list[dict]:
         result = self._client.table("posts").select("*") \
             .eq("is_published", True).eq("is_draft", False) \
+            .eq("is_hidden", False) \
             .eq("visibility", visibility) \
             .order("created_at", desc=True) \
             .range(offset, offset + limit - 1).execute()
@@ -27,6 +28,7 @@ class SupabasePostRepository:
         result = self._client.table("posts").select("*") \
             .in_("author_id", author_ids) \
             .eq("is_published", True).eq("is_draft", False) \
+            .eq("is_hidden", False) \
             .order("created_at", desc=True) \
             .range(offset, offset + limit - 1).execute()
         return result.data or []
@@ -36,9 +38,40 @@ class SupabasePostRepository:
         result = self._client.table("posts").select("*") \
             .eq("author_id", author_id) \
             .eq("is_published", True).eq("is_draft", False) \
+            .eq("is_hidden", False) \
             .order("created_at", desc=True) \
             .range(offset, offset + limit - 1).execute()
         return result.data or []
+
+    # --- Personal "hide from my feed" ---
+
+    def hide_for_user(self, user_id: str, post_id: str) -> None:
+        self._client.table("hidden_posts").upsert(
+            {"user_id": user_id, "post_id": post_id}, on_conflict="user_id,post_id"
+        ).execute()
+
+    def unhide_for_user(self, user_id: str, post_id: str) -> None:
+        self._client.table("hidden_posts").delete() \
+            .eq("user_id", user_id).eq("post_id", post_id).execute()
+
+    def get_hidden_post_ids(self, user_id: str) -> set[str]:
+        result = self._client.table("hidden_posts").select("post_id") \
+            .eq("user_id", user_id).execute()
+        return {row["post_id"] for row in (result.data or [])}
+
+    # --- Moderator soft-removal ---
+
+    def moderator_hide(self, post_id: str, moderator_id: str) -> Optional[dict]:
+        result = self._client.table("posts").update({
+            "is_hidden": True, "hidden_by": moderator_id, "hidden_at": "now()",
+        }).eq("id", post_id).execute()
+        return result.data[0] if result.data else None
+
+    def moderator_unhide(self, post_id: str) -> Optional[dict]:
+        result = self._client.table("posts").update({
+            "is_hidden": False, "hidden_by": None, "hidden_at": None,
+        }).eq("id", post_id).execute()
+        return result.data[0] if result.data else None
 
     def get_by_ids(self, post_ids: list[str]) -> list[dict]:
         if not post_ids:

@@ -81,6 +81,7 @@ class PostResponse(BaseModel):
     is_liked: Optional[bool] = None
     is_reposted: Optional[bool] = None
     is_saved: Optional[bool] = None
+    is_hidden: Optional[bool] = None
 
 # Comment Models
 class CommentCreate(BaseModel):

@@ -22,6 +22,8 @@ interface ReportItem {
   status: "pending" | "reviewed" | "resolved" | "dismissed";
   created_at: string;
   updated_at: string;
+  target_is_hidden?: boolean;
+  target_is_suspended?: boolean;
 }
 
 const statusOptions: Array<ReportItem["status"]> = ["pending", "reviewed", "resolved", "dismissed"];
@@ -53,6 +55,50 @@ const ModerationQueue = () => {
       queryClient.invalidateQueries({ queryKey: ["reports", "queue"] });
     },
     onError: () => toast({ title: "Failed to update report", variant: "destructive" }),
+  });
+
+  const hideReportedPostMutation = useMutation({
+    mutationFn: ({ postId, reportId }: { postId: string; reportId: string }) =>
+      backendApi.posts.moderatorHidePost(postId).then(() =>
+        backendApi.reports.updateStatus(reportId, "resolved")
+      ),
+    onSuccess: () => {
+      toast({ title: "Post hidden and report resolved" });
+      queryClient.invalidateQueries({ queryKey: ["reports", "queue"] });
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+    },
+    onError: () => toast({ title: "Failed to hide post", variant: "destructive" }),
+  });
+
+  const unhideReportedPostMutation = useMutation({
+    mutationFn: (postId: string) => backendApi.posts.moderatorUnhidePost(postId),
+    onSuccess: () => {
+      toast({ title: "Post restored" });
+      queryClient.invalidateQueries({ queryKey: ["reports", "queue"] });
+      queryClient.invalidateQueries({ queryKey: ["feed"] });
+    },
+    onError: () => toast({ title: "Failed to restore post", variant: "destructive" }),
+  });
+
+  const suspendReportedUserMutation = useMutation({
+    mutationFn: ({ userId, reportId, reason }: { userId: string; reportId: string; reason?: string }) =>
+      backendApi.admin.suspendUser(userId, reason).then(() =>
+        backendApi.reports.updateStatus(reportId, "resolved")
+      ),
+    onSuccess: () => {
+      toast({ title: "Account suspended and report resolved" });
+      queryClient.invalidateQueries({ queryKey: ["reports", "queue"] });
+    },
+    onError: () => toast({ title: "Failed to suspend account", variant: "destructive" }),
+  });
+
+  const unsuspendReportedUserMutation = useMutation({
+    mutationFn: (userId: string) => backendApi.admin.unsuspendUser(userId),
+    onSuccess: () => {
+      toast({ title: "Account restored" });
+      queryClient.invalidateQueries({ queryKey: ["reports", "queue"] });
+    },
+    onError: () => toast({ title: "Failed to restore account", variant: "destructive" }),
   });
 
   const { data: reviewQueueData, isLoading: loadingReviews } = useQuery({
@@ -271,6 +317,8 @@ const ModerationQueue = () => {
                             <div className="flex items-center gap-2 flex-wrap">
                               <Badge variant="secondary" className="capitalize">{report.status}</Badge>
                               <Badge variant="outline" className="capitalize">{report.target_type}</Badge>
+                              {report.target_is_hidden && <Badge variant="destructive">Hidden</Badge>}
+                              {report.target_is_suspended && <Badge variant="destructive">Suspended</Badge>}
                               <span className="text-sm text-muted-foreground">{new Date(report.created_at).toLocaleString()}</span>
                             </div>
 
@@ -311,6 +359,44 @@ const ModerationQueue = () => {
                               <Button variant="ghost" onClick={() => updateStatusMutation.mutate({ reportId: report.id, status: "dismissed" })} disabled={updateStatusMutation.isPending}>
                                 Dismiss
                               </Button>
+                            )}
+                            {report.target_type === "post" && (
+                              report.target_is_hidden ? (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => unhideReportedPostMutation.mutate(report.target_id)}
+                                  disabled={unhideReportedPostMutation.isPending}
+                                >
+                                  Unhide post
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="destructive"
+                                  onClick={() => hideReportedPostMutation.mutate({ postId: report.target_id, reportId: report.id })}
+                                  disabled={hideReportedPostMutation.isPending}
+                                >
+                                  Hide post
+                                </Button>
+                              )
+                            )}
+                            {report.target_type === "user" && (
+                              report.target_is_suspended ? (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => unsuspendReportedUserMutation.mutate(report.target_id)}
+                                  disabled={unsuspendReportedUserMutation.isPending}
+                                >
+                                  Restore account
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="destructive"
+                                  onClick={() => suspendReportedUserMutation.mutate({ userId: report.target_id, reportId: report.id, reason: report.reason })}
+                                  disabled={suspendReportedUserMutation.isPending}
+                                >
+                                  Suspend account
+                                </Button>
+                              )
                             )}
                           </div>
                         </div>

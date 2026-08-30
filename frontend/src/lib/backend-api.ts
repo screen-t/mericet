@@ -85,6 +85,18 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
+    // Sentinel from require_auth: the CALLER's own account is suspended (not
+    // to be confused with viewing someone else's suspended profile, which
+    // returns a normal human-readable message and shouldn't log anyone out).
+    if (err.detail === "ACCOUNT_SUSPENDED") {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+      sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+      if (window.location.pathname !== "/suspended") {
+        window.location.href = "/suspended";
+      }
+    }
     throw new Error(typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail));
   }
   const text = await res.text();
@@ -254,6 +266,26 @@ const posts = {
   deletePost: (postId: string) =>
     fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  hidePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}/hide`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  unhidePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}/hide`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  moderatorHidePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}/moderate/hide`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse),
+  moderatorUnhidePost: (postId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/posts/${encodeURIComponent(postId)}/moderate/unhide`, {
+      method: "POST",
       headers: getAuthHeaders(),
     }).then(handleResponse),
   likePost: (postId: string) =>
@@ -821,7 +853,9 @@ export interface AdminUser {
   last_name?: string | null;
   avatar_url?: string | null;
   headline?: string | null;
-  role: "user" | "moderator" | "admin";
+  role?: "user" | "moderator" | "admin";
+  suspended_at?: string | null;
+  suspended_reason?: string | null;
 }
 
 const admin = {
@@ -838,6 +872,21 @@ const admin = {
       method: "PATCH",
       headers: getAuthHeaders(),
       body: JSON.stringify({ role }),
+    }).then(handleResponse<AdminUser>),
+  getSuspended: () =>
+    fetchWithAuth(`${API_BASE_URL}/admin/suspended`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<AdminUser[]>),
+  suspendUser: (userId: string, reason?: string) =>
+    fetchWithAuth(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}/suspend`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ reason }),
+    }).then(handleResponse<AdminUser>),
+  unsuspendUser: (userId: string) =>
+    fetchWithAuth(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}/unsuspend`, {
+      method: "POST",
+      headers: getAuthHeaders(),
     }).then(handleResponse<AdminUser>),
 };
 

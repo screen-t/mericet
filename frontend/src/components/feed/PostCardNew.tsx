@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { backendApi } from "@/lib/backend-api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { formatDistanceToNow } from "date-fns";
 import { Post, Comment } from '@/types/api';
 import {
@@ -555,6 +556,32 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
     },
   });
 
+  const hidePostMutation = useMutation({
+    mutationFn: () => backendApi.posts.hidePost(post.id),
+    onSuccess: () => {
+      queryClient.setQueriesData<Post[]>({ queryKey: ['feed'] }, (old) =>
+        Array.isArray(old) ? old.filter((p) => p.id !== post.id) : old
+      );
+      toast({
+        title: "Post hidden",
+        description: "You won't see this post in your feed anymore.",
+        action: (
+          <ToastAction
+            altText="Undo"
+            onClick={() => {
+              backendApi.posts.unhidePost(post.id).then(() => {
+                queryClient.invalidateQueries({ queryKey: ['feed'] });
+              });
+            }}
+          >
+            Undo
+          </ToastAction>
+        ),
+      });
+    },
+    onError: () => toast({ title: "Failed to hide post", variant: "destructive" }),
+  });
+
   // Handle actions
   const handleLike = () => {
     if (!user) { setShowAuthGate(true); return; }
@@ -762,7 +789,12 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
             ) : (
               <>
                 <DropdownMenuItem onClick={() => setShowReportDialog(true)}>Report</DropdownMenuItem>
-                <DropdownMenuItem>Hide</DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => hidePostMutation.mutate()}
+                  disabled={hidePostMutation.isPending}
+                >
+                  Hide
+                </DropdownMenuItem>
               </>
             )}
           </DropdownMenuContent>
