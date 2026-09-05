@@ -5,9 +5,12 @@
   "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/", "destination": "/api/og-static?page=landing" },
+    { "source": "/terms-of-service", "destination": "/api/og-static?page=terms" },
+    { "source": "/privacy-policy", "destination": "/api/og-static?page=privacy" },
+    { "source": "/contact", "destination": "/api/og-static?page=contact" },
+    { "source": "/profile/:username", "destination": "/api/og-profile?username=:username" },
+    { "source": "/posts/:postId", "destination": "/api/og-post?postId=:postId" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
