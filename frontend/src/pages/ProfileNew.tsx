@@ -59,6 +59,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ImageCropDialog } from "@/components/ui/ImageCropDialog";
 
 export const ProfilePage = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -74,6 +75,20 @@ export const ProfilePage = () => {
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteEditing, setNoteEditing] = useState(false);
+
+  const [cropTarget, setCropTarget] = useState<"avatar" | "cover" | null>(null);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+
+  const openCrop = (target: "avatar" | "cover", file: File) => {
+    setCropTarget(target);
+    setCropImageSrc(URL.createObjectURL(file));
+  };
+
+  const closeCrop = () => {
+    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
+    setCropTarget(null);
+    setCropImageSrc(null);
+  };
 
   const toAbsoluteUrl = (url: string) =>
     /^https?:\/\//i.test(url) ? url : `https://${url}`;
@@ -340,7 +355,7 @@ export const ProfilePage = () => {
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) uploadCoverMutation.mutate(file);
+                  if (file) openCrop("cover", file);
                   e.target.value = "";
                 }}
               />
@@ -400,7 +415,7 @@ export const ProfilePage = () => {
                       className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) uploadAvatarMutation.mutate(file);
+                        if (file) openCrop("avatar", file);
                         e.target.value = "";
                       }}
                     />
@@ -790,6 +805,21 @@ export const ProfilePage = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <ImageCropDialog
+          open={cropTarget !== null}
+          imageSrc={cropImageSrc}
+          aspect={cropTarget === "avatar" ? 1 : 3}
+          cropShape={cropTarget === "avatar" ? "round" : "rect"}
+          title={cropTarget === "avatar" ? "Adjust profile photo" : "Adjust cover photo"}
+          onCancel={closeCrop}
+          onConfirm={(blob) => {
+            const file = new File([blob], cropTarget === "avatar" ? "avatar.jpg" : "cover.jpg", { type: blob.type });
+            if (cropTarget === "avatar") uploadAvatarMutation.mutate(file);
+            else if (cropTarget === "cover") uploadCoverMutation.mutate(file);
+            closeCrop();
+          }}
+        />
 
         {/* Profile Tabs */}
         <Tabs defaultValue="about" className="w-full">

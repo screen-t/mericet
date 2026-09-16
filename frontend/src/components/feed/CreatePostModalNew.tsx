@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ImageCropDialog } from "@/components/ui/ImageCropDialog";
 import {
   Select,
   SelectContent,
@@ -85,6 +86,15 @@ export const CreatePostModalNew = ({
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [cropQueue, setCropQueue] = useState<File[]>([]);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropAspect, setCropAspect] = useState(1);
+  const POST_ASPECT_OPTIONS = [
+    { label: "Square", value: 1 },
+    { label: "Portrait", value: 4 / 5 },
+    { label: "Landscape", value: 16 / 9 },
+  ];
+
   // Notify once, on mount, if a non-empty draft was restored
   useEffect(() => {
     if (restoredDraft && !isDraftEmpty(restoredDraft)) {
@@ -111,18 +121,11 @@ export const CreatePostModalNew = ({
     return () => clearTimeout(timer);
   }, [content, mediaUrls, showPoll, pollOptions, pollDuration, user?.id]);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+  const uploadOneFile = async (file: File) => {
     setIsUploadingMedia(true);
     try {
-      const uploaded: string[] = [];
-      for (const file of files) {
-        const result = await backendApi.media.upload(file);
-        uploaded.push(result.url);
-      }
-      setMediaUrls((prev) => [...prev, ...uploaded]);
-      toast({ title: `${uploaded.length} file(s) uploaded` });
+      const result = await backendApi.media.upload(file);
+      setMediaUrls((prev) => [...prev, result.url]);
     } catch (err: unknown) {
       toast({
         title: "Upload failed",
@@ -131,8 +134,34 @@ export const CreatePostModalNew = ({
       });
     } finally {
       setIsUploadingMedia(false);
-      // Reset so the same file can be selected again if needed
-      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const advanceCropQueue = () => {
+    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
+    setCropQueue((prev) => {
+      const rest = prev.slice(1);
+      setCropImageSrc(rest.length > 0 ? URL.createObjectURL(rest[0]) : null);
+      setCropAspect(1);
+      return rest;
+    });
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!files.length) return;
+
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    const others = files.filter((f) => !f.type.startsWith("image/"));
+
+    for (const file of others) {
+      await uploadOneFile(file);
+    }
+
+    if (images.length > 0) {
+      setCropQueue(images);
+      setCropImageSrc(URL.createObjectURL(images[0]));
     }
   };
 
@@ -474,6 +503,23 @@ export const CreatePostModalNew = ({
           </div>
         </div>
       </DialogContent>
+
+      <ImageCropDialog
+        open={cropQueue.length > 0}
+        imageSrc={cropImageSrc}
+        aspect={cropAspect}
+        aspectOptions={POST_ASPECT_OPTIONS}
+        onAspectChange={setCropAspect}
+        title={cropQueue.length > 1 ? `Adjust image (${cropQueue.length} remaining)` : "Adjust image"}
+        onCancel={advanceCropQueue}
+        onConfirm={async (blob) => {
+          const original = cropQueue[0];
+          if (!original) return;
+          const file = new File([blob], original.name, { type: blob.type });
+          await uploadOneFile(file);
+          advanceCropQueue();
+        }}
+      />
     </Dialog>
   );
 };
