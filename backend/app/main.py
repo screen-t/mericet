@@ -63,7 +63,7 @@ def root():
     return {"message": "Mericet Backend API", "status": "running"}
 
 # Health check endpoint for monitoring
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "healthy"}
 
