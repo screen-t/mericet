@@ -28,13 +28,17 @@ CREATE INDEX IF NOT EXISTS idx_login_activity_is_active ON login_activity(is_act
 ALTER TABLE login_activity ENABLE ROW LEVEL SECURITY;
 
 -- Allow service role full access (for backend operations)
-CREATE POLICY IF NOT EXISTS "Allow service role full access to login_activity" 
-ON login_activity FOR ALL 
+-- Note: Postgres has no "CREATE POLICY IF NOT EXISTS" syntax — drop-then-create
+-- is the standard idempotent pattern for policies.
+DROP POLICY IF EXISTS "Allow service role full access to login_activity" ON login_activity;
+CREATE POLICY "Allow service role full access to login_activity"
+ON login_activity FOR ALL
 USING (auth.role() = 'service_role');
 
 -- Allow users to read their own login activity
-CREATE POLICY IF NOT EXISTS "Users can view own login activity" 
-ON login_activity FOR SELECT 
+DROP POLICY IF EXISTS "Users can view own login activity" ON login_activity;
+CREATE POLICY "Users can view own login activity"
+ON login_activity FOR SELECT
 USING (auth.uid() = user_id);
 
 -- Verification queries (run manually after applying):

@@ -45,6 +45,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { renderWithLinks } from "@/lib/renderWithLinks";
 import { SaveToFolderModal } from "@/components/feed/SaveToFolderModal";
 import { SharePostModal } from "@/components/feed/SharePostModal";
 import { ReportDialog } from "@/components/modals/ReportDialog";
@@ -170,7 +171,7 @@ function CommentItem({ comment, currentUserId, postAuthorId, postId, onChanged, 
             </div>
           </div>
         ) : (
-          <p className="text-muted-foreground">{comment.content}</p>
+          <p className="text-muted-foreground">{renderWithLinks(comment.content || "")}</p>
         )}
 
         <span className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</span>
@@ -804,7 +805,7 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
       {/* Content */}
       <div className="mb-4">
         <p className="text-foreground whitespace-pre-wrap leading-relaxed">
-          {post.content}
+          {renderWithLinks(post.content || "")}
         </p>
       </div>
 
