@@ -59,6 +59,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ImageCropDialog } from "@/components/ui/ImageCropDialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 export const ProfilePage = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -74,6 +76,21 @@ export const ProfilePage = () => {
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteEditing, setNoteEditing] = useState(false);
+
+  const [cropTarget, setCropTarget] = useState<"avatar" | "cover" | null>(null);
+  const [showAvatarViewer, setShowAvatarViewer] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+
+  const openCrop = (target: "avatar" | "cover", file: File) => {
+    setCropTarget(target);
+    setCropImageSrc(URL.createObjectURL(file));
+  };
+
+  const closeCrop = () => {
+    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
+    setCropTarget(null);
+    setCropImageSrc(null);
+  };
 
   const toAbsoluteUrl = (url: string) =>
     /^https?:\/\//i.test(url) ? url : `https://${url}`;
@@ -340,7 +357,7 @@ export const ProfilePage = () => {
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) uploadCoverMutation.mutate(file);
+                  if (file) openCrop("cover", file);
                   e.target.value = "";
                 }}
               />
@@ -391,7 +408,7 @@ export const ProfilePage = () => {
                   size="xl"
                   className="border-4 border-background"
                 />
-                {isOwnProfile && (
+                {isOwnProfile ? (
                   <>
                     <input
                       ref={avatarInputRef}
@@ -400,7 +417,7 @@ export const ProfilePage = () => {
                       className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) uploadAvatarMutation.mutate(file);
+                        if (file) openCrop("avatar", file);
                         e.target.value = "";
                       }}
                     />
@@ -415,6 +432,11 @@ export const ProfilePage = () => {
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent>
+                            {profile.avatar_url && (
+                              <DropdownMenuItem onClick={() => setShowAvatarViewer(true)}>
+                                View profile picture
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => avatarInputRef.current?.click()}>
                               Change profile photo
                             </DropdownMenuItem>
@@ -431,6 +453,15 @@ export const ProfilePage = () => {
                       )}
                     </div>
                   </>
+                ) : (
+                  profile.avatar_url && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAvatarViewer(true)}
+                      className="absolute inset-0 rounded-full cursor-pointer"
+                      aria-label="View profile picture"
+                    />
+                  )
                 )}
               </div>
 
@@ -790,6 +821,34 @@ export const ProfilePage = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <ImageCropDialog
+          open={cropTarget !== null}
+          imageSrc={cropImageSrc}
+          aspect={cropTarget === "avatar" ? 1 : 3}
+          cropShape={cropTarget === "avatar" ? "round" : "rect"}
+          title={cropTarget === "avatar" ? "Adjust profile photo" : "Adjust cover photo"}
+          onCancel={closeCrop}
+          onConfirm={(blob) => {
+            const file = new File([blob], cropTarget === "avatar" ? "avatar.jpg" : "cover.jpg", { type: blob.type });
+            if (cropTarget === "avatar") uploadAvatarMutation.mutate(file);
+            else if (cropTarget === "cover") uploadCoverMutation.mutate(file);
+            closeCrop();
+          }}
+        />
+
+        <Dialog open={showAvatarViewer} onOpenChange={setShowAvatarViewer}>
+          <DialogContent className="max-w-md p-0 overflow-hidden bg-black border-none">
+            <DialogTitle className="sr-only">Profile picture</DialogTitle>
+            {profile.avatar_url && (
+              <img
+                src={profile.avatar_url}
+                alt={`${profile.first_name} ${profile.last_name}`.trim() || "Profile picture"}
+                className="w-full h-auto"
+              />
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Profile Tabs */}
         <Tabs defaultValue="about" className="w-full">
