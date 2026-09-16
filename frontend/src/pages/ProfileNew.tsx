@@ -60,6 +60,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ImageCropDialog } from "@/components/ui/ImageCropDialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 export const ProfilePage = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -77,6 +78,7 @@ export const ProfilePage = () => {
   const [noteEditing, setNoteEditing] = useState(false);
 
   const [cropTarget, setCropTarget] = useState<"avatar" | "cover" | null>(null);
+  const [showAvatarViewer, setShowAvatarViewer] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
 
   const openCrop = (target: "avatar" | "cover", file: File) => {
@@ -406,7 +408,7 @@ export const ProfilePage = () => {
                   size="xl"
                   className="border-4 border-background"
                 />
-                {isOwnProfile && (
+                {isOwnProfile ? (
                   <>
                     <input
                       ref={avatarInputRef}
@@ -430,6 +432,11 @@ export const ProfilePage = () => {
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent>
+                            {profile.avatar_url && (
+                              <DropdownMenuItem onClick={() => setShowAvatarViewer(true)}>
+                                View profile picture
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => avatarInputRef.current?.click()}>
                               Change profile photo
                             </DropdownMenuItem>
@@ -446,6 +453,15 @@ export const ProfilePage = () => {
                       )}
                     </div>
                   </>
+                ) : (
+                  profile.avatar_url && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAvatarViewer(true)}
+                      className="absolute inset-0 rounded-full cursor-pointer"
+                      aria-label="View profile picture"
+                    />
+                  )
                 )}
               </div>
 
@@ -820,6 +836,19 @@ export const ProfilePage = () => {
             closeCrop();
           }}
         />
+
+        <Dialog open={showAvatarViewer} onOpenChange={setShowAvatarViewer}>
+          <DialogContent className="max-w-md p-0 overflow-hidden bg-black border-none">
+            <DialogTitle className="sr-only">Profile picture</DialogTitle>
+            {profile.avatar_url && (
+              <img
+                src={profile.avatar_url}
+                alt={`${profile.first_name} ${profile.last_name}`.trim() || "Profile picture"}
+                className="w-full h-auto"
+              />
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Profile Tabs */}
         <Tabs defaultValue="about" className="w-full">
