@@ -307,6 +307,14 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
   const [showAuthGate, setShowAuthGate] = useState(false);
   const [showLikers, setShowLikers] = useState(false);
   const [isVoting, setIsVoting] = useState(false);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const mediaScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleMediaScroll = () => {
+    const el = mediaScrollRef.current;
+    if (!el || el.clientWidth === 0) return;
+    setActiveMediaIndex(Math.round(el.scrollLeft / el.clientWidth));
+  };
 
   const PAGE_SIZE_LIKERS = 20;
   const likersSentinelRef = useRef<HTMLDivElement>(null);
@@ -819,20 +827,40 @@ export const PostCardNew = ({ post, highlightCommentId }: PostCardNewProps) => {
             : (post.media_urls ?? []).map((u: string) => ({ url: u })));
         if (!mediaItems.length) return null;
         return (
-          <div className="mb-4 space-y-2">
-            {mediaItems.map((item, idx) => (
-              item.media_type === "video" ? (
-                <VideoPlayer key={idx} src={item.url} />
-              ) : (
-                <img
-                  key={idx}
-                  src={item.url}
-                  alt="Post media"
-                  className="w-full rounded-lg object-cover max-h-96"
-                  onError={(e) => { e.currentTarget.style.display = "none"; }}
-                />
-              )
-            ))}
+          <div className="mb-4">
+            <div
+              ref={mediaScrollRef}
+              onScroll={handleMediaScroll}
+              className="flex overflow-x-auto snap-x snap-mandatory rounded-lg no-scrollbar"
+            >
+              {mediaItems.map((item, idx) => (
+                <div key={idx} className="flex-shrink-0 w-full snap-center">
+                  {item.media_type === "video" ? (
+                    <VideoPlayer src={item.url} />
+                  ) : (
+                    <img
+                      src={item.url}
+                      alt="Post media"
+                      className="w-full rounded-lg object-cover max-h-96"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+            {mediaItems.length > 1 && (
+              <div className="flex justify-center gap-1.5 mt-2">
+                {mediaItems.map((_, idx) => (
+                  <div
+                    key={idx}
+                    className={cn(
+                      "h-1.5 rounded-full transition-all",
+                      idx === activeMediaIndex ? "w-4 bg-primary" : "w-1.5 bg-muted-foreground/30"
+                    )}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         );
       })()}

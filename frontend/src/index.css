@@ -162,6 +162,14 @@ body {
     background-image: var(--gradient-primary);
   }
 
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .bg-gradient-primary {
     background-image: var(--gradient-primary);
   }
