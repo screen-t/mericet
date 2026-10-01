@@ -1,6 +1,6 @@
 # Mericet - Professional Networking Platform
 
-A modern professional networking platform built for entrepreneurs, innovators, and business leaders to connect, collaborate, and grow.
+A modern professional & intellectual networking platform built for entrepreneurs, innovators, leaders, professionals & all intellectuals to show work, connect, and grow.
 
 ## Tech Stack
 
