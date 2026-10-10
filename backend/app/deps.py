@@ -110,8 +110,20 @@ def get_post_repo():
 
 
 from app.repositories.supabase.message_repo import SupabaseMessageRepository
+from app.repositories.supabase.vault_repo import SupabaseVaultRepository, SupabaseConnectedToolRepository
 
 
 @lru_cache(maxsize=1)
 def get_message_repo():
     return SupabaseMessageRepository(supabase)
+
+
+@lru_cache(maxsize=1)
+def get_vault_repo():
+    return SupabaseVaultRepository(supabase)
+
+
+@lru_cache(maxsize=1)
+def get_connected_tool_repo():
+    return SupabaseConnectedToolRepository(supabase)
+
