@@ -904,6 +904,65 @@ const media = {
   },
 };
 
+const vault = {
+  getMyItems: (category?: string): Promise<VaultItem[]> =>
+    fetchWithAuth(`${API_BASE_URL}/vault${category ? `?category=${encodeURIComponent(category)}` : ""}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<VaultItem[]>),
+  getUserItems: (userId: string, category?: string): Promise<VaultItem[]> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/user/${encodeURIComponent(userId)}${category ? `?category=${encodeURIComponent(category)}` : ""}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<VaultItem[]>),
+  getItem: (itemId: string): Promise<VaultItem> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/${encodeURIComponent(itemId)}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<VaultItem>),
+  createItem: (data: Partial<VaultItem>): Promise<VaultItem> =>
+    fetchWithAuth(`${API_BASE_URL}/vault`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse<VaultItem>),
+  updateItem: (itemId: string, data: Partial<VaultItem>): Promise<VaultItem> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/${encodeURIComponent(itemId)}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse<VaultItem>),
+  deleteItem: (itemId: string): Promise<{ message: string; id: string }> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/${encodeURIComponent(itemId)}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ message: string; id: string }>),
+  verifyItem: (itemId: string, payload: { proof_type: string; evidence: Record<string, unknown> }): Promise<VerificationResponse> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/${encodeURIComponent(itemId)}/verify`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload),
+    }).then(handleResponse<VerificationResponse>),
+  getConnectedTools: (): Promise<ConnectedTool[]> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/tools/list`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<ConnectedTool[]>),
+  connectTool: (provider: string, handle: string): Promise<ConnectedTool> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/tools`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ provider, handle }),
+    }).then(handleResponse<ConnectedTool>),
+  disconnectTool: (toolId: string): Promise<{ message: string; id: string }> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/tools/${encodeURIComponent(toolId)}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ message: string; id: string }>),
+  syncLivingGraph: (): Promise<{ message: string; result: { synced_tools: number; highlights_created: number; errors: string[] } }> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/living-graph/sync`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(handleResponse<{ message: string; result: { synced_tools: number; highlights_created: number; errors: string[] } }>),
+};
+
+
 export const backendApi = {
   auth,
   profile,
@@ -918,4 +977,6 @@ export const backendApi = {
   reviews,
   admin,
   media,
+  vault,
 };
+

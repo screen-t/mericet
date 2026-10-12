@@ -15,7 +15,9 @@ import { WorkExperienceSection } from "@/components/profile/WorkExperienceSectio
 import { EducationSection } from "@/components/profile/EducationSection";
 import { SkillsSection } from "@/components/profile/SkillsSection";
 import { ProfilePosts } from "@/components/profile/ProfilePosts";
+import { VaultSection } from "@/components/profile/VaultSection";
 import { Profile } from '@/types/api';
+
 import {
   MapPin,
   Link as LinkIcon,
@@ -850,14 +852,16 @@ export const ProfilePage = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Profile Tabs */}
+        {/* 3-Tab Profile Layout */}
         <Tabs defaultValue="about" className="w-full">
           <div className="overflow-x-auto">
-            <TabsList className="grid grid-cols-4 w-full min-w-[360px] h-auto gap-0">
+            <TabsList className="grid grid-cols-3 w-full min-w-[320px] h-auto gap-0">
               <TabsTrigger value="about" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">About</TabsTrigger>
               <TabsTrigger value="posts" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Posts</TabsTrigger>
-              <TabsTrigger value="experience" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Experience</TabsTrigger>
-              <TabsTrigger value="education" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Education</TabsTrigger>
+              <TabsTrigger value="vault" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap flex items-center justify-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+                Resume Vault
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -865,6 +869,7 @@ export const ProfilePage = () => {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
+              className="space-y-6"
             >
               {/* Private Note (only on other profiles) */}
               {!isOwnProfile && connectionStatus?.status === 'accepted' && (
@@ -917,6 +922,10 @@ export const ProfilePage = () => {
               )}
 
               <SkillsSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
+
+              <WorkExperienceSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
+
+              <EducationSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
               
               {(isOwnProfile || profile.work_history_visible) && profile.current_position && (
                 <Card className="p-6 mt-6">
@@ -939,15 +948,12 @@ export const ProfilePage = () => {
             <ProfilePosts username={profile.username} />
           </TabsContent>
 
-          <TabsContent value="experience">
-            <WorkExperienceSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
-          </TabsContent>
-
-          <TabsContent value="education">
-            <EducationSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
+          <TabsContent value="vault">
+            <VaultSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
           </TabsContent>
         </Tabs>
       </div>
+
 
 
     </AppLayout>
