@@ -11,10 +11,8 @@ import { Card } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { backendApi } from "@/lib/backend-api";
 
-import { WorkExperienceSection } from "@/components/profile/WorkExperienceSection";
-import { EducationSection } from "@/components/profile/EducationSection";
-import { SkillsSection } from "@/components/profile/SkillsSection";
 import { ProfilePosts } from "@/components/profile/ProfilePosts";
+import { VaultAccordion } from "@/components/profile/VaultAccordion";
 import { Profile } from '@/types/api';
 import {
   MapPin,
@@ -39,6 +37,9 @@ import {
   Github,
   StickyNote,
   Share2,
+  ShieldCheck,
+  User as UserIcon,
+  Activity,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -850,25 +851,43 @@ export const ProfilePage = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Profile Tabs */}
+        {/* 3-Tab Profile Architecture (X/Twitter Style) */}
         <Tabs defaultValue="about" className="w-full">
-          <div className="overflow-x-auto">
-            <TabsList className="grid grid-cols-4 w-full min-w-[360px] h-auto gap-0">
-              <TabsTrigger value="about" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">About</TabsTrigger>
-              <TabsTrigger value="posts" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Posts</TabsTrigger>
-              <TabsTrigger value="experience" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Experience</TabsTrigger>
-              <TabsTrigger value="education" className="text-xs sm:text-sm py-2 sm:py-3 whitespace-nowrap">Education</TabsTrigger>
+          <div className="border-b border-border mb-6">
+            <TabsList className="grid grid-cols-3 w-full max-w-lg mx-auto h-12 bg-transparent p-0 gap-0">
+              <TabsTrigger
+                value="about"
+                className="text-xs sm:text-sm font-medium py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary transition-all cursor-pointer"
+              >
+                About
+              </TabsTrigger>
+              <TabsTrigger
+                value="posts"
+                className="text-xs sm:text-sm font-medium py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary transition-all cursor-pointer"
+              >
+                Posts
+              </TabsTrigger>
+              <TabsTrigger
+                value="vault"
+                className="text-xs sm:text-sm font-medium py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+                Resume Vault
+              </TabsTrigger>
             </TabsList>
           </div>
 
+          {/* TAB 1: About (Identity Summary) */}
           <TabsContent value="about" className="space-y-6">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6"
             >
-              {/* Private Note (only on other profiles) */}
+              {/* Private Note (only on other profiles when connected) */}
               {!isOwnProfile && connectionStatus?.status === 'accepted' && (
-                <Card className="p-4 mb-6">
+                <Card className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-semibold flex items-center gap-2">
                       <StickyNote className="w-4 h-4" />
@@ -916,37 +935,103 @@ export const ProfilePage = () => {
                 </Card>
               )}
 
-              <SkillsSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
-              
-              {(isOwnProfile || profile.work_history_visible) && profile.current_position && (
-                <Card className="p-6 mt-6">
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <Briefcase className="w-5 h-5" />
-                    Current Position
+              {/* Primary Role & Identity Summary */}
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                    <UserIcon className="w-5 h-5 text-primary" />
+                    Professional Identity
                   </h3>
-                  <div>
-                    <p className="font-medium">{profile.current_position}</p>
-                    {profile.current_company && (
-                      <p className="text-sm text-muted-foreground">{profile.current_company}</p>
-                    )}
+                  {isOwnProfile && (
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link to="/settings" className="text-xs text-muted-foreground hover:text-primary">
+                        <Edit3 className="w-3.5 h-3.5 mr-1" />
+                        Edit Profile
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+
+                {profile.current_position ? (
+                  <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-muted/30 border border-border/50">
+                    <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
+                      <Briefcase className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">Current Role</p>
+                      <p className="text-base font-semibold text-foreground">{profile.current_position}</p>
+                      {profile.current_company && (
+                        <p className="text-sm text-muted-foreground">{profile.current_company}</p>
+                      )}
+                    </div>
                   </div>
-                </Card>
-              )}
+                ) : (
+                  <div className="p-4 rounded-xl border border-dashed text-center text-xs text-muted-foreground">
+                    {isOwnProfile
+                      ? "No current role set. Add your current position in profile settings."
+                      : "No current role specified."}
+                  </div>
+                )}
+
+                {/* Account Details & Role Overview */}
+                <div className="mt-4 pt-4 border-t border-border/50 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground">
+                  <div>
+                    <span className="font-medium text-foreground">Account Type: </span>
+                    <span className="capitalize">{profile.account_type || "Personal"}</span>
+                  </div>
+                  {profile.pronouns && (
+                    <div>
+                      <span className="font-medium text-foreground">Pronouns: </span>
+                      <span>{profile.pronouns}</span>
+                    </div>
+                  )}
+                </div>
+              </Card>
             </motion.div>
           </TabsContent>
 
+          {/* TAB 2: Posts (Social Feed / The Voice) */}
           <TabsContent value="posts">
             <ProfilePosts username={profile.username} />
           </TabsContent>
 
-          <TabsContent value="experience">
-            <WorkExperienceSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
-          </TabsContent>
-
-          <TabsContent value="education">
-            <EducationSection userId={profileUserId!} isOwnProfile={isOwnProfile} />
+          {/* TAB 3: Vault (The Living Resume - 6 Expandable Sections) */}
+          <TabsContent value="vault">
+            <VaultAccordion
+              userId={profileUserId!}
+              isOwnProfile={isOwnProfile}
+              profile={profile}
+            />
           </TabsContent>
         </Tabs>
+
+        {/* The Living Graph (Bottom Section - Issue #55) */}
+        <section className="mt-8 pt-8 border-t border-border/60">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" />
+              The Living Graph
+            </h3>
+            <Badge variant="outline" className="text-[11px] text-muted-foreground border-border font-normal">
+              Continuous Progress
+            </Badge>
+          </div>
+          <Card className="p-5 border bg-muted/20">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  Automated Execution Heatmap
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl">
+                  Displays daily micro-updates and verified highlights of continuous progress across connected developer and professional platforms.
+                </p>
+              </div>
+              <Badge variant="secondary" className="text-xs font-normal shrink-0">
+                Integration in Progress (#59 & #60)
+              </Badge>
+            </div>
+          </Card>
+        </section>
       </div>
 
 
