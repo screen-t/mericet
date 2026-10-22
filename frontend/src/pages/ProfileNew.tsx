@@ -41,6 +41,7 @@ import {
   Github,
   StickyNote,
   Share2,
+  ShieldCheck,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
