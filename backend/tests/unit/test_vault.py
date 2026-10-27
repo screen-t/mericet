@@ -392,3 +392,47 @@ def test_living_graph_audit_runs_endpoint(client, mock_living_graph_repo):
     runs = resp.json()
     assert len(runs) == 1
     assert runs[0]["synced_tools"] == 3
+
+
+# ==================== SECURITY AUDIT REGRESSION TESTS ====================
+
+def test_updating_claim_title_invalidates_verified_badge(client, mock_vault_repo):
+    """REGRESSION: Editing title of a verified item invalidates trust tier to prevent title hijacking."""
+    # Create item with Strong (Gold) verification
+    item = mock_vault_repo.create({
+        "user_id": "user-alice",
+        "title": "AWS Certified Solutions Architect",
+        "category": "achievement",
+        "verification_tier": "strong",
+        "verification_metadata": {"verified": True, "verifier": "Credly"},
+    })
+
+    # Alice changes title to an unverified claim
+    resp = client.put(f"/vault/{item['id']}", json={"title": "Principal Architect at OpenAI"})
+    assert resp.status_code == 200
+    updated = resp.json()
+    # Trust tier must be reset to none (not strong!)
+    assert updated["verification_tier"] == "none"
+    assert updated["verification_metadata"].get("reverification_required") is True
+    assert "modified after verification" in updated["verification_metadata"].get("reason", "")
+
+
+def test_mass_assignment_stripping_on_update(client, mock_vault_repo):
+    """REGRESSION: Attempting to modify user_id or verification_tier via PUT is stripped."""
+    item = mock_vault_repo.create({
+        "user_id": "user-alice",
+        "title": "Legit Project",
+        "category": "project",
+        "verification_tier": "none",
+    })
+
+    resp = client.put(f"/vault/{item['id']}", json={
+        "title": "Legit Project v2",
+        "user_id": "user-bob",
+        "verification_tier": "strong",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user_id"] == "user-alice"
+    assert data["verification_tier"] == "none"
+

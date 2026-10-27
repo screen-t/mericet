@@ -191,10 +191,35 @@ class VerificationService:
                 message="Ring signature requires a valid ring of at least 2 public keys.",
             )
 
+        # Unique ring member check (duplicate keys cannot form an anonymity ring)
+        clean_ring = [str(k).strip() for k in ring if str(k).strip()]
+        if len(set(clean_ring)) != len(clean_ring) or len(set(clean_ring)) < 2:
+            return VerificationResult(
+                tier=VerificationTier.none,
+                verified=False,
+                message="Ring signature requires unique public keys with at least 2 distinct ring members.",
+            )
+
+        # Ring size safety bound (prevent CPU exhaustion)
+        if len(clean_ring) > 100:
+            return VerificationResult(
+                tier=VerificationTier.none,
+                verified=False,
+                message="Ring signature exceeds maximum permitted ring size (100).",
+            )
+
+        # Anti-replay validation: If key_image is provided, validate length & structure
+        if key_image and len(str(key_image).strip()) < 8:
+            return VerificationResult(
+                tier=VerificationTier.none,
+                verified=False,
+                message="Ring signature contains malformed or truncated key image.",
+            )
+
         c_0 = signature.get("c_0")
         s_vals = signature.get("s")
 
-        if not c_0 or not isinstance(s_vals, list) or len(s_vals) != len(ring):
+        if not c_0 or not isinstance(s_vals, list) or len(s_vals) != len(clean_ring):
             return VerificationResult(
                 tier=VerificationTier.none,
                 verified=False,
@@ -207,8 +232,8 @@ class VerificationService:
             current_c = str(c_0).strip().lower()
             h_m = hashlib.sha256(message.encode("utf-8")).hexdigest()
 
-            for i in range(len(ring)):
-                pk = str(ring[i]).strip()
+            for i in range(len(clean_ring)):
+                pk = clean_ring[i]
                 s_i = str(s_vals[i]).strip()
                 if not pk or not s_i:
                     return VerificationResult(
@@ -229,11 +254,12 @@ class VerificationService:
                 return VerificationResult(
                     tier=VerificationTier.mid,
                     verified=True,
-                    message=f"P2P Ring Signature cryptographically verified across {len(ring)} ring members (Silver tier).",
+                    message=f"P2P Ring Signature cryptographically verified across {len(clean_ring)} ring members (Silver tier).",
                     details={
                         "verifier": "Mericet-RingSignature-Engine/1.0",
-                        "ring_size": len(ring),
-                        "key_image": key_image[:16] + "..." if key_image else None,
+                        "algorithm": "Linkable Ring Signature (SHA256 hash-chain simulation)",
+                        "ring_size": len(clean_ring),
+                        "key_image": str(key_image)[:16] + "...",
                         "verified_at": now_iso,
                     },
                 )
@@ -293,6 +319,39 @@ class VerificationService:
                 details={"provided_server": server_name},
             )
 
+        # Timestamp freshness and replay protection
+        notarized_at_raw = session_data.get("notarized_at") or session_data.get("timestamp") or evidence.get("notarized_at")
+        if notarized_at_raw:
+            try:
+                dt_str = str(notarized_at_raw).replace("Z", "+00:00")
+                notarized_dt = datetime.fromisoformat(dt_str)
+                if notarized_dt.tzinfo is None:
+                    notarized_dt = notarized_dt.replace(tzinfo=timezone.utc)
+                now_utc = datetime.now(timezone.utc)
+
+                # Replay protection: Reject attestations older than 90 days
+                if (now_utc - notarized_dt).total_seconds() > 90 * 86400:
+                    return VerificationResult(
+                        tier=VerificationTier.none,
+                        verified=False,
+                        message="TLSNotary attestation is expired (validity window is 90 days).",
+                        details={"notarized_at": str(notarized_at_raw), "max_age_days": 90},
+                    )
+                # Reject invalid future timestamps (allow 5-minute clock drift)
+                if (notarized_dt - now_utc).total_seconds() > 300:
+                    return VerificationResult(
+                        tier=VerificationTier.none,
+                        verified=False,
+                        message="TLSNotary attestation contains invalid future timestamp.",
+                        details={"notarized_at": str(notarized_at_raw)},
+                    )
+            except (ValueError, TypeError):
+                return VerificationResult(
+                    tier=VerificationTier.none,
+                    verified=False,
+                    message="TLSNotary attestation contains malformed notarized_at timestamp.",
+                )
+
         # Verify notary signature structure
         # Signature must be a valid hex or base64 cryptographic attestation (at least 64 chars)
         if len(notary_signature) < 64 or len(notary_pubkey) < 32:
@@ -321,6 +380,7 @@ class VerificationService:
                 "notary_pubkey_fingerprint": notary_pubkey[:16] + "...",
                 "verified_stats": extracted_stats,
                 "verified_at": now_iso,
+                "expiry_window_days": 90,
             },
         )
 
@@ -609,9 +669,9 @@ class VerificationService:
 
         metrics = evidence.get("metrics") or {}
         return VerificationResult(
-            tier=VerificationTier.mid if metrics else VerificationTier.weak,
+            tier=VerificationTier.weak,
             verified=True,
-            message=f"Verified active {provider.capitalize()} integration for handle '{handle}'.",
+            message=f"Verified active {provider.capitalize()} integration for handle '{handle}' (Bronze tier). Cryptographic attestation required for higher tiers.",
             details={
                 "provider": provider,
                 "handle": handle,

@@ -260,3 +260,73 @@ def test_living_graph_sanitize_logs():
     assert "SUPER_SECRET_VALUE" not in sanitized
     assert "KEY123" not in sanitized
     assert "alice" in sanitized
+
+
+# ==================== REGRESSION TESTS ====================
+
+def test_tlsnotary_expired_timestamp_fails_closed():
+    """TLSNotary attestation older than 90 days fails closed."""
+    evidence = {
+        "server_name": "api.github.com",
+        "notary_pubkey": "0x1234567890abcdef1234567890abcdef1234567890abcdef",
+        "notary_signature": "0x" + "a" * 64,
+        "extracted_stats": {"public_repos": 50},
+        "notarized_at": "2020-01-01T00:00:00Z",  # Expired
+    }
+    res = VerificationService.verify_tlsnotary_proof(evidence)
+    assert res.tier == VerificationTier.none
+    assert res.verified is False
+    assert "expired" in res.message.lower()
+
+
+def test_tlsnotary_future_timestamp_fails_closed():
+    """TLSNotary attestation with future timestamp fails closed."""
+    evidence = {
+        "server_name": "api.github.com",
+        "notary_pubkey": "0x1234567890abcdef1234567890abcdef1234567890abcdef",
+        "notary_signature": "0x" + "a" * 64,
+        "extracted_stats": {"public_repos": 50},
+        "notarized_at": "2099-01-01T00:00:00Z",  # Far future
+    }
+    res = VerificationService.verify_tlsnotary_proof(evidence)
+    assert res.tier == VerificationTier.none
+    assert res.verified is False
+    assert "future" in res.message.lower()
+
+
+def test_ring_signature_duplicate_keys_fails_closed():
+    """Ring signature containing duplicate public keys fails closed."""
+    res = VerificationService.verify_ring_signature({
+        "message": "Claim",
+        "ring": ["0xduplicate_key", "0xduplicate_key"],
+        "signature": {"c_0": "0xc0", "s": ["s1", "s2"]},
+    })
+    assert res.tier == VerificationTier.none
+    assert res.verified is False
+    assert "unique public keys" in res.message.lower()
+
+
+def test_ring_signature_malformed_key_image_fails_closed():
+    """Ring signature with short/truncated key image fails closed."""
+    res = VerificationService.verify_ring_signature({
+        "message": "Claim",
+        "ring": ["0xkey1", "0xkey2"],
+        "signature": {"c_0": "0xc0", "s": ["s1", "s2"]},
+        "key_image": "short",  # < 8 chars
+    })
+    assert res.tier == VerificationTier.none
+    assert res.verified is False
+    assert "malformed or truncated key image" in res.message.lower()
+
+
+def test_connected_service_without_crypto_restricted_to_bronze():
+    """Public third-party profile without cryptographic proof is restricted to Bronze (Weak) tier."""
+    res = VerificationService.verify_connected_service({
+        "provider": "github",
+        "handle": "my_handle",
+        "metrics": {"repos": 10},
+    })
+    assert res.tier == VerificationTier.weak
+    assert res.verified is True
+    assert "Bronze" in res.message
+

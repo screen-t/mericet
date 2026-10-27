@@ -138,10 +138,9 @@ class SupabaseLivingGraphRepository:
                     "expires_at": expires_at.isoformat(),
                     "acquired_by": acquired_by,
                 }).execute()
-                return True
         except Exception:
-            # Fall back safely
-            return True
+            # Concurrency safety: fail closed if database lock check fails
+            return False
 
     def release_lease(self, lock_key: str, acquired_by: str) -> None:
         """Releases the held lease."""

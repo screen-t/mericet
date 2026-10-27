@@ -518,11 +518,10 @@ class LivingGraphEngine:
         now_iso = datetime.now(timezone.utc).isoformat()
         clean_title = f"[{item.provider.capitalize()}] {item.title}"
 
-        # Verification tier assignment based on verified provider
+        # Verification tier assignment: Credly badges have verified issuer templates (Gold tier);
+        # public API milestones without TLSNotary or ring signatures are Weak (Bronze) tier.
         if item.provider == "credly":
             tier = VerificationTier.strong.value
-        elif item.provider in ("github", "leetcode"):
-            tier = VerificationTier.mid.value
         else:
             tier = VerificationTier.weak.value
 

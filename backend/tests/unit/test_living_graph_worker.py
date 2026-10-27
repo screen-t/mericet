@@ -464,3 +464,133 @@ def test_worker_run_once_cli(monkeypatch):
     summary = run_once(tool_repo=tool_repo, vault_repo=vault_repo, living_graph_repo=living_graph_repo)
     assert summary["status"] == "completed"
     assert len(living_graph_repo.runs) == 1
+
+
+# ==================== REGRESSION TESTS ====================
+
+def test_metric_decrease_does_not_downgrade_highest_milestone(monkeypatch):
+    """REGRESSION: If metric counter decreases, highest milestone is retained and not downgraded."""
+    vault_repo = MockVaultRepository()
+    tool_repo = MockConnectedToolRepository()
+
+    tool_repo.upsert({
+        "user_id": "user-charlie",
+        "provider": "leetcode",
+        "handle": "charlie_lc",
+        "auth_status": "connected",
+    })
+
+    # User originally solved 250 problems (high milestone)
+    monkeypatch.setattr(LeetCodeAdapter, "fetch", lambda self, handle, cursor=None, credentials=None: ProviderFetchResult(
+        success=True,
+        provider="leetcode",
+        handle=handle,
+        raw_achievements=[
+            RawAchievement(
+                provider="leetcode",
+                handle=handle,
+                external_id="leetcode:user:charlie_lc:solved_milestone",
+                achievement_type="algorithmic_milestone",
+                title="250+ Algorithmic Challenges Solved",
+                description="Solved 250 problems.",
+                raw_metric_value=250.0,
+                metric_name="leetcode_solved",
+            )
+        ],
+    ))
+    LivingGraphEngine.sync_user_tools("user-charlie", tool_repo, vault_repo)
+
+    # Next sync: reported metric is 200 (lower)
+    monkeypatch.setattr(LeetCodeAdapter, "fetch", lambda self, handle, cursor=None, credentials=None: ProviderFetchResult(
+        success=True,
+        provider="leetcode",
+        handle=handle,
+        raw_achievements=[
+            RawAchievement(
+                provider="leetcode",
+                handle=handle,
+                external_id="leetcode:user:charlie_lc:solved_milestone",
+                achievement_type="algorithmic_milestone",
+                title="100+ Algorithmic Challenges Solved",
+                description="Solved 200 problems.",
+                raw_metric_value=200.0,
+                metric_name="leetcode_solved",
+            )
+        ],
+    ))
+    res2 = LivingGraphEngine.sync_user_tools("user-charlie", tool_repo, vault_repo)
+    # Must NOT update or downgrade
+    assert res2["highlights_updated"] == 0
+    items = vault_repo.get_by_user("user-charlie")
+    assert len(items) == 1
+    assert "250+" in items[0]["title"]
+    assert items[0]["metadata"]["raw_metric_value"] == 250.0
+
+
+def test_worker_lease_reclaims_stale_expired_lock():
+    """REGRESSION: Worker reclaims lock if a prior worker crashed and lease expired."""
+    from app.repositories.supabase.vault_repo import SupabaseLivingGraphRepository
+
+    class MockTable:
+        def __init__(self):
+            # Simulate a stale lock expired in the past
+            self.data = [{
+                "lock_key": "living_graph_sync_job",
+                "acquired_at": "2020-01-01T00:00:00+00:00",
+                "expires_at": "2020-01-01T00:10:00+00:00",
+                "acquired_by": "crashed-worker-999",
+            }]
+            self.updated = False
+
+        def select(self, *args, **kwargs):
+            return self
+
+        def eq(self, col, val):
+            return self
+
+        def execute(self):
+            return MagicMock(data=self.data)
+
+        def update(self, data):
+            self.updated = True
+            self.data = [data]
+            return self
+
+    mock_client = MagicMock()
+    mock_table = MockTable()
+    mock_client.table.return_value = mock_table
+
+    repo = SupabaseLivingGraphRepository(mock_client)
+    # Stale lock should be successfully reclaimed
+    acquired = repo.acquire_lease("living_graph_sync_job", "new-worker-101", lease_duration_seconds=600)
+    assert acquired is True
+    assert mock_table.updated is True
+
+
+def test_github_retry_exponential_backoff_on_429(monkeypatch):
+    """REGRESSION: GitHub adapter retries on 429 rate limit with backoff and succeeds on next attempt."""
+    mock_resp_429 = MagicMock()
+    mock_resp_429.status_code = 429
+
+    mock_resp_200 = MagicMock()
+    mock_resp_200.status_code = 200
+    mock_resp_200.json.return_value = {"public_repos": 10, "followers": 5}
+
+    calls = []
+
+    def mock_get(url, headers):
+        calls.append(url)
+        if len(calls) == 1:
+            return mock_resp_429
+        return mock_resp_200
+
+    mock_client = MagicMock()
+    mock_client.get = mock_get
+
+    # Patch time.sleep so test runs instantly without delay
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+    resp = GitHubAdapter._execute_with_retry(mock_client, "https://api.github.com/users/test", {})
+    assert resp.status_code == 200
+    assert len(calls) == 2
+

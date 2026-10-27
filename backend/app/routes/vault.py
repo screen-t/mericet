@@ -118,19 +118,36 @@ def update_vault_item(
     user_id: str = Depends(require_auth),
     vault_repo=Depends(get_vault_repo),
 ):
-    """Update a vault item (enforces server-side ownership)."""
-    owner_id = vault_repo.get_owner(item_id)
-    if not owner_id:
+    current_item = vault_repo.get_by_id(item_id)
+    if not current_item:
         raise HTTPException(status_code=404, detail="Vault item not found")
-    if owner_id != user_id:
+    if current_item.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Unauthorized to modify this vault item")
 
     update_data = payload.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
 
+    # Defense in depth: forbid modifying system-managed attributes
+    for forbidden in ("id", "user_id", "created_at", "verification_tier", "verification_metadata"):
+        update_data.pop(forbidden, None)
+
     if isinstance(update_data.get("category"), VaultCategory):
         update_data["category"] = update_data["category"].value
+
+    # Trust-tier hijacking prevention:
+    # If claim title or category changed on a verified item (Mid/Silver or Strong/Gold),
+    # invalidate the trust tier back to unverified/weak pending re-verification.
+    title_changed = "title" in update_data and update_data["title"] != current_item.get("title")
+    category_changed = "category" in update_data and update_data["category"] != current_item.get("category")
+    if (title_changed or category_changed) and current_item.get("verification_tier") in (VerificationTier.mid.value, VerificationTier.strong.value):
+        effective_hash = update_data.get("poseidon_hash") or current_item.get("poseidon_hash")
+        update_data["verification_tier"] = VerificationTier.weak.value if effective_hash else VerificationTier.none.value
+        update_data["verification_metadata"] = {
+            "reverification_required": True,
+            "reason": "Claim title or category was modified after verification.",
+            "invalidated_at": "now()",
+        }
 
     # If poseidon_hash is updated, update commitment metadata
     if "poseidon_hash" in update_data:
