@@ -101,16 +101,17 @@ class VerificationService:
 
             now_iso = datetime.now(timezone.utc).isoformat()
             if score > 0.85:
-                # Silver / Mid: Text relevance exceeds 85%
+                # Silver / Mid: Text relevance exceeds 85% (semantic text alignment)
                 return VerificationResult(
                     tier=VerificationTier.mid,
                     verified=True,
-                    message=f"Verified high text relevance score of {score*100:.1f}% (exceeds 85% threshold).",
+                    message=f"Verified semantic text relevance of {score*100:.1f}% exceeds 85% threshold (Silver tier). Note: Evaluates semantic text alignment, not cryptographic proof or code originality.",
                     details={
                         "verifier": "Mericet-TextRelevance-Engine/1.0",
                         "computed_score": round(score, 4),
                         "threshold": 0.85,
                         "matched_keywords": matched,
+                        "proof_nature": "semantic_text_alignment",
                         "evaluated_at": now_iso,
                     },
                 )
@@ -252,15 +253,18 @@ class VerificationService:
             if is_valid_closure:
                 now_iso = datetime.now(timezone.utc).isoformat()
                 return VerificationResult(
-                    tier=VerificationTier.mid,
-                    verified=True,
-                    message=f"P2P Ring Signature cryptographically verified across {len(clean_ring)} ring members (Silver tier).",
+                    tier=VerificationTier.none,
+                    verified=False,
+                    message=f"P2P Ring Signature verification is pending: current engine is an experimental SHA-256 hash-chain prototype. Silver tier is withheld until native elliptic-curve ring verification (e.g., MLSAG/CLSAG) is integrated.",
                     details={
-                        "verifier": "Mericet-RingSignature-Engine/1.0",
-                        "algorithm": "Linkable Ring Signature (SHA256 hash-chain simulation)",
+                        "verifier": "Mericet-RingSignature-Prototype/1.0",
+                        "status": "prototype_verification_pending",
+                        "simulation_closure_valid": True,
+                        "algorithm": "Linkable Ring Signature (SHA256 hash-chain prototype)",
                         "ring_size": len(clean_ring),
                         "key_image": str(key_image)[:16] + "...",
-                        "verified_at": now_iso,
+                        "evaluated_at": now_iso,
+                        "limitation": "Hash-chain simulation does not establish discrete-logarithm cryptographic proof. Silver tier cannot be awarded.",
                     },
                 )
             else:
@@ -371,16 +375,19 @@ class VerificationService:
 
         now_iso = datetime.now(timezone.utc).isoformat()
         return VerificationResult(
-            tier=VerificationTier.strong,
-            verified=True,
-            message=f"TLSNotary verified API statistics directly from {server_name} (Gold tier).",
+            tier=VerificationTier.none,
+            verified=False,
+            message=f"TLSNotary attestation verification for {server_name} is pending: structural headers and trusted domain validated, but full MPC-TLS cryptographic transcript verification requires native TLSNotary verifier binary. Gold tier is withheld.",
             details={
                 "verifier": "Mericet-TLSNotary-Engine/1.0",
+                "status": "cryptographic_transcript_verification_pending",
+                "structural_checks_passed": True,
                 "server_name": server_name,
                 "notary_pubkey_fingerprint": notary_pubkey[:16] + "...",
                 "verified_stats": extracted_stats,
-                "verified_at": now_iso,
+                "evaluated_at": now_iso,
                 "expiry_window_days": 90,
+                "limitation": "Structural domain and header checks alone do not establish MPC-TLS session authenticity without full transcript cryptographic proof.",
             },
         )
 
@@ -434,16 +441,17 @@ class VerificationService:
             now_iso = datetime.now(timezone.utc).isoformat()
             if is_high_originality:
                 return VerificationResult(
-                    tier=VerificationTier.strong,
+                    tier=VerificationTier.weak,
                     verified=True,
-                    message=f"Vector & structural originality analysis confirmed highly original codebase (entropy {entropy:.2f}, unique ratio {unique_ratio:.2f}) (Gold tier).",
+                    message=f"Local code complexity evaluated: high entropy ({entropy:.2f}) and token diversity ({unique_ratio:.2f}) across {len(lines)} lines (Bronze tier). Note: Local token entropy indicates structural complexity, not global codebase originality or cryptographic proof.",
                     details={
-                        "verifier": "Mericet-CodeOriginality-Engine/1.0",
+                        "verifier": "Mericet-CodeComplexity-Heuristic/1.0",
                         "entropy": round(entropy, 2),
                         "unique_token_ratio": round(unique_ratio, 2),
                         "active_lines": len(lines),
                         "repo_url": repo_url or None,
-                        "verified_at": now_iso,
+                        "evaluated_at": now_iso,
+                        "nature_of_proof": "local_complexity_heuristic",
                     },
                 )
             else:
@@ -452,29 +460,20 @@ class VerificationService:
                     verified=True,
                     message="Code structure evaluated: standard or boilerplate patterns detected (Bronze tier).",
                     details={
-                        "verifier": "Mericet-CodeOriginality-Engine/1.0",
+                        "verifier": "Mericet-CodeComplexity-Heuristic/1.0",
                         "entropy": round(entropy, 2),
                         "unique_token_ratio": round(unique_ratio, 2),
+                        "nature_of_proof": "local_complexity_heuristic",
                     },
                 )
 
         if isinstance(embedding, list) and len(embedding) > 0:
-            # Vector embedding provided
-            vector_distance = evidence.get("vector_distance") or 0.1
-            if vector_distance >= 0.85:
-                return VerificationResult(
-                    tier=VerificationTier.strong,
-                    verified=True,
-                    message="Vector embedding cosine analysis confirmed highly original codebase (Gold tier).",
-                    details={"vector_distance": vector_distance, "dimensions": len(embedding)},
-                )
-            else:
-                return VerificationResult(
-                    tier=VerificationTier.weak,
-                    verified=True,
-                    message="Vector distance below threshold for strong originality (Bronze tier).",
-                    details={"vector_distance": vector_distance},
-                )
+            return VerificationResult(
+                tier=VerificationTier.none,
+                verified=False,
+                message="Global codebase originality analysis requires server-side embedding lookup against indexed repository database. Client-supplied vector distance cannot establish Gold tier.",
+                details={"dimensions": len(embedding)},
+            )
 
         return VerificationResult(
             tier=VerificationTier.none,
@@ -500,26 +499,31 @@ class VerificationService:
         if credential_url:
             cleaned_url = credential_url.strip()
             if _CREDLY_URL_RE.match(cleaned_url):
+                # Client-supplied Credly URL: register claim URL at Bronze tier.
+                # Direct server-side API query or signed cryptographic issuer badge required for Gold tier.
                 return VerificationResult(
-                    tier=VerificationTier.strong,
+                    tier=VerificationTier.weak,
                     verified=True,
-                    message="Official issuer credential verified via Credly badge platform (Gold tier).",
+                    message=f"Credly credential URL registered ({cleaned_url}) (Bronze tier). Direct server-side verification or cryptographic attestation required for Gold tier.",
                     details={
                         "issuer": "Credly",
-                        "verification_type": "official_issuer",
+                        "verification_type": "registered_credential_url",
                         "verified_url": cleaned_url,
+                        "nature_of_evidence": "client_supplied_url",
                     },
                 )
             parsed = urllib.parse.urlparse(cleaned_url)
             if parsed.netloc.endswith((".edu", ".ac.uk", ".gov", "coursera.org", "edx.org")):
+                # Client-supplied accredited domain URL: register claim at Bronze tier.
                 return VerificationResult(
-                    tier=VerificationTier.strong,
+                    tier=VerificationTier.weak,
                     verified=True,
-                    message=f"Official credential validated from accredited issuer domain ({parsed.netloc}) (Gold tier).",
+                    message=f"Accredited issuer domain URL registered ({parsed.netloc}) (Bronze tier). Independent cryptographic attestation or direct issuer confirmation required for Gold tier.",
                     details={
                         "issuer": parsed.netloc,
-                        "verification_type": "accredited_domain",
+                        "verification_type": "registered_accredited_domain_url",
                         "verified_url": cleaned_url,
+                        "nature_of_evidence": "client_supplied_url",
                     },
                 )
 
@@ -603,16 +607,16 @@ class VerificationService:
             owner, repo_name = repo_match.group(2), repo_match.group(3)
             if commit_hash and _COMMIT_HASH_RE.match(commit_hash):
                 is_author_match = claimed_author and (claimed_author.lower() == owner.lower())
-                tier = VerificationTier.mid if is_author_match or live_url else VerificationTier.weak
                 return VerificationResult(
-                    tier=tier,
+                    tier=VerificationTier.weak,
                     verified=True,
-                    message=f"Verified GitHub repository work '{owner}/{repo_name}' with valid commit {commit_hash[:8]}.",
+                    message=f"Verified GitHub repository work '{owner}/{repo_name}' with valid commit {commit_hash[:8]} (Bronze tier).",
                     details={
                         "verification_type": "github_proof_of_work",
                         "repo": f"{owner}/{repo_name}",
                         "commit_hash": commit_hash,
                         "live_url": live_url or None,
+                        "author_matches_owner": bool(is_author_match),
                     },
                 )
             else:

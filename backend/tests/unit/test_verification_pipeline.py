@@ -79,8 +79,8 @@ def test_client_forged_ai_score_is_ignored():
     assert res.verified is False
 
 
-def test_p2p_ring_signature_valid_grants_silver():
-    """Mid (Silver): Approved via cryptographically verified P2P ring signature."""
+def test_p2p_ring_signature_prototype_fails_closed_pending_ec_implementation():
+    """NEGATIVE TEST: Prototype ring signature cannot award Silver trust tier and fails closed to pending."""
     # Deterministic ring setup
     msg = "User claim: Lead Architect of Protocol V2"
     ring = ["0x04abc123", "0x04def456", "0x04789abc"]
@@ -101,9 +101,11 @@ def test_p2p_ring_signature_valid_grants_silver():
         "signature": {"c_0": c_0, "s": s_vals, "closure_hash": cur},
         "key_image": "0xkeyimage12345",
     })
-    assert res.tier == VerificationTier.mid
-    assert res.verified is True
-    assert "P2P Ring Signature" in res.message
+    # MUST fail closed to none until real EC ring signatures are integrated
+    assert res.tier == VerificationTier.none
+    assert res.verified is False
+    assert "pending" in res.message.lower()
+    assert res.details.get("status") == "prototype_verification_pending"
 
 
 def test_p2p_ring_signature_closure_mismatch_fails_closed():
@@ -129,8 +131,8 @@ def test_p2p_ring_signature_insufficient_ring_size():
     assert res.verified is False
 
 
-def test_tlsnotary_session_valid_grants_gold():
-    """Strong (Gold): Valid TLSNotary evidence verifies relevant API statistics."""
+def test_tlsnotary_session_structural_checks_alone_cannot_award_gold():
+    """NEGATIVE TEST: Incomplete TLSNotary proof without cryptographic transcript fails closed to pending."""
     evidence = {
         "server_name": "api.github.com",
         "notary_pubkey": "0x1234567890abcdef1234567890abcdef1234567890abcdef",
@@ -138,10 +140,11 @@ def test_tlsnotary_session_valid_grants_gold():
         "extracted_stats": {"public_repos": 42, "total_commits": 1250},
     }
     res = VerificationService.verify_tlsnotary_proof(evidence)
-    assert res.tier == VerificationTier.strong
-    assert res.verified is True
-    assert "TLSNotary verified API statistics" in res.message
-    assert "Gold" in res.message
+    # MUST fail closed to none: structural checks alone do not award Gold
+    assert res.tier == VerificationTier.none
+    assert res.verified is False
+    assert "pending" in res.message.lower()
+    assert res.details.get("status") == "cryptographic_transcript_verification_pending"
 
 
 def test_tlsnotary_untrusted_domain_fails_closed():
@@ -158,9 +161,9 @@ def test_tlsnotary_untrusted_domain_fails_closed():
     assert "not in the trusted verifier domain registry" in res.message
 
 
-def test_vector_code_originality_high_complexity_grants_gold():
-    """Strong (Gold): Supabase Vector / code originality analysis confirms complex codebase."""
-    # High-entropy unique code sample (>25 lines, complex algorithms, diverse tokens)
+def test_vector_code_originality_high_complexity_grants_bronze_complexity_heuristic():
+    """Local code complexity analysis awards Bronze complexity heuristic, not Gold originality."""
+    # High-entropy unique code sample
     code_sample = """
     class DistributedMerkleTree:
         def __init__(self, depth: int, hasher_cls: Any):
@@ -190,13 +193,26 @@ def test_vector_code_originality_high_complexity_grants_gold():
             return acc == root
     """
     res = VerificationService.verify_vector_originality({"code_sample": code_sample})
-    assert res.tier == VerificationTier.strong
+    # Must award Bronze heuristic, never Gold without global database comparison
+    assert res.tier == VerificationTier.weak
     assert res.verified is True
-    assert "Gold" in res.message
+    assert "local code complexity" in res.message.lower()
+    assert "not global codebase originality" in res.message.lower()
+
+
+def test_vector_code_originality_client_supplied_distance_rejected():
+    """NEGATIVE TEST: Client-supplied vector distance cannot establish Gold tier."""
+    res = VerificationService.verify_vector_originality({
+        "embedding": [0.1] * 128,
+        "vector_distance": 0.99,
+    })
+    assert res.tier == VerificationTier.none
+    assert res.verified is False
+    assert "client-supplied vector distance cannot establish" in res.message.lower()
 
 
 def test_vector_code_originality_short_or_boilerplate_grants_bronze():
-    """Code sample too short or boilerplate grants Bronze, not Gold."""
+    """Code sample too short or boilerplate grants Bronze."""
     short_code = """
     def add(a, b):
         return a + b
@@ -206,24 +222,26 @@ def test_vector_code_originality_short_or_boilerplate_grants_bronze():
     assert res.verified is True
 
 
-def test_issuer_credential_credly_valid():
-    """Credly badges grant Strong (Gold) tier."""
+def test_issuer_credential_credly_client_url_grants_bronze():
+    """Client-supplied Credly URL registers Bronze claim URL, not Gold without server API fetch."""
     res = VerificationService.verify_issuer_credential({
         "credential_url": "https://www.credly.com/badges/12345678-abcd-1234-abcd-1234567890ab",
         "issuer": "Credly"
     })
-    assert res.tier == VerificationTier.strong
+    assert res.tier == VerificationTier.weak
     assert res.verified is True
     assert "Credly" in res.message
+    assert "Bronze" in res.message
 
 
-def test_issuer_credential_accredited_domain():
-    """Accredited .edu domains grant Strong (Gold) tier."""
+def test_issuer_credential_accredited_domain_client_url_grants_bronze():
+    """Client-supplied accredited domain URL registers Bronze claim URL, not Gold."""
     res = VerificationService.verify_issuer_credential({
         "credential_url": "https://credentials.mit.edu/verify/987654321",
     })
-    assert res.tier == VerificationTier.strong
+    assert res.tier == VerificationTier.weak
     assert res.verified is True
+    assert "Bronze" in res.message
 
 
 def test_issuer_credential_unrecognized_domain():

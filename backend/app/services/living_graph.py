@@ -518,12 +518,10 @@ class LivingGraphEngine:
         now_iso = datetime.now(timezone.utc).isoformat()
         clean_title = f"[{item.provider.capitalize()}] {item.title}"
 
-        # Verification tier assignment: Credly badges have verified issuer templates (Gold tier);
-        # public API milestones without TLSNotary or ring signatures are Weak (Bronze) tier.
-        if item.provider == "credly":
-            tier = VerificationTier.strong.value
-        else:
-            tier = VerificationTier.weak.value
+        # Verification tier assignment: automated milestones fetched from public third-party endpoints
+        # are recorded as Weak (Bronze) tier. Genuine cryptographic proof (TLSNotary or signed commit)
+        # or OAuth owner verification is required before awarding Silver or Gold.
+        tier = VerificationTier.weak.value
 
         # Check existing item by metric_name for highest-metric retention
         if item.metric_name:
@@ -545,6 +543,7 @@ class LivingGraphEngine:
                         },
                         "verification_metadata": {
                             "source": "living_graph_sync",
+                            "nature_of_evidence": "automated_public_api_observation",
                             "provider": item.provider,
                             "score": score,
                             "verified_at": now_iso,
@@ -585,6 +584,7 @@ class LivingGraphEngine:
             "verification_tier": tier,
             "verification_metadata": {
                 "source": "living_graph_sync",
+                "nature_of_evidence": "automated_public_api_observation",
                 "provider": item.provider,
                 "external_id": item.external_id,
                 "score": score,

@@ -594,3 +594,44 @@ def test_github_retry_exponential_backoff_on_429(monkeypatch):
     assert resp.status_code == 200
     assert len(calls) == 2
 
+
+def test_automated_milestones_assigned_bronze_tier(monkeypatch):
+    """NEGATIVE TEST: Automated milestones fetched from public APIs receive Bronze tier and cannot fabricate Silver or Gold."""
+    vault_repo = MockVaultRepository()
+    tool_repo = MockConnectedToolRepository()
+
+    tool_repo.upsert({
+        "user_id": "user-dave",
+        "provider": "credly",
+        "handle": "dave_badges",
+        "auth_status": "connected",
+    })
+
+    monkeypatch.setattr(CredlyAdapter, "fetch", lambda self, handle, cursor=None, credentials=None: ProviderFetchResult(
+        success=True,
+        provider="credly",
+        handle=handle,
+        raw_achievements=[
+            RawAchievement(
+                provider="credly",
+                handle=handle,
+                external_id="credly:badge:security-plus",
+                achievement_type="credential",
+                title="CompTIA Security+",
+                description="Verified cybersecurity credential.",
+                source_url="https://www.credly.com/badges/sec-123",
+                raw_metric_value=1.0,
+                metric_name="verified_credential",
+            )
+        ],
+    ))
+
+    res = LivingGraphEngine.sync_user_tools("user-dave", tool_repo, vault_repo)
+    assert res["highlights_created"] == 1
+    items = vault_repo.get_by_user("user-dave")
+    assert len(items) == 1
+    # Automated public API observation must be Weak (Bronze), NOT fabricated Gold
+    assert items[0]["verification_tier"] == "weak"
+    assert items[0]["verification_metadata"].get("nature_of_evidence") == "automated_public_api_observation"
+
+
