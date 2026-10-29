@@ -1,11 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
-from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from typing import List, Optional, Dict, Any
 from app.middleware.auth import require_auth, optional_auth
-from app.deps import get_vault_repo, get_connected_tool_repo
+from app.deps import get_vault_repo, get_connected_tool_repo, get_living_graph_repo
 from app.models.vault import (
     VaultItemCreate, VaultItemUpdate, VaultItemResponse,
     ConnectedToolCreate, ConnectedToolResponse, VerifyVaultItemRequest,
-    VerificationTier
+    VerificationTier, VaultCategory, LivingGraphSyncSummary, LivingGraphRunResponse
 )
 from app.services.verification_service import VerificationService
 from app.services.living_graph import LivingGraphEngine
@@ -17,14 +17,21 @@ router = APIRouter(prefix="/vault", tags=["Vault"])
 
 @router.get("", response_model=List[VaultItemResponse])
 def get_my_vault_items(
-    category: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0,
+    category: Optional[VaultCategory] = None,
+    limit: int = Query(50, ge=1, le=100, description="Page size limit (1-100)"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
     user_id: str = Depends(require_auth),
     vault_repo=Depends(get_vault_repo),
 ):
-    """Retrieve all vault items for the authenticated user."""
-    items = vault_repo.get_by_user(user_id=user_id, category=category, is_public_only=False, limit=limit, offset=offset)
+    """Retrieve all vault items for the authenticated user with bounded pagination."""
+    cat_val = category.value if category else None
+    items = vault_repo.get_by_user(
+        user_id=user_id,
+        category=cat_val,
+        is_public_only=False,
+        limit=limit,
+        offset=offset,
+    )
     return items
 
 
@@ -36,19 +43,25 @@ def create_vault_item(
 ):
     """Create a new vault item for the authenticated user.
     
-    SECURITY: Raw verification documents must NOT be uploaded.
-    Client supplies only client-computed Poseidon commitment hash if available.
+    SECURITY INVARIANTS:
+    - Server-side ownership enforced: item is bound to authenticated user_id.
+    - Raw verification documents must NOT be uploaded.
+    - Client-supplied verification tiers or scores are rejected (prevent mass assignment).
     """
     data = payload.model_dump(exclude_unset=True)
+    # Server-controlled fields
     data["user_id"] = user_id
-    
-    # If a Poseidon commitment is provided, initialize verification metadata accordingly
+    if isinstance(data.get("category"), VaultCategory):
+        data["category"] = data["category"].value
+
+    # Evaluate initial tier: Local Poseidon commitment is Weak (Bronze); otherwise default is None
     if data.get("poseidon_hash"):
         data["verification_tier"] = VerificationTier.weak.value
         data["verification_metadata"] = {
             "commitment_type": "poseidon_hash",
             "poseidon_hash": data["poseidon_hash"],
             "registered_at": "now()",
+            "verifier": "Client-Poseidon-Commitment",
         }
     else:
         data["verification_tier"] = VerificationTier.none.value
@@ -61,20 +74,21 @@ def create_vault_item(
 @router.get("/user/{target_user_id}", response_model=List[VaultItemResponse])
 def get_user_vault_items(
     target_user_id: str,
-    category: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0,
+    category: Optional[VaultCategory] = None,
+    limit: int = Query(50, ge=1, le=100, description="Page size limit (1-100)"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
     viewer_id: Optional[str] = Depends(optional_auth),
     vault_repo=Depends(get_vault_repo),
 ):
     """Get vault items for a user. Public items only unless viewed by the owner."""
-    is_owner = viewer_id == target_user_id
+    is_owner = (viewer_id is not None and viewer_id == target_user_id)
+    cat_val = category.value if category else None
     items = vault_repo.get_by_user(
         user_id=target_user_id,
-        category=category,
+        category=cat_val,
         is_public_only=not is_owner,
         limit=limit,
-        offset=offset
+        offset=offset,
     )
     return items
 
@@ -85,12 +99,12 @@ def get_vault_item(
     viewer_id: Optional[str] = Depends(optional_auth),
     vault_repo=Depends(get_vault_repo),
 ):
-    """Get a single vault item."""
+    """Get a single vault item with strict privacy check."""
     item = vault_repo.get_by_id(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Vault item not found")
     
-    # Privacy check
+    # Privacy authorization check: private items are only viewable by owner
     if not item.get("is_public", True) and item.get("user_id") != viewer_id:
         raise HTTPException(status_code=403, detail="This vault item is private")
 
@@ -104,18 +118,38 @@ def update_vault_item(
     user_id: str = Depends(require_auth),
     vault_repo=Depends(get_vault_repo),
 ):
-    """Update a vault item (enforces ownership)."""
-    owner_id = vault_repo.get_owner(item_id)
-    if not owner_id:
+    current_item = vault_repo.get_by_id(item_id)
+    if not current_item:
         raise HTTPException(status_code=404, detail="Vault item not found")
-    if owner_id != user_id:
+    if current_item.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Unauthorized to modify this vault item")
 
     update_data = payload.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
 
-    # If poseidon_hash is updated, update verification tier commitment
+    # Defense in depth: forbid modifying system-managed attributes
+    for forbidden in ("id", "user_id", "created_at", "verification_tier", "verification_metadata"):
+        update_data.pop(forbidden, None)
+
+    if isinstance(update_data.get("category"), VaultCategory):
+        update_data["category"] = update_data["category"].value
+
+    # Trust-tier hijacking prevention:
+    # If claim title or category changed on a verified item (Mid/Silver or Strong/Gold),
+    # invalidate the trust tier back to unverified/weak pending re-verification.
+    title_changed = "title" in update_data and update_data["title"] != current_item.get("title")
+    category_changed = "category" in update_data and update_data["category"] != current_item.get("category")
+    if (title_changed or category_changed) and current_item.get("verification_tier") in (VerificationTier.mid.value, VerificationTier.strong.value):
+        effective_hash = update_data.get("poseidon_hash") or current_item.get("poseidon_hash")
+        update_data["verification_tier"] = VerificationTier.weak.value if effective_hash else VerificationTier.none.value
+        update_data["verification_metadata"] = {
+            "reverification_required": True,
+            "reason": "Claim title or category was modified after verification.",
+            "invalidated_at": "now()",
+        }
+
+    # If poseidon_hash is updated, update commitment metadata
     if "poseidon_hash" in update_data:
         if update_data["poseidon_hash"]:
             update_data["verification_tier"] = VerificationTier.weak.value
@@ -137,7 +171,7 @@ def delete_vault_item(
     user_id: str = Depends(require_auth),
     vault_repo=Depends(get_vault_repo),
 ):
-    """Delete a vault item (enforces ownership)."""
+    """Delete a vault item (enforces server-side ownership)."""
     owner_id = vault_repo.get_owner(item_id)
     if not owner_id:
         raise HTTPException(status_code=404, detail="Vault item not found")
@@ -148,7 +182,7 @@ def delete_vault_item(
     return {"message": "Vault item deleted successfully", "id": item_id}
 
 
-# ==================== VERIFICATION PIPELINE ====================
+# ==================== VERIFICATION PIPELINE (Issue #58 3-Tier Policy) ====================
 
 @router.post("/{item_id}/verify")
 def verify_vault_item(
@@ -157,13 +191,13 @@ def verify_vault_item(
     user_id: str = Depends(require_auth),
     vault_repo=Depends(get_vault_repo),
 ):
-    """Evaluate submitted proof evidence and assign verification tier.
+    """Evaluate submitted proof evidence and assign Trust Tier automatically without human intervention.
     
-    Tiers assigned:
-    - strong: official issuer credentials (Credly/accredited) or valid ZKP SNARK proof
-    - mid: verified GitHub repo with commit authorship or active verified connected tool
-    - weak: repository/live URL check or local Poseidon commitment
-    - none: unverified / invalid / unsupported claims
+    Tiers assigned per Issue #58 policy:
+    - Weak (Bronze): URL or claim exists, but evidence is insufficient, generic, or partially relevant.
+    - Mid (Silver): Verified text relevance exceeds 85% (>0.85) OR approved via P2P ring signatures.
+    - Strong (Gold): TLSNotary verified API stats OR vector analysis confirms codebase originality.
+    - None (Unverified): Invalid, forged, or unverifiable claims (fail-closed).
     """
     item = vault_repo.get_by_id(item_id)
     if not item:
@@ -172,9 +206,15 @@ def verify_vault_item(
         raise HTTPException(status_code=403, detail="Unauthorized to verify this vault item")
 
     stored_hash = item.get("poseidon_hash")
-    result = VerificationService.evaluate(payload.proof_type, payload.evidence, stored_poseidon_hash=stored_hash)
+    result = VerificationService.evaluate(
+        proof_type=payload.proof_type,
+        evidence=payload.evidence,
+        stored_poseidon_hash=stored_hash,
+        item_title=item.get("title", ""),
+        item_category=item.get("category", ""),
+    )
 
-    # Persist updated tier and verification metadata
+    # Persist updated tier and explicit audit metadata
     update_data = {
         "verification_tier": result.tier.value,
         "verification_metadata": {
@@ -194,7 +234,7 @@ def verify_vault_item(
     }
 
 
-# ==================== CONNECTED TOOLS & LIVING GRAPH ====================
+# ==================== CONNECTED TOOLS & LIVING GRAPH (Issue #60) ====================
 
 @router.get("/tools/list", response_model=List[ConnectedToolResponse])
 def get_connected_tools(
@@ -211,9 +251,9 @@ def connect_tool(
     user_id: str = Depends(require_auth),
     tool_repo=Depends(get_connected_tool_repo),
 ):
-    """Connect an external tool (GitHub, LeetCode, Credly) for Living Graph automation.
+    """Connect or update an external tool (GitHub, LeetCode, Credly) for Living Graph automation.
     
-    SECURITY: No access tokens or private credentials stored.
+    SECURITY: No private credentials or passwords stored.
     """
     data = {
         "user_id": user_id,
@@ -232,7 +272,7 @@ def disconnect_tool(
     user_id: str = Depends(require_auth),
     tool_repo=Depends(get_connected_tool_repo),
 ):
-    """Disconnect a connected tool."""
+    """Disconnect a connected tool and stop future collection."""
     owner_id = tool_repo.get_owner(tool_id)
     if not owner_id:
         raise HTTPException(status_code=404, detail="Connected tool not found")
@@ -243,7 +283,7 @@ def disconnect_tool(
     return {"message": "Tool disconnected successfully", "id": tool_id}
 
 
-@router.post("/living-graph/sync")
+@router.post("/living-graph/sync", response_model=Dict[str, Any])
 def sync_living_graph(
     user_id: str = Depends(require_auth),
     tool_repo=Depends(get_connected_tool_repo),
@@ -255,3 +295,13 @@ def sync_living_graph(
         "message": "Living graph synchronized successfully",
         "result": sync_result,
     }
+
+
+@router.get("/living-graph/runs", response_model=List[LivingGraphRunResponse])
+def get_living_graph_runs(
+    limit: int = Query(20, ge=1, le=100),
+    user_id: str = Depends(require_auth),
+    living_graph_repo=Depends(get_living_graph_repo),
+):
+    """Observability endpoint: retrieve recent worker execution audit logs."""
+    return living_graph_repo.get_recent_sync_runs(limit=limit)

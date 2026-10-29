@@ -110,7 +110,11 @@ def get_post_repo():
 
 
 from app.repositories.supabase.message_repo import SupabaseMessageRepository
-from app.repositories.supabase.vault_repo import SupabaseVaultRepository, SupabaseConnectedToolRepository
+from app.repositories.supabase.vault_repo import (
+    SupabaseVaultRepository,
+    SupabaseConnectedToolRepository,
+    SupabaseLivingGraphRepository,
+)
 
 
 @lru_cache(maxsize=1)
@@ -126,4 +130,10 @@ def get_vault_repo():
 @lru_cache(maxsize=1)
 def get_connected_tool_repo():
     return SupabaseConnectedToolRepository(supabase)
+
+
+@lru_cache(maxsize=1)
+def get_living_graph_repo():
+    return SupabaseLivingGraphRepository(supabase)
+
 

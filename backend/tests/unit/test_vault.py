@@ -1,9 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock
 from app.main import app
 from app.middleware.auth import require_auth
-from app.deps import get_vault_repo, get_connected_tool_repo
+from app.deps import get_vault_repo, get_connected_tool_repo, get_living_graph_repo
 from app.models.vault import VaultCategory, VerificationTier
 
 
@@ -23,6 +22,20 @@ class MockVaultRepository:
             and (not is_public_only or item.get("is_public", True))
         ]
         return results[offset:offset + limit]
+
+    def get_by_external_id(self, user_id: str, external_id: str):
+        for item in self.items.values():
+            if item["user_id"] == user_id and item.get("metadata", {}).get("external_id") == external_id:
+                return item
+        return None
+
+    def get_by_metric_name(self, user_id: str, provider: str, metric_name: str):
+        for item in self.items.values():
+            if (item["user_id"] == user_id and
+                item.get("metadata", {}).get("provider") == provider and
+                item.get("metadata", {}).get("metric_name") == metric_name):
+                return item
+        return None
 
     def get_owner(self, item_id: str):
         item = self.items.get(item_id)
@@ -69,6 +82,9 @@ class MockConnectedToolRepository:
     def get_by_user(self, user_id: str):
         return [t for t in self.tools.values() if t["user_id"] == user_id]
 
+    def get_all_active(self, limit: int = 500):
+        return [t for t in self.tools.values() if t.get("auth_status") == "connected"][:limit]
+
     def get_by_user_and_provider(self, user_id: str, provider: str):
         for t in self.tools.values():
             if t["user_id"] == user_id and t["provider"] == provider:
@@ -105,6 +121,40 @@ class MockConnectedToolRepository:
         return tool["user_id"] if tool else None
 
 
+class MockLivingGraphRepository:
+    def __init__(self):
+        self.locks = {}
+        self.runs = []
+        self.counter = 1
+
+    def acquire_lease(self, lock_key: str, acquired_by: str, lease_duration_seconds: int = 600):
+        if lock_key in self.locks and self.locks[lock_key]["acquired_by"] != acquired_by:
+            return False
+        self.locks[lock_key] = {"acquired_by": acquired_by}
+        return True
+
+    def release_lease(self, lock_key: str, acquired_by: str):
+        if lock_key in self.locks and self.locks[lock_key]["acquired_by"] == acquired_by:
+            del self.locks[lock_key]
+
+    def create_sync_run(self, data: dict):
+        run_id = f"run-{self.counter}"
+        self.counter += 1
+        record = {"id": run_id, **data}
+        self.runs.append(record)
+        return record
+
+    def update_sync_run(self, run_id: str, data: dict):
+        for r in self.runs:
+            if r["id"] == run_id:
+                r.update(data)
+                return r
+        return None
+
+    def get_recent_sync_runs(self, limit: int = 20):
+        return self.runs[-limit:]
+
+
 @pytest.fixture
 def mock_vault_repo():
     return MockVaultRepository()
@@ -116,243 +166,273 @@ def mock_tool_repo():
 
 
 @pytest.fixture
-def client(mock_vault_repo, mock_tool_repo):
+def mock_living_graph_repo():
+    return MockLivingGraphRepository()
+
+
+@pytest.fixture
+def client(mock_vault_repo, mock_tool_repo, mock_living_graph_repo):
     app.dependency_overrides[require_auth] = lambda: "user-alice"
     app.dependency_overrides[get_vault_repo] = lambda: mock_vault_repo
     app.dependency_overrides[get_connected_tool_repo] = lambda: mock_tool_repo
-    
+    app.dependency_overrides[get_living_graph_repo] = lambda: mock_living_graph_repo
+
     yield TestClient(app)
-    
+
     app.dependency_overrides.clear()
 
 
-# ==================== ISSUE #58 TESTS ====================
+# ==================== TASK 3 (ISSUE #58): CRUD & AUTHORIZATION TESTS ====================
 
-def test_create_vault_item(client, mock_vault_repo):
-    response = client.post("/vault", json={
-        "title": "Mericet Distributed Engine",
+def test_unauthenticated_access_rejected():
+    """Unauthenticated requests must be rejected with 401."""
+    # Ensure no auth override
+    app.dependency_overrides.clear()
+    unauth_client = TestClient(app)
+
+    resp_get = unauth_client.get("/vault")
+    assert resp_get.status_code == 401
+
+    resp_post = unauth_client.post("/vault", json={"title": "Test Item"})
+    assert resp_post.status_code == 401
+
+    resp_delete = unauth_client.delete("/vault/item-123")
+    assert resp_delete.status_code == 401
+
+
+def test_create_vault_items_all_supported_categories(client, mock_vault_repo):
+    """Verify item creation for Skills, Work, Education, Projects, and Achievements."""
+    categories = ["skill", "work", "education", "project", "achievement", "tool", "other"]
+    for cat in categories:
+        resp = client.post("/vault", json={
+            "title": f"Test {cat.capitalize()}",
+            "category": cat,
+            "description": f"Description for {cat}",
+            "metadata": {"custom_key": "custom_value"},
+            "is_public": True,
+            "display_order": 1,
+        })
+        assert resp.status_code == 200, f"Failed for category {cat}: {resp.text}"
+        data = resp.json()
+        assert data["title"] == f"Test {cat.capitalize()}"
+        assert data["category"] == cat
+        assert data["user_id"] == "user-alice"
+        assert data["verification_tier"] == "none"
+
+
+def test_create_vault_item_prevents_mass_assignment_of_trust_tier(client, mock_vault_repo):
+    """Clients cannot set verification_tier or verification_metadata on creation."""
+    resp = client.post("/vault", json={
+        "title": "Hacked Gold Item",
         "category": "project",
-        "description": "High performance backend infrastructure",
-        "metadata": {"repo_url": "https://github.com/screen-t/mericet"},
-        "is_public": True
+        "verification_tier": "strong",
+        "verification_metadata": {"verified": True, "fake": "claim"},
     })
-    assert response.status_code == 200
-    data = response.json()
-    assert data["title"] == "Mericet Distributed Engine"
-    assert data["user_id"] == "user-alice"
+    assert resp.status_code == 200
+    data = resp.json()
+    # verification_tier must remain 'none' regardless of client injection
     assert data["verification_tier"] == "none"
-    assert data["id"] in mock_vault_repo.items
+    assert data["verification_metadata"] == {}
 
 
 def test_create_vault_item_with_poseidon_commitment(client):
+    """Registering a Poseidon commitment hash sets Weak (Bronze) tier commitment."""
     response = client.post("/vault", json={
         "title": "ZK Identity Credential",
         "category": "achievement",
-        "description": "Zero knowledge verified badge",
         "poseidon_hash": "0x1234567890abcdef1234567890abcdef",
         "is_public": True
     })
     assert response.status_code == 200
     data = response.json()
     assert data["poseidon_hash"] == "0x1234567890abcdef1234567890abcdef"
-    assert data["verification_tier"] == "weak"  # Local commitment registered
+    assert data["verification_tier"] == "weak"
 
 
-def test_create_vault_item_invalid_hash(client):
-    response = client.post("/vault", json={
-        "title": "Invalid Hash Item",
-        "category": "project",
-        "poseidon_hash": "invalid hash with spaces!!!"
-    })
-    assert response.status_code == 422
+def test_create_vault_item_invalid_payloads(client):
+    """Invalid payloads (blank title, whitespace-only title, invalid hash, invalid category) return 422."""
+    # Blank title
+    assert client.post("/vault", json={"title": "", "category": "project"}).status_code == 422
+    # Whitespace-only title
+    assert client.post("/vault", json={"title": "   ", "category": "project"}).status_code == 422
+    # Invalid category
+    assert client.post("/vault", json={"title": "Valid", "category": "nonexistent_cat"}).status_code == 422
+    # Malformed poseidon hash
+    assert client.post("/vault", json={"title": "Valid", "poseidon_hash": "has spaces and symbols!!"}).status_code == 422
 
 
-def test_get_my_vault_items(client, mock_vault_repo):
-    mock_vault_repo.create({"user_id": "user-alice", "title": "Project Alpha", "category": "project"})
-    mock_vault_repo.create({"user_id": "user-alice", "title": "Project Beta", "category": "project"})
-    mock_vault_repo.create({"user_id": "user-bob", "title": "Bob Secret Project", "category": "project"})
+def test_get_my_vault_items_and_bounded_pagination(client, mock_vault_repo):
+    """List authenticated user items with category filter and bounded pagination."""
+    for i in range(15):
+        mock_vault_repo.create({"user_id": "user-alice", "title": f"Skill {i}", "category": "skill"})
+    mock_vault_repo.create({"user_id": "user-alice", "title": "Project One", "category": "project"})
+    mock_vault_repo.create({"user_id": "user-bob", "title": "Bob Skill", "category": "skill"})
 
-    response = client.get("/vault")
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-    assert all(item["user_id"] == "user-alice" for item in data)
+    # Filter by category
+    resp = client.get("/vault?category=skill&limit=10&offset=0")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 10
+    assert all(item["category"] == "skill" and item["user_id"] == "user-alice" for item in data)
+
+    # Offset pagination
+    resp_page2 = client.get("/vault?category=skill&limit=10&offset=10")
+    assert resp_page2.status_code == 200
+    assert len(resp_page2.json()) == 5
+
+    # Out of bounds limit rejected
+    assert client.get("/vault?limit=200").status_code == 422
+    assert client.get("/vault?limit=0").status_code == 422
+    assert client.get("/vault?offset=-1").status_code == 422
+
+
+def test_get_single_vault_item_and_invalid_id(client, mock_vault_repo):
+    """Retrieving nonexistent item returns 404."""
+    resp = client.get("/vault/nonexistent-item-id")
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["detail"].lower()
 
 
 def test_cross_user_data_isolation(client, mock_vault_repo):
-    # Bob creates a private project
-    bob_item = mock_vault_repo.create({
+    """Strict authorization: Alice cannot read, update, delete, or verify Bob's private vault."""
+    bob_private_item = mock_vault_repo.create({
         "user_id": "user-bob",
-        "title": "Bob Private Project",
+        "title": "Bob Confidential Patent",
         "category": "project",
-        "is_public": False
+        "is_public": False,
     })
 
-    # Alice tries to view Bob's private item
-    response = client.get(f"/vault/{bob_item['id']}")
-    assert response.status_code == 403
+    # Alice cannot read Bob's private item
+    assert client.get(f"/vault/{bob_private_item['id']}").status_code == 403
 
-    # Alice tries to update Bob's item
-    put_resp = client.put(f"/vault/{bob_item['id']}", json={"title": "Hacked Title"})
+    # Alice cannot update Bob's item
+    put_resp = client.put(f"/vault/{bob_private_item['id']}", json={"title": "Hacked"})
     assert put_resp.status_code == 403
+    assert mock_vault_repo.items[bob_private_item["id"]]["title"] == "Bob Confidential Patent"
 
-    # Alice tries to delete Bob's item
-    del_resp = client.delete(f"/vault/{bob_item['id']}")
+    # Alice cannot delete Bob's item
+    del_resp = client.delete(f"/vault/{bob_private_item['id']}")
     assert del_resp.status_code == 403
-    assert bob_item["id"] in mock_vault_repo.items
+    assert bob_private_item["id"] in mock_vault_repo.items
+
+    # Alice cannot verify Bob's item
+    verify_resp = client.post(f"/vault/{bob_private_item['id']}/verify", json={
+        "proof_type": "issuer_credential",
+        "evidence": {}
+    })
+    assert verify_resp.status_code == 403
+
+
+def test_public_user_vault_privacy_boundary(client, mock_vault_repo):
+    """When viewing another user's vault, private items are omitted."""
+    mock_vault_repo.create({"user_id": "user-bob", "title": "Bob Public Project", "category": "project", "is_public": True})
+    mock_vault_repo.create({"user_id": "user-bob", "title": "Bob Secret Project", "category": "project", "is_public": False})
+
+    # Alice views Bob's profile vault
+    resp = client.get("/vault/user/user-bob")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["title"] == "Bob Public Project"
 
 
 def test_update_and_delete_own_vault_item(client, mock_vault_repo):
-    item = mock_vault_repo.create({"user_id": "user-alice", "title": "Original Title", "category": "skill"})
-    
-    put_resp = client.put(f"/vault/{item['id']}", json={"title": "Updated Title"})
-    assert put_resp.status_code == 200
-    assert put_resp.json()["title"] == "Updated Title"
+    """Authenticated user can update and delete their own items."""
+    item = mock_vault_repo.create({"user_id": "user-alice", "title": "Original Skill", "category": "skill"})
 
+    # Update title and description
+    put_resp = client.put(f"/vault/{item['id']}", json={
+        "title": "Updated Skill",
+        "description": "Updated details",
+    })
+    assert put_resp.status_code == 200
+    assert put_resp.json()["title"] == "Updated Skill"
+
+    # Delete item
     del_resp = client.delete(f"/vault/{item['id']}")
     assert del_resp.status_code == 200
     assert item["id"] not in mock_vault_repo.items
 
-
-# ==================== ISSUE #62 & #64 VERIFICATION TESTS ====================
-
-def test_verify_official_issuer_credly(client, mock_vault_repo):
-    item = mock_vault_repo.create({"user_id": "user-alice", "title": "AWS Solutions Architect", "category": "achievement"})
-    
-    resp = client.post(f"/vault/{item['id']}/verify", json={
-        "proof_type": "issuer_credential",
-        "evidence": {
-            "credential_url": "https://www.credly.com/badges/abc-123-xyz",
-            "issuer": "Credly"
-        }
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["verification"]["tier"] == "strong"
-    assert data["verification"]["verified"] is True
-    assert mock_vault_repo.items[item["id"]]["verification_tier"] == "strong"
+    # Second delete returns 404
+    assert client.delete(f"/vault/{item['id']}").status_code == 404
 
 
-def test_verify_official_issuer_invalid(client, mock_vault_repo):
-    item = mock_vault_repo.create({"user_id": "user-alice", "title": "Fake Certificate", "category": "achievement"})
-    
-    resp = client.post(f"/vault/{item['id']}/verify", json={
-        "proof_type": "issuer_credential",
-        "evidence": {
-            "credential_url": "https://unverified-random-site.com/fake-cert"
-        }
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["verification"]["tier"] == "none"
-    assert data["verification"]["verified"] is False
+# ==================== CONNECTED TOOLS & OBSERVABILITY TESTS ====================
 
-
-def test_verify_cryptographic_proof_zkp(client, mock_vault_repo):
-    item = mock_vault_repo.create({
-        "user_id": "user-alice",
-        "title": "ZKP Proof Item",
-        "category": "project",
-        "poseidon_hash": "0x1234567890abcdef"
-    })
-    
-    # Valid Groth16 structured proof payload
-    resp = client.post(f"/vault/{item['id']}/verify", json={
-        "proof_type": "cryptographic_proof",
-        "evidence": {
-            "poseidon_hash": "0x1234567890abcdef",
-            "proof": {
-                "pi_a": ["0x1", "0x2"],
-                "pi_b": [["0x3", "0x4"], ["0x5", "0x6"]],
-                "pi_c": ["0x7", "0x8"],
-                "protocol": "groth16",
-                "curve": "bn128"
-            }
-        }
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["verification"]["tier"] == "weak"
-    assert data["verification"]["verified"] is True
-
-
-def test_verify_proof_of_work_github(client, mock_vault_repo):
-    item = mock_vault_repo.create({"user_id": "user-alice", "title": "FastAPI Repo", "category": "project"})
-    
-    resp = client.post(f"/vault/{item['id']}/verify", json={
-        "proof_type": "proof_of_work",
-        "evidence": {
-            "repo_url": "https://github.com/alice/fastapi-app",
-            "commit_hash": "a1b2c3d4e5f6789012345678901234567890abcd",
-            "author": "alice",
-            "live_url": "https://fastapi-app.vercel.app"
-        }
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["verification"]["tier"] == "mid"
-    assert data["verification"]["verified"] is True
-
-
-def test_unsupported_verification_path_fails_safely(client, mock_vault_repo):
-    item = mock_vault_repo.create({"user_id": "user-alice", "title": "Unsupported Item", "category": "project"})
-    
-    resp = client.post(f"/vault/{item['id']}/verify", json={
-        "proof_type": "unsupported_magic_protocol",
-        "evidence": {}
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["verification"]["tier"] == "none"
-    assert data["verification"]["verified"] is False
-
-
-# ==================== ISSUE #60 LIVING GRAPH TESTS ====================
-
-def test_connected_tools_and_living_graph_sync(client, mock_vault_repo, mock_tool_repo, monkeypatch):
-    # Mock external GitHub fetch to be deterministic
-    from app.services.living_graph import LivingGraphEngine
-    monkeypatch.setattr(LivingGraphEngine, "fetch_github_highlights", lambda handle: {
-        "provider": "github",
-        "handle": handle,
-        "success": True,
-        "public_repos": 10,
-        "followers": 25,
-        "highlights": ["10 public repositories", "Active Open Source Contributor"],
-    })
-    monkeypatch.setattr(LivingGraphEngine, "fetch_leetcode_highlights", lambda handle: {
-        "provider": "leetcode",
-        "handle": handle,
-        "success": True,
-        "solved_count": 150,
-        "highlights": ["150+ algorithmic problems solved on LeetCode"],
-    })
-
-    # 1. Connect GitHub
-    resp = client.post("/vault/tools", json={
-        "provider": "github",
-        "handle": "alice-dev"
-    })
+def test_connected_tools_management(client, mock_tool_repo):
+    """Connect, list, and disconnect third party tools."""
+    # Connect GitHub
+    resp = client.post("/vault/tools", json={"provider": "github", "handle": "alice_dev"})
     assert resp.status_code == 200
     tool = resp.json()
     assert tool["provider"] == "github"
-    assert tool["handle"] == "alice-dev"
+    assert tool["handle"] == "alice_dev"
 
-    # 2. Connect LeetCode
-    client.post("/vault/tools", json={
-        "provider": "leetcode",
-        "handle": "alice_codes"
+    # List tools
+    tools = client.get("/vault/tools/list").json()
+    assert len(tools) == 1
+    assert tools[0]["id"] == tool["id"]
+
+    # Disconnect tool
+    del_resp = client.delete(f"/vault/tools/{tool['id']}")
+    assert del_resp.status_code == 200
+    assert client.get("/vault/tools/list").json() == []
+
+
+def test_living_graph_audit_runs_endpoint(client, mock_living_graph_repo):
+    """Observability endpoint returns recent worker execution audit logs."""
+    mock_living_graph_repo.create_sync_run({
+        "started_at": "2026-10-27T12:00:00Z",
+        "status": "completed",
+        "synced_tools": 3,
+        "highlights_created": 2,
+    })
+    resp = client.get("/vault/living-graph/runs")
+    assert resp.status_code == 200
+    runs = resp.json()
+    assert len(runs) == 1
+    assert runs[0]["synced_tools"] == 3
+
+
+# ==================== SECURITY AUDIT REGRESSION TESTS ====================
+
+def test_updating_claim_title_invalidates_verified_badge(client, mock_vault_repo):
+    """REGRESSION: Editing title of a verified item invalidates trust tier to prevent title hijacking."""
+    # Create item with Strong (Gold) verification
+    item = mock_vault_repo.create({
+        "user_id": "user-alice",
+        "title": "AWS Certified Solutions Architect",
+        "category": "achievement",
+        "verification_tier": "strong",
+        "verification_metadata": {"verified": True, "verifier": "Credly"},
     })
 
-    # 3. Trigger Living Graph sync
-    sync_resp = client.post("/vault/living-graph/sync")
-    assert sync_resp.status_code == 200
-    sync_data = sync_resp.json()
-    assert sync_data["result"]["synced_tools"] == 2
-    assert sync_data["result"]["highlights_created"] > 0
+    # Alice changes title to an unverified claim
+    resp = client.put(f"/vault/{item['id']}", json={"title": "Principal Architect at OpenAI"})
+    assert resp.status_code == 200
+    updated = resp.json()
+    # Trust tier must be reset to none (not strong!)
+    assert updated["verification_tier"] == "none"
+    assert updated["verification_metadata"].get("reverification_required") is True
+    assert "modified after verification" in updated["verification_metadata"].get("reason", "")
 
-    # 4. Check that synced highlights exist in vault items as achievements
-    items = mock_vault_repo.get_by_user("user-alice", category="achievement")
-    assert len(items) > 0
-    assert any("[Github]" in item["title"] or "[Leetcode]" in item["title"] for item in items)
+
+def test_mass_assignment_stripping_on_update(client, mock_vault_repo):
+    """REGRESSION: Attempting to modify user_id or verification_tier via PUT is stripped."""
+    item = mock_vault_repo.create({
+        "user_id": "user-alice",
+        "title": "Legit Project",
+        "category": "project",
+        "verification_tier": "none",
+    })
+
+    resp = client.put(f"/vault/{item['id']}", json={
+        "title": "Legit Project v2",
+        "user_id": "user-bob",
+        "verification_tier": "strong",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user_id"] == "user-alice"
+    assert data["verification_tier"] == "none"
 

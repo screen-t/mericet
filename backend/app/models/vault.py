@@ -7,9 +7,9 @@ import re
 
 class VerificationTier(str, Enum):
     none = "none"
-    weak = "weak"
-    mid = "mid"
-    strong = "strong"
+    weak = "weak"      # Bronze
+    mid = "mid"        # Silver
+    strong = "strong"  # Gold
 
 
 class VaultCategory(str, Enum):
@@ -47,6 +47,14 @@ class VaultItemCreate(BaseModel):
     is_public: bool = True
     display_order: int = 0
 
+    @field_validator("title")
+    @classmethod
+    def validate_title_non_empty(cls, v):
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Title cannot be blank or whitespace only")
+        return cleaned
+
     @field_validator("poseidon_hash")
     @classmethod
     def validate_hash(cls, v):
@@ -61,6 +69,16 @@ class VaultItemUpdate(BaseModel):
     poseidon_hash: Optional[str] = Field(None, max_length=130)
     is_public: Optional[bool] = None
     display_order: Optional[int] = None
+
+    @field_validator("title")
+    @classmethod
+    def validate_title_non_empty(cls, v):
+        if v is not None:
+            cleaned = v.strip()
+            if not cleaned:
+                raise ValueError("Title cannot be blank or whitespace only")
+            return cleaned
+        return v
 
     @field_validator("poseidon_hash")
     @classmethod
@@ -92,7 +110,7 @@ class ConnectedToolCreate(BaseModel):
     @field_validator("provider")
     @classmethod
     def validate_provider(cls, v):
-        allowed = {"github", "leetcode", "credly"}
+        allowed = {"github", "leetcode", "credly", "fueler", "google_search_console"}
         p = v.strip().lower()
         if p not in allowed:
             raise ValueError(f"Unsupported provider: '{p}'. Supported providers are: {', '.join(sorted(allowed))}")
@@ -123,3 +141,30 @@ class ConnectedToolResponse(BaseModel):
 class VerifyVaultItemRequest(BaseModel):
     proof_type: str = Field(..., max_length=50)
     evidence: Dict[str, Any] = Field(default_factory=dict)
+
+
+# Living Graph Worker / Sync Models
+class LivingGraphSyncSummary(BaseModel):
+    status: str
+    synced_tools: int = 0
+    highlights_created: int = 0
+    highlights_updated: int = 0
+    highlights_filtered: int = 0
+    errors: List[str] = Field(default_factory=list)
+    diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    duration_ms: Optional[int] = None
+
+
+class LivingGraphRunResponse(BaseModel):
+    id: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    status: str
+    duration_ms: Optional[int] = None
+    total_tools_checked: int = 0
+    synced_tools: int = 0
+    highlights_created: int = 0
+    highlights_updated: int = 0
+    highlights_filtered: int = 0
+    errors: List[Any] = Field(default_factory=list)
+    diagnostics: Dict[str, Any] = Field(default_factory=dict)
