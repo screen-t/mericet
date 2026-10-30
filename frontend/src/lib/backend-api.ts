@@ -906,12 +906,12 @@ const media = {
 
 
 const vault = {
-  getMyItems: (category?: string): Promise<VaultItem[]> =>
-    fetchWithAuth(`${API_BASE_URL}/vault${category ? `?category=${encodeURIComponent(category)}` : ""}`, {
+  getMyItems: (category?: string, limit: number = 100, offset: number = 0): Promise<VaultItem[]> =>
+    fetchWithAuth(`${API_BASE_URL}/vault?limit=${limit}&offset=${offset}${category ? `&category=${encodeURIComponent(category)}` : ""}`, {
       headers: getAuthHeaders(),
     }).then(handleResponse<VaultItem[]>),
-  getUserItems: (userId: string, category?: string, limit: number = 100): Promise<VaultItem[]> =>
-    fetchWithAuth(`${API_BASE_URL}/vault/user/${encodeURIComponent(userId)}?limit=${limit}${category ? `&category=${encodeURIComponent(category)}` : ""}`, {
+  getUserItems: (userId: string, category?: string, limit: number = 100, offset: number = 0): Promise<VaultItem[]> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/user/${encodeURIComponent(userId)}?limit=${limit}&offset=${offset}${category ? `&category=${encodeURIComponent(category)}` : ""}`, {
       headers: getAuthHeaders(),
     }).then(handleResponse<VaultItem[]>),
   getItem: (itemId: string): Promise<VaultItem> =>
