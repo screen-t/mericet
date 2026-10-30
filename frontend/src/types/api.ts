@@ -290,3 +290,45 @@ export interface CompanySearchResult {
 export interface UnreadCountResponse {
   count: number;
 }
+
+export type VerificationTier = 'none' | 'weak' | 'mid' | 'strong';
+export type VaultCategory = 'skill' | 'work' | 'education' | 'project' | 'achievement' | 'tool' | 'other';
+
+export interface VaultItem {
+  id: string;
+  user_id: string;
+  category: VaultCategory;
+  title: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  poseidon_hash?: string;
+  verification_tier: VerificationTier;
+  verification_metadata?: Record<string, unknown>;
+  is_public: boolean;
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ConnectedTool {
+  id: string;
+  user_id: string;
+  provider: 'github' | 'leetcode' | 'credly' | string;
+  handle: string;
+  auth_status: 'connected' | 'unverified' | 'disconnected';
+  metadata?: Record<string, unknown>;
+  last_synced_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface VerificationResponse {
+  item_id: string;
+  verification: {
+    tier: VerificationTier;
+    verified: boolean;
+    message: string;
+    details?: Record<string, unknown>;
+  };
+  item: VaultItem;
+}
