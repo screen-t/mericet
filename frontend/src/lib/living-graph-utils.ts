@@ -19,33 +19,81 @@ export interface MonthLabel {
 
 /**
  * Normalizes an ISO timestamp, Date object, or date string into consistent calendar "YYYY-MM-DD".
- * Avoids browser timezone drift and off-by-one errors across international date boundaries.
+ * Timezone behavior is explicit: defaults to "UTC" (standard for milestone contribution graphs),
+ * or accepts any valid IANA timezone string (e.g., "America/New_York", "Asia/Kolkata").
+ *
+ * Guarantees:
+ * - Deterministic output.
+ * - Handles pure date strings ("YYYY-MM-DD") without false conversion.
+ * - Handles daylight saving boundaries and year transitions.
  */
-export function normalizeDateToLocalDateString(dateInput: string | Date | undefined | null): string | null {
+export function normalizeDateToCalendarDateString(
+  dateInput: string | Date | undefined | null,
+  timeZone: string = "UTC"
+): string | null {
   if (!dateInput) return null;
 
+  // Pure date string ("YYYY-MM-DD")
   if (typeof dateInput === "string") {
     const trimmed = dateInput.trim();
-    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-      return trimmed.slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
     }
     const d = new Date(trimmed);
     if (isNaN(d.getTime())) return null;
-    const year = d.getUTCFullYear();
-    const month = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(d.getUTCDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+
+    if (timeZone === "UTC") {
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(d.getUTCDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    try {
+      const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      return formatter.format(d);
+    } catch {
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(d.getUTCDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
   }
 
   if (dateInput instanceof Date && !isNaN(dateInput.getTime())) {
-    const year = dateInput.getUTCFullYear();
-    const month = String(dateInput.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(dateInput.getUTCDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+    if (timeZone === "UTC") {
+      const year = dateInput.getUTCFullYear();
+      const month = String(dateInput.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(dateInput.getUTCDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    try {
+      const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      return formatter.format(dateInput);
+    } catch {
+      const year = dateInput.getUTCFullYear();
+      const month = String(dateInput.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(dateInput.getUTCDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
   }
 
   return null;
 }
+
+// Backwards-compatible alias
+export const normalizeDateToLocalDateString = normalizeDateToCalendarDateString;
 
 /**
  * Parses YYYY-MM-DD string into a clean Date at UTC midnight.
@@ -100,21 +148,46 @@ export function calculateIntensity(count: number): 0 | 1 | 2 | 3 | 4 {
  * - created_at
  * - metadata.synced_at
  * - verification_metadata.verified_at
+ *
+ * CRITICAL INVARIANT:
+ * Deduplicates by item.id so the exact same achievement is NEVER assigned
+ * to two different calendar dates.
  */
 export function groupAchievementsByDate(
   items: VaultItem[],
   options?: {
     filterTier?: "all" | "verified_only";
     filterProvider?: string;
+    timeZone?: string;
   }
 ): Map<string, VaultItem[]> {
   const map = new Map<string, VaultItem[]>();
+  const seenItemIds = new Set<string>();
+
+  const targetTz = options?.timeZone || "UTC";
 
   for (const item of items) {
-    // Filter tier check
+    if (!item) continue;
+
+    // Deduplication check: Ensure same achievement is not double-counted across dates
+    if (item.id && seenItemIds.has(item.id)) {
+      continue;
+    }
+
+    // Filter tier check:
+    // Only genuine Strong and Mid tiers count as verified.
+    // Items with pending verifier status or reverification required are excluded from verified_only.
     if (options?.filterTier === "verified_only") {
       const tier = item.verification_tier?.toLowerCase();
-      if (tier !== "strong" && tier !== "mid") {
+      const status = item.verification_metadata?.status;
+      const reverificationRequired = item.verification_metadata?.reverification_required;
+
+      if (
+        reverificationRequired ||
+        status === "prototype_verification_pending" ||
+        status === "cryptographic_transcript_verification_pending" ||
+        (tier !== "strong" && tier !== "mid")
+      ) {
         continue;
       }
     }
@@ -128,15 +201,19 @@ export function groupAchievementsByDate(
       }
     }
 
-    // Determine relevant event date from actual backend timestamps
+    // Determine canonical event timestamp from actual backend fields
     const rawDate =
       (item.metadata?.observed_at as string) ||
       item.created_at ||
       (item.metadata?.synced_at as string) ||
       (item.verification_metadata?.verified_at as string);
 
-    const dateKey = normalizeDateToLocalDateString(rawDate);
+    const dateKey = normalizeDateToCalendarDateString(rawDate, targetTz);
     if (!dateKey) continue;
+
+    if (item.id) {
+      seenItemIds.add(item.id);
+    }
 
     const existing = map.get(dateKey) || [];
     existing.push(item);
@@ -162,7 +239,7 @@ export function generateCalendarGrid(
   const refMonth = referenceDate.getUTCMonth();
   const refDay = referenceDate.getUTCDate();
   const ref = new Date(Date.UTC(refYear, refMonth, refDay));
-  const todayString = normalizeDateToLocalDateString(ref)!;
+  const todayString = normalizeDateToCalendarDateString(ref, "UTC")!;
 
   // Find the end Saturday of the current week (day 6, where 0 is Sunday)
   const currentDayOfWeek = ref.getUTCDay();
@@ -188,7 +265,7 @@ export function generateCalendarGrid(
       const cellDate = new Date(startSunday);
       cellDate.setUTCDate(startSunday.getUTCDate() + dayOffset);
 
-      const dateString = normalizeDateToLocalDateString(cellDate)!;
+      const dateString = normalizeDateToCalendarDateString(cellDate, "UTC")!;
       const isFuture = cellDate.getTime() > ref.getTime();
       const isToday = dateString === todayString;
 
@@ -258,7 +335,15 @@ export function calculateStreaksAndSummary(days: DayCell[]): {
       totalAchievements += day.count;
       for (const item of day.items) {
         const tier = item.verification_tier?.toLowerCase();
-        if (tier === "strong" || tier === "mid") {
+        const status = item.verification_metadata?.status;
+        const reverificationRequired = item.verification_metadata?.reverification_required;
+
+        const isPending =
+          reverificationRequired ||
+          status === "prototype_verification_pending" ||
+          status === "cryptographic_transcript_verification_pending";
+
+        if (!isPending && (tier === "strong" || tier === "mid")) {
           verifiedCount++;
         }
       }
@@ -305,59 +390,144 @@ export function calculateStreaksAndSummary(days: DayCell[]): {
 }
 
 /**
- * Returns user-facing badge formatting for verification tiers.
- * Crucially distinguishes verified achievements (Gold/Silver) from
- * automated public API observations (Bronze).
+ * Returns user-facing badge formatting for verification tiers adhering strictly
+ * to the backend verification_service.py policy:
+ *
+ * 1. Prototype ring signatures MUST NEVER display as Silver (they are marked Pending/Unverified).
+ * 2. Structural TLSNotary checks MUST NEVER display as Gold (they are marked Pending/Unverified).
+ * 3. Local token entropy heuristic MUST NOT display as cryptographic originality proof or Gold (Bronze only).
+ * 4. Public GitHub & LeetCode automated observations MUST remain Bronze / API Observation.
+ * 5. Client-submitted credential URLs MUST NOT display as Gold (Bronze registered URL only).
+ * 6. Badges are rendered based ONLY on actual server-provided verification tier and metadata.
+ * 7. Pending / prototype states display as "Verification Pending".
  */
 export function getTierBadgeInfo(tier: string, metadata?: Record<string, unknown>) {
-  const isAutomated =
-    metadata?.nature_of_evidence === "automated_public_api_observation" ||
-    metadata?.source === "living_graph_sync";
+  const status = metadata?.status as string | undefined;
+  const isReverificationRequired = Boolean(metadata?.reverification_required);
+  const natureOfEvidence = metadata?.nature_of_evidence as string | undefined;
+  const natureOfProof = metadata?.nature_of_proof as string | undefined;
+  const isAutomatedSync = metadata?.source === "living_graph_sync";
+
+  // Check pending or invalidation flags
+  if (isReverificationRequired) {
+    return {
+      label: "Re-verification Required",
+      shortLabel: "Re-verify",
+      isVerified: false,
+      isPending: true,
+      variant: "pending" as const,
+      description: "Claim title or details were modified after verification; re-verification is required.",
+      colorClass: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30",
+      badgeVariant: "outline" as const,
+    };
+  }
+
+  if (
+    status === "prototype_verification_pending" ||
+    status === "cryptographic_transcript_verification_pending"
+  ) {
+    return {
+      label: "Verification Pending",
+      shortLabel: "Pending",
+      isVerified: false,
+      isPending: true,
+      variant: "pending" as const,
+      description:
+        status === "prototype_verification_pending"
+          ? "Prototype simulation verified closure; native elliptic-curve ring signature verification is pending."
+          : "TLSNotary structural headers validated; full cryptographic MPC-TLS transcript verification is pending.",
+      colorClass: "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30",
+      badgeVariant: "outline" as const,
+    };
+  }
 
   switch (tier?.toLowerCase()) {
     case "strong":
+      // Gold tier: Only server-awarded strong verification
       return {
         label: "Verified (Gold)",
         shortLabel: "Gold",
         isVerified: true,
-        isAutomated: false,
+        isPending: false,
         variant: "gold" as const,
-        description: "TLSNotary cryptographically verified stats or codebase originality vector proof",
+        description: "Cryptographically verified high-trust milestone (server-awarded Gold tier)",
         colorClass: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30",
         badgeVariant: "default" as const,
       };
+
     case "mid":
+      // Silver tier: Server-evaluated text relevance >85%
       return {
         label: "Verified (Silver)",
         shortLabel: "Silver",
         isVerified: true,
-        isAutomated: false,
+        isPending: false,
         variant: "silver" as const,
-        description: "Verified claim with >85% text relevance or P2P ring signature",
+        description: "Verified semantic text relevance exceeding 85% threshold (>0.85)",
         colorClass: "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-400/40",
         badgeVariant: "secondary" as const,
       };
+
     case "weak":
+      // Bronze tier: Distinguish the nature of evidence explicitly
+      if (natureOfEvidence === "automated_public_api_observation" || isAutomatedSync) {
+        return {
+          label: "API Observation (Bronze)",
+          shortLabel: "Observed",
+          isVerified: false,
+          isPending: false,
+          variant: "bronze" as const,
+          description: "Automated milestone observed via public third-party provider API (public observation, not cryptographic proof)",
+          colorClass: "bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/30",
+          badgeVariant: "outline" as const,
+        };
+      }
+
+      if (natureOfProof === "local_complexity_heuristic") {
+        return {
+          label: "Code Complexity (Bronze)",
+          shortLabel: "Complexity",
+          isVerified: false,
+          isPending: false,
+          variant: "bronze" as const,
+          description: "Local token entropy and structural complexity heuristic; does not establish cryptographic originality proof",
+          colorClass: "bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/30",
+          badgeVariant: "outline" as const,
+        };
+      }
+
+      if (natureOfEvidence === "client_supplied_url") {
+        return {
+          label: "Registered URL (Bronze)",
+          shortLabel: "Registered URL",
+          isVerified: false,
+          isPending: false,
+          variant: "bronze" as const,
+          description: "Credential claim URL registered; direct server-side verification required for higher trust tier",
+          colorClass: "bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/30",
+          badgeVariant: "outline" as const,
+        };
+      }
+
       return {
-        label: isAutomated ? "API Observation" : "Bronze Claim",
-        shortLabel: isAutomated ? "Observed" : "Bronze",
+        label: "Bronze Commitment",
+        shortLabel: "Bronze",
         isVerified: false,
-        isAutomated: true,
+        isPending: false,
         variant: "bronze" as const,
-        description: isAutomated
-          ? "Automated milestone observed via public third-party provider API"
-          : "Client-side cryptographic commitment; awaiting verification",
+        description: "Local commitment or claim registered; pending higher-tier cryptographic verification",
         colorClass: "bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/30",
         badgeVariant: "outline" as const,
       };
+
     default:
       return {
         label: "Unverified",
         shortLabel: "Unverified",
         isVerified: false,
-        isAutomated: false,
+        isPending: false,
         variant: "none" as const,
-        description: "Unverified portfolio claim",
+        description: "Unverified milestone claim",
         colorClass: "bg-muted text-muted-foreground border-border",
         badgeVariant: "outline" as const,
       };

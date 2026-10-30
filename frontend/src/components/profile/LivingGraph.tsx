@@ -13,7 +13,6 @@ import { backendApi } from "@/lib/backend-api";
 import { VaultItem } from "@/types/api";
 import { useToast } from "@/hooks/use-toast";
 import {
-  DayCell,
   generateCalendarGrid,
   groupAchievementsByDate,
   calculateStreaksAndSummary,
@@ -33,7 +32,6 @@ import {
   Github,
   AlertCircle,
   X,
-  Filter,
   Info,
 } from "lucide-react";
 
@@ -42,8 +40,6 @@ export interface LivingGraphProps {
   isOwnProfile: boolean;
   className?: string;
 }
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /**
  * Returns color classes for each activity intensity level.
@@ -95,7 +91,7 @@ export const LivingGraph = ({ userId, isOwnProfile, className = "" }: LivingGrap
   const [filterTier, setFilterTier] = useState<"all" | "verified_only">("all");
   const [filterProvider, setFilterProvider] = useState<string>("all");
 
-  // Fetch verified achievements from authorized Vault endpoint
+  // Fetch verified achievements from authorized Vault endpoint with bounded pagination
   const {
     data: achievements = [],
     isLoading,
@@ -104,22 +100,51 @@ export const LivingGraph = ({ userId, isOwnProfile, className = "" }: LivingGrap
     refetch,
     isRefetching,
   } = useQuery<VaultItem[]>({
-    queryKey: ["living-graph", userId],
+    queryKey: ["living-graph", userId, isOwnProfile],
     queryFn: async () => {
-      // Prioritize category=achievement; fallback gracefully to all user vault items if needed
+      const PAGE_SIZE = 100;
+      const MAX_PAGES = 10; // Bounded safety limit (up to 1,000 milestones)
+      const collected: VaultItem[] = [];
+
       try {
-        const items = isOwnProfile
-          ? await backendApi.vault.getMyItems("achievement")
-          : await backendApi.vault.getUserItems(userId, "achievement");
-        if (Array.isArray(items) && items.length > 0) return items;
+        let offset = 0;
+        for (let page = 0; page < MAX_PAGES; page++) {
+          const batch = isOwnProfile
+            ? await backendApi.vault.getMyItems("achievement", PAGE_SIZE, offset)
+            : await backendApi.vault.getUserItems(userId, "achievement", PAGE_SIZE, offset);
+
+          if (!Array.isArray(batch) || batch.length === 0) {
+            break;
+          }
+
+          collected.push(...batch);
+
+          if (batch.length < PAGE_SIZE) {
+            break; // Reached last page
+          }
+
+          offset += PAGE_SIZE;
+        }
+
+        if (collected.length > 0) return collected;
       } catch {
-        // If specific achievement filter isn't supported by legacy route, fetch all items
+        // Fallback for legacy routes lacking category query parameter
       }
 
-      const allItems = isOwnProfile
-        ? await backendApi.vault.getMyItems()
-        : await backendApi.vault.getUserItems(userId);
-      return (allItems || []).filter((item) => item.category === "achievement");
+      // Fallback: paginated fetch without category parameter, filtered client-side
+      let fallbackOffset = 0;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const batch = isOwnProfile
+          ? await backendApi.vault.getMyItems(undefined, PAGE_SIZE, fallbackOffset)
+          : await backendApi.vault.getUserItems(userId, undefined, PAGE_SIZE, fallbackOffset);
+
+        if (!Array.isArray(batch) || batch.length === 0) break;
+        const filtered = batch.filter((item) => item.category === "achievement");
+        collected.push(...filtered);
+        if (batch.length < PAGE_SIZE) break;
+        fallbackOffset += PAGE_SIZE;
+      }
+      return collected;
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
     retry: 1,
@@ -150,6 +175,7 @@ export const LivingGraph = ({ userId, isOwnProfile, className = "" }: LivingGrap
     return groupAchievementsByDate(achievements, {
       filterTier,
       filterProvider,
+      timeZone: "UTC",
     });
   }, [achievements, filterTier, filterProvider]);
 
@@ -641,6 +667,12 @@ export const LivingGraph = ({ userId, isOwnProfile, className = "" }: LivingGrap
                           </span>
                         )}
                       </div>
+
+                      {tierInfo.description && (
+                        <p className="text-[10px] text-muted-foreground/80 leading-normal border-t border-border/20 pt-1">
+                          {tierInfo.description}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
