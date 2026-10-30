@@ -14,6 +14,8 @@ import { backendApi } from "@/lib/backend-api";
 
 import { ProfilePosts } from "@/components/profile/ProfilePosts";
 import { VaultAccordion } from "@/components/profile/VaultAccordion";
+import { LivingGraph } from '@/components/profile/LivingGraph';
+
 import { Profile } from '@/types/api';
 import {
   MapPin,
@@ -1006,32 +1008,12 @@ export const ProfilePage = () => {
           </TabsContent>
         </Tabs>
 
-        {/* The Living Graph (Bottom Section - Issue #55) */}
+        {/* The Living Graph (Bottom Section - Issue #55, #59) */}
         <section className="mt-8 pt-8 border-t border-border/60">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
-              <Activity className="w-5 h-5 text-primary" />
-              The Living Graph
-            </h3>
-            <Badge variant="outline" className="text-[11px] text-muted-foreground border-border font-normal">
-              Continuous Progress
-            </Badge>
-          </div>
-          <Card className="p-5 border bg-muted/20">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">
-                  Automated Execution Heatmap
-                </p>
-                <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl">
-                  Displays daily micro-updates and verified highlights of continuous progress across connected developer and professional platforms.
-                </p>
-              </div>
-              <Badge variant="secondary" className="text-xs font-normal shrink-0">
-                Integration in Progress (#59 & #60)
-              </Badge>
-            </div>
-          </Card>
+          <LivingGraph
+            userId={profileUserId!}
+            isOwnProfile={isOwnProfile}
+          />
         </section>
       </div>
 
