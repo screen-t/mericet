@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node src/tests/living-graph.test.ts"
+    "test": "node src/tests/living-graph.test.ts && node src/tests/google-oauth.test.ts"
   },
   "dependencies": {
     "@fontsource/plus-jakarta-sans": "^5.2.8",
