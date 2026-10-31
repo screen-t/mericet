@@ -53,7 +53,22 @@ async function tryRefreshToken(): Promise<string | null> {
  * On a second 401 (refresh failed), clears tokens and redirects to /login.
  */
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-  const res = await fetch(url, options);
+  let res: Response;
+  try {
+    res = await fetch(url, options);
+  } catch (err: unknown) {
+    const isNetwork =
+      err instanceof TypeError ||
+      (err as Error)?.name === "TypeError" ||
+      (err as Error)?.message?.toLowerCase().includes("fetch");
+    if (isNetwork) {
+      throw new Error(
+        `Backend service unreachable at ${API_BASE_URL}. Ensure the backend API server is running on port 8000.`
+      );
+    }
+    throw err;
+  }
+
   if (res.status !== 401) return res;
 
   // Deduplicate concurrent refresh calls
@@ -67,23 +82,58 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
     localStorage.removeItem(REFRESH_TOKEN_KEY);
     sessionStorage.removeItem(ACCESS_TOKEN_KEY);
     sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-    window.location.href = "/login";
+    // Avoid hijacking window during preview or public viewing
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/login" &&
+      window.location.pathname !== "/vault-preview" &&
+      !window.location.pathname.startsWith("/profile/")
+    ) {
+      window.location.href = "/login";
+    }
     return res;
   }
 
   // Retry with refreshed token
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${newToken}`,
-    },
-  });
+  try {
+    return await fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${newToken}`,
+      },
+    });
+  } catch (err: unknown) {
+    const isNetwork =
+      err instanceof TypeError ||
+      (err as Error)?.name === "TypeError" ||
+      (err as Error)?.message?.toLowerCase().includes("fetch");
+    if (isNetwork) {
+      throw new Error(
+        `Backend service unreachable at ${API_BASE_URL}. Ensure the backend API server is running on port 8000.`
+      );
+    }
+    throw err;
+  }
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("Unauthorized: Invalid or expired session. Please sign in again.");
+    }
+    if (res.status === 403) {
+      throw new Error("Forbidden: You do not have permission to perform this action.");
+    }
+    if (res.status === 404) {
+      throw new Error(`Endpoint not found (404): ${res.url}`);
+    }
+    if (res.status >= 500) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      const msg = typeof err.detail === "string" ? err.detail : "Internal server error.";
+      throw new Error(`Backend Error (${res.status}): ${msg}`);
+    }
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     // Sentinel from require_auth: the CALLER's own account is suspended (not
     // to be confused with viewing someone else's suspended profile, which

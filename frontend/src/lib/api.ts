@@ -102,7 +102,12 @@ export const authApi = {
    * Not available in regions where supabase.co is blocked.
    */
   googleOAuth: async () => {
-    const { supabase } = await import('./supabase');
+    const { supabase, isSupabaseConfigured } = await import('./supabase');
+    if (!isSupabaseConfigured()) {
+      throw new Error(
+        "Google Authentication is not configured. Missing valid VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in frontend configuration."
+      );
+    }
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/auth/callback` },
@@ -112,7 +117,12 @@ export const authApi = {
   },
 
   githubOAuth: async () => {
-    const { supabase } = await import('./supabase');
+    const { supabase, isSupabaseConfigured } = await import('./supabase');
+    if (!isSupabaseConfigured()) {
+      throw new Error(
+        "GitHub Authentication is not configured. Missing valid VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in frontend configuration."
+      );
+    }
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'github',
       options: { redirectTo: `${window.location.origin}/auth/callback` },
@@ -122,7 +132,12 @@ export const authApi = {
   },
 
   linkedinOAuth: async () => {
-    const { supabase } = await import('./supabase');
+    const { supabase, isSupabaseConfigured } = await import('./supabase');
+    if (!isSupabaseConfigured()) {
+      throw new Error(
+        "LinkedIn Authentication is not configured. Missing valid VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in frontend configuration."
+      );
+    }
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'linkedin_oidc',
       options: { redirectTo: `${window.location.origin}/auth/callback` },

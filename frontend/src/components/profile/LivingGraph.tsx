@@ -109,7 +109,8 @@ export const LivingGraph = ({ userId, isOwnProfile, className = "" }: LivingGrap
       try {
         let offset = 0;
         for (let page = 0; page < MAX_PAGES; page++) {
-          const batch = isOwnProfile
+          const hasToken = typeof localStorage !== "undefined" && Boolean(localStorage.getItem("access_token"));
+          const batch = (isOwnProfile && hasToken)
             ? await backendApi.vault.getMyItems("achievement", PAGE_SIZE, offset)
             : await backendApi.vault.getUserItems(userId, "achievement", PAGE_SIZE, offset);
 
@@ -134,7 +135,8 @@ export const LivingGraph = ({ userId, isOwnProfile, className = "" }: LivingGrap
       // Fallback: paginated fetch without category parameter, filtered client-side
       let fallbackOffset = 0;
       for (let page = 0; page < MAX_PAGES; page++) {
-        const batch = isOwnProfile
+        const hasTokenFallback = typeof localStorage !== "undefined" && Boolean(localStorage.getItem("access_token"));
+        const batch = (isOwnProfile && hasTokenFallback)
           ? await backendApi.vault.getMyItems(undefined, PAGE_SIZE, fallbackOffset)
           : await backendApi.vault.getUserItems(userId, undefined, PAGE_SIZE, fallbackOffset);
 

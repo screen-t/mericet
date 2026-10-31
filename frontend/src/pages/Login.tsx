@@ -85,15 +85,30 @@ const Login = () => {
   };
 
   const handleGoogleLogin = async (): Promise<void> => {
-    await authApi.googleOAuth();
+    try {
+      setError('');
+      await authApi.googleOAuth();
+    } catch (err: unknown) {
+      setError((err as Error)?.message || 'Google login failed');
+    }
   };
 
   const handleGithubLogin = async (): Promise<void> => {
-    await authApi.githubOAuth();
+    try {
+      setError('');
+      await authApi.githubOAuth();
+    } catch (err: unknown) {
+      setError((err as Error)?.message || 'GitHub login failed');
+    }
   };
 
   const handleLinkedinLogin = async (): Promise<void> => {
-    await authApi.linkedinOAuth();
+    try {
+      setError('');
+      await authApi.linkedinOAuth();
+    } catch (err: unknown) {
+      setError((err as Error)?.message || 'LinkedIn login failed');
+    }
   };
 
 
