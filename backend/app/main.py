@@ -56,6 +56,7 @@ from app.routes.reports import router as reports_router
 from app.routes.reviews import router as reviews_router
 from app.routes.admin import router as admin_router
 from app.routes.media import router as media_router
+from app.routes.vault import router as vault_router
 
 # Root endpoint
 @app.get("/")
@@ -70,6 +71,7 @@ def health():
 app.include_router(auth_router)
 app.include_router(oauth_router)
 app.include_router(profile_router)
+app.include_router(vault_router)
 app.include_router(posts_router)
 app.include_router(connections_router)
 app.include_router(messages_router)
@@ -81,4 +83,5 @@ app.include_router(reports_router)
 app.include_router(reviews_router)
 app.include_router(admin_router)
 app.include_router(media_router)
+
 
