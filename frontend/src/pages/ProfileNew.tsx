@@ -13,8 +13,7 @@ import { useAuth } from "@/lib/auth";
 import { backendApi } from "@/lib/backend-api";
 
 import { ProfilePosts } from "@/components/profile/ProfilePosts";
-import { VaultAccordion } from "@/components/profile/VaultAccordion";
-import { LivingGraph } from '@/components/profile/LivingGraph';
+import { ResumeVault } from "@/components/profile/ResumeVault";
 
 import { Profile } from '@/types/api';
 import {
@@ -998,23 +997,15 @@ export const ProfilePage = () => {
             <ProfilePosts username={profile.username} />
           </TabsContent>
 
-          {/* TAB 3: Vault (The Living Resume - 6 Expandable Sections) */}
-          <TabsContent value="vault">
-            <VaultAccordion
+          {/* TAB 3: Resume Vault (Continuous Professional Narrative & Living Graph) */}
+          <TabsContent value="vault" className="mt-2">
+            <ResumeVault
               userId={profileUserId!}
               isOwnProfile={isOwnProfile}
               profile={profile}
             />
           </TabsContent>
         </Tabs>
-
-        {/* The Living Graph (Bottom Section - Issue #55, #59) */}
-        <section className="mt-8 pt-8 border-t border-border/60">
-          <LivingGraph
-            userId={profileUserId!}
-            isOwnProfile={isOwnProfile}
-          />
-        </section>
       </div>
 
 

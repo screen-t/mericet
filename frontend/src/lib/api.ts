@@ -98,37 +98,21 @@ export const authApi = {
   },
 
   /**
-   * OAuth flows — these still redirect through Supabase's OAuth URL.
-   * Not available in regions where supabase.co is blocked.
+   * OAuth flows — centralized via auth-oauth.ts with configuration guards.
    */
-  googleOAuth: async () => {
-    const { supabase } = await import('./supabase');
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-    if (error) throw new Error(error.message);
-    return data;
+  googleOAuth: async (options?: { redirectTo?: string }) => {
+    const { initiateGoogleOAuth } = await import('./auth-oauth');
+    return initiateGoogleOAuth(options);
   },
 
-  githubOAuth: async () => {
-    const { supabase } = await import('./supabase');
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'github',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-    if (error) throw new Error(error.message);
-    return data;
+  githubOAuth: async (options?: { redirectTo?: string }) => {
+    const { initiateGithubOAuth } = await import('./auth-oauth');
+    return initiateGithubOAuth(options);
   },
 
-  linkedinOAuth: async () => {
-    const { supabase } = await import('./supabase');
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'linkedin_oidc',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-    if (error) throw new Error(error.message);
-    return data;
+  linkedinOAuth: async (options?: { redirectTo?: string }) => {
+    const { initiateLinkedinOAuth } = await import('./auth-oauth');
+    return initiateLinkedinOAuth(options);
   },
 
   /** Check username availability via backend. */
