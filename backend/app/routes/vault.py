@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
+import re
 from app.middleware.auth import require_auth, optional_auth
-from app.deps import get_vault_repo, get_connected_tool_repo, get_living_graph_repo
+from app.deps import get_vault_repo, get_connected_tool_repo, get_living_graph_repo, get_user_repo
 from app.models.vault import (
     VaultItemCreate, VaultItemUpdate, VaultItemResponse,
     ConnectedToolCreate, ConnectedToolResponse, VerifyVaultItemRequest,
@@ -12,6 +13,25 @@ from app.services.verification_service import VerificationService
 from app.services.living_graph import LivingGraphEngine
 
 router = APIRouter(prefix="/vault", tags=["Vault"])
+
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
+
+
+def _resolve_user_id(identifier: str, user_repo) -> str:
+    """Resolves target identifier to user UUID if it is a username, or returns identifier directly."""
+    if _UUID_RE.match(identifier):
+        return identifier
+    if user_repo:
+        try:
+            user = user_repo.get_by_username(identifier)
+            if user and "id" in user:
+                return user["id"]
+        except Exception:
+            pass
+    return identifier
 
 
 def _normalize_category_query(category: Optional[str]) -> Optional[str]:
@@ -108,12 +128,14 @@ def get_user_vault_items(
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     viewer_id: Optional[str] = Depends(optional_auth),
     vault_repo=Depends(get_vault_repo),
+    user_repo=Depends(get_user_repo),
 ):
     """Get vault items for a user. Public items only unless viewed by the owner."""
-    is_owner = (viewer_id is not None and viewer_id == target_user_id)
+    resolved_id = _resolve_user_id(target_user_id, user_repo)
+    is_owner = (viewer_id is not None and viewer_id == resolved_id)
     cat_val = _normalize_category_query(category)
     items = vault_repo.get_by_user(
-        user_id=target_user_id,
+        user_id=resolved_id,
         category=cat_val,
         is_public_only=not is_owner,
         limit=limit,
@@ -251,14 +273,16 @@ def get_user_living_graph(
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     viewer_id: Optional[str] = Depends(optional_auth),
     vault_repo=Depends(get_vault_repo),
+    user_repo=Depends(get_user_repo),
 ):
     """Fetch Living Graph verified achievements for target profile. Public only unless owner."""
     if target_user_id in ("runs", "sync"):
         raise HTTPException(status_code=404, detail="Living Graph endpoint not found")
 
-    is_owner = (viewer_id is not None and viewer_id == target_user_id)
+    resolved_id = _resolve_user_id(target_user_id, user_repo)
+    is_owner = (viewer_id is not None and viewer_id == resolved_id)
     items = vault_repo.get_by_user(
-        user_id=target_user_id,
+        user_id=resolved_id,
         category=VaultCategory.achievement.value,
         is_public_only=not is_owner,
         limit=limit,

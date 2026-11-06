@@ -1000,7 +1000,7 @@ export const ProfilePage = () => {
           {/* TAB 3: Resume Vault (Continuous Professional Narrative & Living Graph) */}
           <TabsContent value="vault" className="mt-2">
             <ResumeVault
-              userId={profileUserId!}
+              userId={profile?.id || profileUserId!}
               isOwnProfile={isOwnProfile}
               profile={profile}
             />
