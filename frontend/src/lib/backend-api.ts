@@ -1013,6 +1013,51 @@ const vault = {
     }).then(handleResponse<{ message: string; result: { synced_tools: number; highlights_created: number; errors: string[] } }>),
 };
 
+const workVerification = {
+  searchCoworkers: (company: string): Promise<import('@/types/api').CoworkerProfile[]> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/coworkers/search?company=${encodeURIComponent(company)}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<import('@/types/api').CoworkerProfile[]>),
+
+  verifyAuto: (experienceId: string, data: { evidence_text: string; document_hash?: string }): Promise<import('@/types/api').WorkExperience> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/${encodeURIComponent(experienceId)}/verify/auto`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse<import('@/types/api').WorkExperience>),
+
+  requestAdmin: (experienceId: string, data: { admin_identifier: string }): Promise<{ message: string; request_id: string; status: string }> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/${encodeURIComponent(experienceId)}/verify/admin`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse<{ message: string; request_id: string; status: string }>),
+
+  requestP2P: (experienceId: string, peer_ids: string[]): Promise<{ message: string; request_id: string; status: string; approvals_required: number; approvals_received: number }> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/${encodeURIComponent(experienceId)}/verify/p2p`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ peer_ids }),
+    }).then(handleResponse<{ message: string; request_id: string; status: string; approvals_required: number; approvals_received: number }>),
+
+  respondP2P: (data: { request_id: string; key_image: string; signature: Record<string, unknown> }): Promise<{ message: string; approvals_received: number; approvals_required: number; status: string; is_verified: boolean }> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/p2p/respond`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse<{ message: string; approvals_received: number; approvals_required: number; status: string; is_verified: boolean }>),
+
+  getVerificationStatus: (experienceId: string): Promise<import('@/types/api').WorkVerificationStatusInfo> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/${encodeURIComponent(experienceId)}/verification-status`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<import('@/types/api').WorkVerificationStatusInfo>),
+
+  getPendingApprovals: (): Promise<Record<string, unknown>[]> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/pending-approvals`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<Record<string, unknown>[]>),
+};
+
 export const backendApi = {
   auth,
   profile,
@@ -1028,4 +1073,5 @@ export const backendApi = {
   admin,
   media,
   vault,
+  workVerification,
 };
