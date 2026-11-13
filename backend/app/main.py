@@ -45,6 +45,7 @@ app.add_middleware(
 # Routers imported after middleware is set up
 from app.routes.auth import router as auth_router
 from app.routes.oauth import router as oauth_router
+from app.routes.work_verification import router as work_verification_router
 from app.routes.profile import router as profile_router
 from app.routes.posts import router as posts_router
 from app.routes.connections import router as connections_router
@@ -71,6 +72,7 @@ def health():
 
 app.include_router(auth_router)
 app.include_router(oauth_router)
+app.include_router(work_verification_router)
 app.include_router(profile_router)
 app.include_router(vault_router)
 app.include_router(posts_router)

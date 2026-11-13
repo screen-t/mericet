@@ -59,18 +59,56 @@ export interface Profile extends User {
   activity_status_visible?: boolean;
 }
 
+export type EmploymentType = "Full-time" | "Part-time" | "Contract" | "Internship" | "Freelance";
+
+export type WorkVerificationStatus =
+  | "PENDING"
+  | "AI_EVIDENCE_CHECKED"
+  | "SOURCE_VERIFIED"
+  | "P2P_REQUIRED"
+  | "P2P_PENDING"
+  | "VERIFIED"
+  | "REJECTED"
+  | "EXPIRED";
+
 export interface WorkExperience {
   id: string;
   user_id: string;
   title: string;
   company: string;
   location?: string;
+  employment_type?: EmploymentType | string;
   start_date: string;
   end_date?: string;
   is_current: boolean;
   description?: string;
+  verification_status?: WorkVerificationStatus;
+  verification_type?: "auto_ai" | "company_admin" | "p2p_anonymous" | string;
+  verified_at?: string;
+  verification_metadata?: Record<string, unknown>;
+  anonymous_proof?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export interface CoworkerProfile {
+  id: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  company: string;
+  title?: string;
+}
+
+export interface WorkVerificationStatusInfo {
+  experience_id: string;
+  verification_status: WorkVerificationStatus;
+  verification_type?: string;
+  approvals_required: number;
+  approvals_received: number;
+  verified_at?: string;
+  is_verified: boolean;
+  details?: Record<string, unknown>;
 }
 
 export interface Education {
