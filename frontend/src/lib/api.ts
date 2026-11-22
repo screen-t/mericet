@@ -20,7 +20,22 @@ export type SignupPayload = {
   last_name?: string;
 }
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+export function resolveBackendBaseUrl(): string {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
+  if (
+    typeof window !== 'undefined' &&
+    window.location?.hostname &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1'
+  ) {
+    return 'https://mericet.onrender.com';
+  }
+  return 'http://localhost:8000';
+}
+
+const API_BASE_URL = resolveBackendBaseUrl();
 
 async function backendPost<T>(path: string, body: unknown, token?: string): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
