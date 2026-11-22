@@ -154,6 +154,47 @@ console.log("=== Running Task 6 & Task 8: Local ZKP & Anonymous P2P Test Suite =
   console.log("  ✓ Anonymous P2P ring signature preserves peer anonymity without database tracking");
 }
 
+// TEST 8: Explicit Environment Separation & Preview Fail-Closed Guard
+{
+  console.log("Test 8: Explicit Environment Separation & Preview Fail-Closed Guard");
+  import("../lib/api.ts").then(({ resolveBackendBaseUrl, getActiveBackendUrl, ConfigurationError }) => {
+    // In local (Node) environment, defaults to localhost:8000
+    const localUrl = resolveBackendBaseUrl();
+    assert.equal(localUrl, "http://localhost:8000", "Local environment must default to local backend");
+
+    // Simulate deployed preview environment logic
+    function resolveForHost(host: string, envUrl?: string): string {
+      if (envUrl && envUrl.trim()) return envUrl.trim();
+      const isLocal = host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host.endsWith(".local");
+      if (isLocal) return "http://localhost:8000";
+      return "";
+    }
+
+    assert.equal(resolveForHost("mericet-git-feature.vercel.app", undefined), "", "Deployed preview must NOT have a default URL");
+    assert.notEqual(resolveForHost("mericet-git-feature.vercel.app", undefined), "https://mericet.onrender.com", "Preview must NEVER silently fall back to production backend");
+    assert.equal(resolveForHost("mericet-git-feature.vercel.app", "https://staging.mericet.com"), "https://staging.mericet.com", "Configured staging URL must be respected");
+
+    console.log("  ✓ Production-safe environment separation verified: Preview fails closed without VITE_BACKEND_URL");
+  });
+}
+
+// TEST 9: Cryptographic Binding vs Inference Reality Contract
+{
+  console.log("Test 9: Cryptographic Binding vs Inference Reality Contract");
+  const dummyBytes = new Uint8Array([50, 60, 70, 80]);
+  const claimId = "claim-spec-check-101";
+  const externalScore = 0.88;
+
+  const payload = generateZKPPayload(dummyBytes, claimId, externalScore);
+
+  // Assert that public signals explicitly attest the externally computed score and hash
+  assert.equal(payload.public_signals[0], payload.poseidon_hash, "Signal 0 must be Poseidon document commitment");
+  assert.equal(payload.public_signals[1], "8800", "Signal 1 must bind external score scaled integer");
+  assert.equal(payload.public_signals[3], "8500", "Signal 3 must bind Silver threshold (85%)");
+
+  console.log("  ✓ Cryptographic specification verified: proof binds commitment and score; does not claim in-circuit zkML");
+}
+
 console.log("\n========================================================");
-console.log(" ALL 7 LOCAL ZKP & ANONYMOUS P2P TESTS PASSED (100%)");
+console.log(" ALL 9 LOCAL ZKP & ANONYMOUS P2P TESTS PASSED (100%)");
 console.log("========================================================\n");

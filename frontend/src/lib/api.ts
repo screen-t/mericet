@@ -20,27 +20,63 @@ export type SignupPayload = {
   last_name?: string;
 }
 
+/**
+ * Configuration Error thrown when environment variables are missing in deployed environments.
+ */
+export class ConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfigurationError';
+  }
+}
+
+/**
+ * Detects whether the code is running in a local developer environment.
+ */
+export function isLocalEnvironment(): boolean {
+  if (typeof window === 'undefined' || !window.location) {
+    return true; // Node.js / test / SSR defaults to local
+  }
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.endsWith('.local');
+}
+
+/**
+ * Resolves the backend API base URL with strict environment separation:
+ * - When VITE_BACKEND_URL is explicitly set: use it.
+ * - When running locally: fall back to http://localhost:8000.
+ * - When running in a deployed environment (e.g. Vercel Preview/Prod) without VITE_BACKEND_URL:
+ *   FAIL CLOSED. Never silently route Preview traffic to the production backend.
+ */
 export function resolveBackendBaseUrl(): string {
-  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) {
-    return import.meta.env.VITE_BACKEND_URL;
+  const envUrl = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_BACKEND_URL : undefined;
+  if (envUrl && envUrl.trim() !== '') {
+    return envUrl.trim();
   }
-  if (
-    typeof window !== 'undefined' &&
-    window.location?.hostname &&
-    window.location.hostname !== 'localhost' &&
-    window.location.hostname !== '127.0.0.1'
-  ) {
-    return 'https://mericet.onrender.com';
+  if (isLocalEnvironment()) {
+    return 'http://localhost:8000';
   }
-  return 'http://localhost:8000';
+  return '';
+}
+
+export function getActiveBackendUrl(): string {
+  const url = resolveBackendBaseUrl();
+  if (!url) {
+    throw new ConfigurationError(
+      'Backend API URL (VITE_BACKEND_URL) is not configured for this preview or deployed environment. ' +
+      'Please configure VITE_BACKEND_URL in your Vercel Project Settings (Preview scope) to point to your dedicated staging backend.'
+    );
+  }
+  return url;
 }
 
 const API_BASE_URL = resolveBackendBaseUrl();
 
 async function backendPost<T>(path: string, body: unknown, token?: string): Promise<T> {
+  const baseUrl = getActiveBackendUrl();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetch(`${baseUrl}${path}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -53,10 +89,11 @@ async function backendPost<T>(path: string, body: unknown, token?: string): Prom
 }
 
 async function backendDelete<T>(path: string, token?: string): Promise<T> {
+  const baseUrl = getActiveBackendUrl();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const t = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') || undefined : undefined);
   if (t) headers['Authorization'] = `Bearer ${t}`;
-  const res = await fetch(`${API_BASE_URL}${path}`, { method: 'DELETE', headers });
+  const res = await fetch(`${baseUrl}${path}`, { method: 'DELETE', headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail));
@@ -65,10 +102,11 @@ async function backendDelete<T>(path: string, token?: string): Promise<T> {
 }
 
 async function backendGet<T>(path: string, token?: string): Promise<T> {
+  const baseUrl = getActiveBackendUrl();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const t = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') || undefined : undefined);
   if (t) headers['Authorization'] = `Bearer ${t}`;
-  const res = await fetch(`${API_BASE_URL}${path}`, { headers });
+  const res = await fetch(`${baseUrl}${path}`, { headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail));

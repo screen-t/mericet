@@ -3,19 +3,54 @@
  * All requests use the stored access token (localStorage) for auth.
  */
 
+/**
+ * Configuration Error thrown when environment variables are missing in deployed environments.
+ */
+export class ConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigurationError";
+  }
+}
+
+/**
+ * Detects whether the code is running in a local developer environment.
+ */
+export function isLocalEnvironment(): boolean {
+  if (typeof window === "undefined" || !window.location) {
+    return true; // Node.js / test / SSR defaults to local
+  }
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host.endsWith(".local");
+}
+
+/**
+ * Resolves the backend API base URL with strict environment separation:
+ * - When VITE_BACKEND_URL is explicitly set: use it.
+ * - When running locally: fall back to http://localhost:8000.
+ * - When running in a deployed environment (e.g. Vercel Preview/Prod) without VITE_BACKEND_URL:
+ *   FAIL CLOSED. Never silently route Preview traffic to the production backend.
+ */
 export function resolveBackendBaseUrl(): string {
-  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) {
-    return import.meta.env.VITE_BACKEND_URL;
+  const envUrl = typeof import.meta !== "undefined" ? import.meta.env?.VITE_BACKEND_URL : undefined;
+  if (envUrl && envUrl.trim() !== "") {
+    return envUrl.trim();
   }
-  if (
-    typeof window !== "undefined" &&
-    window.location?.hostname &&
-    window.location.hostname !== "localhost" &&
-    window.location.hostname !== "127.0.0.1"
-  ) {
-    return "https://mericet.onrender.com";
+  if (isLocalEnvironment()) {
+    return "http://localhost:8000";
   }
-  return "http://localhost:8000";
+  return "";
+}
+
+export function getActiveBackendUrl(): string {
+  const url = resolveBackendBaseUrl();
+  if (!url) {
+    throw new ConfigurationError(
+      "Backend API URL (VITE_BACKEND_URL) is not configured for this preview or deployed environment. " +
+      "Please configure VITE_BACKEND_URL in your Vercel Project Settings (Preview scope) to point to your dedicated staging backend."
+    );
+  }
+  return url;
 }
 
 const API_BASE_URL = resolveBackendBaseUrl();
@@ -68,6 +103,12 @@ async function tryRefreshToken(): Promise<string | null> {
  * On a second 401 (refresh failed), clears tokens and redirects to /login.
  */
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+  if (!API_BASE_URL && !isLocalEnvironment()) {
+    throw new ConfigurationError(
+      "Backend API URL (VITE_BACKEND_URL) is not configured for this preview or deployed environment. " +
+      "Please configure VITE_BACKEND_URL in your Vercel Project Settings (Preview scope) to point to your dedicated staging backend."
+    );
+  }
   let res: Response;
   try {
     res = await fetch(url, options);
