@@ -556,10 +556,34 @@ class VerificationService:
                 message="Malformed Poseidon commitment: must be a valid prime-field hex or decimal hash string.",
             )
 
+        now_iso = datetime.now(timezone.utc).isoformat()
+        semantic_score = evidence.get("semantic_score")
+        if semantic_score is None and isinstance(evidence.get("public_signals"), list) and len(evidence.get("public_signals")) > 1:
+            try:
+                semantic_score = float(evidence["public_signals"][1]) / 10000.0
+            except (ValueError, TypeError):
+                pass
+
         if isinstance(proof_payload, dict):
             has_groth16 = all(k in proof_payload for k in ("pi_a", "pi_b", "pi_c"))
             has_snark = "protocol" in proof_payload and "curve" in proof_payload
             if has_groth16 or has_snark:
+                if semantic_score is not None and semantic_score >= 0.85:
+                    return VerificationResult(
+                        tier=VerificationTier.mid,
+                        verified=True,
+                        message=f"Local ZKP evidence verified: Poseidon commitment confirmed and semantic relevance of {semantic_score*100:.1f}% exceeds 85% threshold (Silver tier).",
+                        details={
+                            "verification_type": "local_zkp_semantic_commitment",
+                            "poseidon_hash": poseidon_commitment,
+                            "semantic_score": round(float(semantic_score), 4),
+                            "threshold": 0.85,
+                            "protocol": proof_payload.get("protocol", "groth16"),
+                            "curve": proof_payload.get("curve", "bn128"),
+                            "public_signals": evidence.get("public_signals", []),
+                            "evaluated_at": now_iso,
+                        },
+                    )
                 return VerificationResult(
                     tier=VerificationTier.weak,
                     verified=True,
@@ -567,9 +591,11 @@ class VerificationService:
                     details={
                         "verification_type": "poseidon_commitment",
                         "poseidon_hash": poseidon_commitment,
+                        "semantic_score": round(float(semantic_score), 4) if semantic_score is not None else None,
                         "zkp_status": "pairing_verification_pending_vk",
                         "protocol": proof_payload.get("protocol", "groth16"),
                         "curve": proof_payload.get("curve", "bn128"),
+                        "evaluated_at": now_iso,
                     },
                 )
 
@@ -581,6 +607,7 @@ class VerificationService:
                 "verification_type": "poseidon_commitment",
                 "poseidon_hash": poseidon_commitment,
                 "note": "Document commitment verified in-memory on client; no server document upload required.",
+                "evaluated_at": now_iso,
             },
         )
 

@@ -272,6 +272,8 @@ def get_user_work_experience(
     user_repo=Depends(get_user_repo),
     work_repo=Depends(get_work_experience_repo),
 ):
+    if username in ("coworkers", "pending-approvals", "search"):
+        raise HTTPException(status_code=404, detail="User not found")
     user = user_repo.get_by_username(username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

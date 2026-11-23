@@ -5,18 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { WorkExperience, Profile } from '@/types/api';
+import { Badge } from "@/components/ui/badge";
+import { WorkExperience, Profile, EmploymentType } from '@/types/api';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { backendApi } from "@/lib/backend-api";
-import { Briefcase, Plus, Pencil, Trash2, Calendar } from "lucide-react";
+import { Briefcase, Plus, Pencil, Trash2, Calendar, ShieldCheck, Users, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
+import { WorkExperienceVerificationModal } from "./WorkExperienceVerificationModal";
 
 interface WorkExperienceSectionProps {
   userId: string;
@@ -28,10 +29,12 @@ export const WorkExperienceSection = ({ userId, isOwnProfile }: WorkExperienceSe
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<WorkExperience | null>(null);
+  const [verifyingItem, setVerifyingItem] = useState<WorkExperience | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     company: "",
     location: "",
+    employment_type: "Full-time" as EmploymentType,
     start_date: "",
     end_date: "",
     is_current: false,
@@ -87,6 +90,7 @@ export const WorkExperienceSection = ({ userId, isOwnProfile }: WorkExperienceSe
       title: "",
       company: "",
       location: "",
+      employment_type: "Full-time",
       start_date: "",
       end_date: "",
       is_current: false,
@@ -101,6 +105,7 @@ export const WorkExperienceSection = ({ userId, isOwnProfile }: WorkExperienceSe
       title: item.title,
       company: item.company,
       location: item.location || "",
+      employment_type: (item.employment_type as EmploymentType) || "Full-time",
       start_date: item.start_date ? item.start_date.slice(0, 7) : "",
       end_date: item.end_date ? item.end_date.slice(0, 7) : "",
       is_current: item.is_current,
@@ -131,6 +136,36 @@ export const WorkExperienceSection = ({ userId, isOwnProfile }: WorkExperienceSe
     saveMutation.mutate(payload);
   };
 
+  const renderStatusBadge = (exp: WorkExperience) => {
+    const status = exp.verification_status || "PENDING";
+    if (status === "VERIFIED") {
+      return (
+        <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-medium py-0 px-1.5 flex items-center gap-1">
+          <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" />
+          Verified Work Experience
+        </Badge>
+      );
+    }
+    if (status === "P2P_PENDING") {
+      const received = Number((exp.verification_metadata as Record<string, unknown>)?.approvals_received || 0);
+      return (
+        <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] py-0 px-1.5 flex items-center gap-1">
+          <Users className="w-2.5 h-2.5 text-amber-500" />
+          P2P Pending ({received}/3)
+        </Badge>
+      );
+    }
+    if (status === "SOURCE_VERIFIED" || status === "AI_EVIDENCE_CHECKED") {
+      return (
+        <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-500/30 text-[10px] py-0 px-1.5 flex items-center gap-1">
+          <Sparkles className="w-2.5 h-2.5 text-blue-500" />
+          Evidence Checked
+        </Badge>
+      );
+    }
+    return null;
+  };
+
   return (
     <>
       <Card className="p-6">
@@ -155,29 +190,46 @@ export const WorkExperienceSection = ({ userId, isOwnProfile }: WorkExperienceSe
           ) : (
             experiences.map((exp: WorkExperience) => (
               <div key={exp.id} className="border-l-2 border-primary pl-4 py-2">
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
-                    <h4 className="font-semibold">{exp.title}</h4>
-                    <p className="text-sm text-muted-foreground">{exp.company}</p>
-                    {exp.location && (
-                      <p className="text-xs text-muted-foreground">{exp.location}</p>
-                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-semibold text-foreground">{exp.title}</h4>
+                      {renderStatusBadge(exp)}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {exp.company}
+                      {exp.employment_type && ` • ${exp.employment_type}`}
+                      {exp.location && ` • ${exp.location}`}
+                    </p>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                       <Calendar className="w-3 h-3" />
                       <span>
                         {format(parseISO(exp.start_date), 'MMM yyyy')} -{" "}
-                        {exp.is_current ? "Present" : format(parseISO(exp.end_date!), 'MMM yyyy')}
+                        {exp.is_current ? "Present" : exp.end_date ? format(parseISO(exp.end_date), 'MMM yyyy') : "Present"}
                       </span>
                     </div>
                     {exp.description && (
                       <p className="text-sm mt-2 text-muted-foreground">{exp.description}</p>
                     )}
                   </div>
+
                   {isOwnProfile && (
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-1">
+                      {exp.verification_status !== "VERIFIED" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setVerifyingItem(exp)}
+                          className="h-8 text-xs flex items-center gap-1 text-primary border-primary/30 hover:bg-primary/10"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          Verify
+                        </Button>
+                      )}
                       <Button
                         size="icon"
                         variant="ghost"
+                        className="h-8 w-8"
                         onClick={() => openEditModal(exp)}
                       >
                         <Pencil className="w-4 h-4" />
@@ -185,6 +237,7 @@ export const WorkExperienceSection = ({ userId, isOwnProfile }: WorkExperienceSe
                       <Button
                         size="icon"
                         variant="ghost"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         onClick={() => deleteMutation.mutate(exp.id)}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -218,14 +271,32 @@ export const WorkExperienceSection = ({ userId, isOwnProfile }: WorkExperienceSe
               />
             </div>
 
-            <div>
-              <Label htmlFor="company">Company *</Label>
-              <Input
-                id="company"
-                value={formData.company}
-                onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                required
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="company">Company *</Label>
+                <Input
+                  id="company"
+                  value={formData.company}
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="employment_type">Employment Type</Label>
+                <select
+                  id="employment_type"
+                  value={formData.employment_type}
+                  onChange={(e) => setFormData({ ...formData, employment_type: e.target.value as EmploymentType })}
+                  className="w-full text-xs p-2.5 rounded-md bg-background border border-input mt-1"
+                >
+                  <option value="Full-time">Full-time</option>
+                  <option value="Part-time">Part-time</option>
+                  <option value="Contract">Contract</option>
+                  <option value="Internship">Internship</option>
+                  <option value="Freelance">Freelance</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -267,7 +338,8 @@ export const WorkExperienceSection = ({ userId, isOwnProfile }: WorkExperienceSe
                 type="checkbox"
                 id="is_current"
                 checked={formData.is_current}
-                onChange={(e) => setFormData({ ...formData, is_current: e.target.checked, end_date: e.target.checked ? "" : formData.end_date })}
+                onChange={(e) => setFormData({ ...formData, is_current: e.target.checked })}
+                className="rounded border-gray-300"
               />
               <Label htmlFor="is_current">I currently work here</Label>
             </div>
@@ -278,22 +350,32 @@ export const WorkExperienceSection = ({ userId, isOwnProfile }: WorkExperienceSe
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={4}
-                placeholder="Describe your responsibilities and achievements..."
+                rows={3}
               />
             </div>
 
-            <DialogFooter>
+            <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={closeModal}>
                 Cancel
               </Button>
               <Button type="submit" disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? "Saving..." : editingItem ? "Update" : "Add"}
+                {saveMutation.isPending ? "Saving..." : (editingItem ? "Update" : "Add")}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Work Experience Verification Modal */}
+      <WorkExperienceVerificationModal
+        isOpen={!!verifyingItem}
+        onClose={() => setVerifyingItem(null)}
+        experience={verifyingItem}
+        onUpdated={() => {
+          queryClient.invalidateQueries({ queryKey: ['workExperience', userId] });
+          queryClient.invalidateQueries({ queryKey: ['profile', userId] });
+        }}
+      />
     </>
   );
 };

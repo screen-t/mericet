@@ -56,8 +56,12 @@ import {
   Info,
   Clock,
   Layers,
+  Users,
+  Cpu,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { UniversalVerificationModal } from "@/components/vault/UniversalVerificationModal";
+import { WorkExperienceVerificationModal } from "@/components/profile/WorkExperienceVerificationModal";
 
 export interface ResumeVaultProps {
   userId: string;
@@ -187,10 +191,13 @@ export const ResumeVault = ({
   // ==================== 1. WORK EXPERIENCE STATE & QUERIES ====================
   const [isWorkModalOpen, setIsWorkModalOpen] = useState(false);
   const [editingWork, setEditingWork] = useState<WorkExperience | null>(null);
+  const [verifyingWork, setVerifyingWork] = useState<WorkExperience | null>(null);
+  const [zkpModalItem, setZkpModalItem] = useState<VaultItem | null>(null);
   const [workForm, setWorkForm] = useState({
     title: "",
     company: "",
     location: "",
+    employment_type: "Full-time",
     start_date: "",
     end_date: "",
     is_current: false,
@@ -885,10 +892,34 @@ export const ResumeVault = ({
                             Current Role
                           </Badge>
                         )}
-                        {renderVerificationBadge(undefined, false, true)}
+                        {exp.verification_status === "VERIFIED" ? (
+                          renderVerificationBadge(exp.verification_tier || "mid", true, true)
+                        ) : exp.verification_status === "P2P_PENDING" ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] font-medium py-0 px-1.5 flex items-center gap-1 cursor-help">
+                                  <Users className="w-2.5 h-2.5 text-amber-500" />
+                                  P2P Pending ({Number((exp.verification_metadata as Record<string, unknown>)?.approvals_received || 0)}/3)
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="text-xs max-w-xs">
+                                Awaiting 3 anonymous coworker approvals via ring signature consensus.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : exp.verification_status === "AI_EVIDENCE_CHECKED" || exp.verification_status === "SOURCE_VERIFIED" ? (
+                          <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-500/30 text-[10px] font-medium py-0 px-1.5 flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5 text-blue-500" />
+                            Evidence Checked
+                          </Badge>
+                        ) : (
+                          renderVerificationBadge("none", false, true)
+                        )}
                       </div>
                       <p className="text-xs sm:text-sm font-medium text-foreground/80 mt-0.5">
                         {exp.company}
+                        {exp.employment_type && ` • ${exp.employment_type}`}
                         {exp.location && ` • ${exp.location}`}
                       </p>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
@@ -902,6 +933,17 @@ export const ResumeVault = ({
 
                     {isOwnProfile && (
                       <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity self-end sm:self-start mt-2 sm:mt-0">
+                        {exp.verification_status !== "VERIFIED" && (
+                          <button
+                            type="button"
+                            onClick={() => setVerifyingWork(exp)}
+                            className="px-2 py-1 rounded-md text-[11px] font-medium text-primary hover:bg-primary/10 border border-primary/20 flex items-center gap-1 transition-colors mr-1"
+                            title="Verify Experience"
+                          >
+                            <ShieldCheck className="w-3 h-3" />
+                            Verify
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
@@ -910,6 +952,7 @@ export const ResumeVault = ({
                               title: exp.title || "",
                               company: exp.company || "",
                               location: exp.location || "",
+                              employment_type: exp.employment_type || "Full-time",
                               start_date: exp.start_date ? exp.start_date.slice(0, 7) : "",
                               end_date: exp.end_date ? exp.end_date.slice(0, 7) : "",
                               is_current: exp.is_current,
@@ -1209,11 +1252,35 @@ export const ResumeVault = ({
                         href={toAbsoluteUrl(proj.repo_url)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground font-medium ml-auto"
+                        className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground font-medium"
                       >
                         <Github className="w-3.5 h-3.5" />
                         Code Repository
                       </a>
+                    )}
+                    {isOwnProfile && (!proj.verified || proj.verification_tier === "none") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setZkpModalItem({
+                            id: proj.id,
+                            user_id: userId,
+                            title: proj.title,
+                            category: "project",
+                            description: proj.description,
+                            is_public: proj.is_public ?? true,
+                            verification_tier: (proj.verification_tier as "none" | "weak" | "mid" | "strong") || "none",
+                            metadata: { tech_stack: proj.tech_stack, repo_url: proj.repo_url },
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline ml-auto"
+                        title="Generate in-memory Local ZKP commitment"
+                      >
+                        <ShieldCheck className="w-3 h-3 text-primary" />
+                        Verify (ZKP)
+                      </button>
                     )}
                   </div>
                 </Card>
@@ -1390,8 +1457,8 @@ export const ResumeVault = ({
                     )}
                   </div>
 
-                  {ach.credential_url && (
-                    <div className="pt-3 border-t border-border/50 text-xs mt-auto">
+                  <div className="pt-3 border-t border-border/50 text-xs mt-auto flex items-center justify-between gap-2">
+                    {ach.credential_url ? (
                       <a
                         href={toAbsoluteUrl(ach.credential_url)}
                         target="_blank"
@@ -1401,8 +1468,35 @@ export const ResumeVault = ({
                         <ExternalLink className="w-3.5 h-3.5" />
                         View Credential Link
                       </a>
-                    </div>
-                  )}
+                    ) : (
+                      <span />
+                    )}
+
+                    {isOwnProfile && (!ach.verified || ach.verification_tier === "none") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setZkpModalItem({
+                            id: ach.id,
+                            user_id: userId,
+                            title: ach.title,
+                            category: "achievement",
+                            description: ach.description,
+                            is_public: ach.is_public ?? true,
+                            verification_tier: (ach.verification_tier as "none" | "weak" | "mid" | "strong") || "none",
+                            metadata: { issuer: ach.issuer, date: ach.date, credential_url: ach.credential_url },
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline ml-auto"
+                        title="Generate in-memory Local ZKP commitment"
+                      >
+                        <ShieldCheck className="w-3 h-3 text-primary" />
+                        Verify (ZKP)
+                      </button>
+                    )}
+                  </div>
                 </Card>
               ))}
             </div>
@@ -1679,14 +1773,30 @@ export const ResumeVault = ({
                 required
               />
             </div>
-            <div>
-              <Label className="text-xs font-semibold">Company / Organization *</Label>
-              <Input
-                value={workForm.company}
-                onChange={(e) => setWorkForm({ ...workForm, company: e.target.value })}
-                placeholder="e.g. Acme Labs or Stealth Startup"
-                required
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold">Company / Organization *</Label>
+                <Input
+                  value={workForm.company}
+                  onChange={(e) => setWorkForm({ ...workForm, company: e.target.value })}
+                  placeholder="e.g. Acme Labs or Stealth Startup"
+                  required
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Employment Type</Label>
+                <select
+                  value={workForm.employment_type}
+                  onChange={(e) => setWorkForm({ ...workForm, employment_type: e.target.value })}
+                  className="w-full text-xs p-2 rounded-md bg-background border border-input mt-1"
+                >
+                  <option value="Full-time">Full-time</option>
+                  <option value="Part-time">Part-time</option>
+                  <option value="Contract">Contract</option>
+                  <option value="Internship">Internship</option>
+                  <option value="Freelance">Freelance</option>
+                </select>
+              </div>
             </div>
             <div>
               <Label className="text-xs font-semibold">Location</Label>
@@ -2100,6 +2210,29 @@ export const ResumeVault = ({
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* 7. Universal Local ZKP Verification Modal */}
+      <UniversalVerificationModal
+        isOpen={!!zkpModalItem}
+        onClose={() => setZkpModalItem(null)}
+        vaultItem={zkpModalItem}
+        onVerified={() => {
+          refetchProjects();
+          refetchAchievements();
+          queryClient.invalidateQueries({ queryKey: ["vault-items"] });
+        }}
+      />
+
+      {/* 8. Work Experience Verification Modal */}
+      <WorkExperienceVerificationModal
+        isOpen={!!verifyingWork}
+        onClose={() => setVerifyingWork(null)}
+        experience={verifyingWork}
+        onUpdated={() => {
+          queryClient.invalidateQueries({ queryKey: ["workExperience", userId] });
+          queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+        }}
+      />
     </div>
   );
 };

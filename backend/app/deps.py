@@ -73,6 +73,12 @@ def get_work_experience_repo():
 
 
 @lru_cache(maxsize=1)
+def get_work_verification_repo():
+    from app.repositories.supabase.work_verification_repo import SupabaseWorkVerificationRepository
+    return SupabaseWorkVerificationRepository(supabase)
+
+
+@lru_cache(maxsize=1)
 def get_education_repo():
     return SupabaseEducationRepository(supabase)
 
