@@ -69,3 +69,43 @@ CREATE TABLE IF NOT EXISTS work_p2p_blind_approvals (
 );
 
 CREATE INDEX IF NOT EXISTS idx_work_p2p_blind_req ON work_p2p_blind_approvals(request_id);
+
+-- 5. Enable Row Level Security and restrict direct anon/authenticated access
+-- All reads and writes go through the FastAPI backend using service_role.
+ALTER TABLE work_verification_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE work_p2p_peer_invites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE work_p2p_blind_approvals ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE work_verification_requests FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE work_p2p_peer_invites FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE work_p2p_blind_approvals FROM PUBLIC, anon, authenticated;
+
+GRANT ALL ON TABLE work_verification_requests TO service_role;
+GRANT ALL ON TABLE work_p2p_peer_invites TO service_role;
+GRANT ALL ON TABLE work_p2p_blind_approvals TO service_role;
+
+DROP POLICY IF EXISTS service_role_all_work_verification_requests ON work_verification_requests;
+CREATE POLICY service_role_all_work_verification_requests
+  ON work_verification_requests
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS service_role_all_work_p2p_peer_invites ON work_p2p_peer_invites;
+CREATE POLICY service_role_all_work_p2p_peer_invites
+  ON work_p2p_peer_invites
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS service_role_all_work_p2p_blind_approvals ON work_p2p_blind_approvals;
+CREATE POLICY service_role_all_work_p2p_blind_approvals
+  ON work_p2p_blind_approvals
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+NOTIFY pgrst, 'reload schema';

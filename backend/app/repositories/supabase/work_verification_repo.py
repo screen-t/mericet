@@ -18,7 +18,7 @@ class SupabaseWorkVerificationRepository:
 
         # Query work_experience with ilike
         result = self._client.table("work_experience") \
-            .select("user_id, company, title, position, users(id, username, first_name, last_name)") \
+            .select("user_id, company, title, position, users(id, username, first_name, last_name, work_history_visible)") \
             .ilike("company", f"%{clean_company}%") \
             .neq("user_id", exclude_user_id) \
             .execute()
@@ -35,10 +35,13 @@ class SupabaseWorkVerificationRepository:
             # Fallback if users relation wasn't expanded
             if not user_obj and u_id not in coworkers_map:
                 try:
-                    u_res = self._client.table("users").select("id, username, first_name, last_name").eq("id", u_id).single().execute()
+                    u_res = self._client.table("users").select("id, username, first_name, last_name, work_history_visible").eq("id", u_id).single().execute()
                     user_obj = u_res.data or {}
                 except Exception:
                     user_obj = {"id": u_id}
+
+            if user_obj.get("work_history_visible") is False:
+                continue
 
             if u_id not in coworkers_map:
                 coworkers_map[u_id] = {
