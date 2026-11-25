@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node src/tests/living-graph.test.ts && node src/tests/google-oauth.test.ts && node src/tests/zkp-and-work-verification.test.ts"
+    "test": "node scripts/test-profile-imports.js && node src/tests/living-graph.test.ts && node src/tests/google-oauth.test.ts && node src/tests/zkp-and-work-verification.test.ts"
   },
   "dependencies": {
     "@fontsource/plus-jakarta-sans": "^5.2.8",
@@ -48,7 +48,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
-    "framer-motion": "^12.24.7",
+    "framer-motion": "^11.18.2",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",

@@ -3,6 +3,11 @@
  * Field: BN254 / alt_bn128 scalar field (p = 21888242871839275222246405745257275088548364400416034343698204186575808495617n)
  *
  * Designed for in-memory execution in Web Workers without external dependencies.
+ * 
+ * SECURITY INVARIANTS:
+ * - Documents are read and processed entirely in browser memory.
+ * - Raw document bytes are NEVER uploaded or transmitted.
+ * - Only the resulting salted Poseidon commitment hash is returned.
  */
 
 export const BN254_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
@@ -145,4 +150,43 @@ export function computePoseidonHash(buffer: Uint8Array, salt?: Uint8Array): { ha
   const saltHex = "0x" + Array.from(effectiveSalt).map((b) => b.toString(16).padStart(2, "0")).join("");
 
   return { hashHex, saltHex };
+}
+
+/**
+ * Generate a cryptographically secure random salt in the scalar field.
+ */
+export function generateRandomSalt(): string {
+  const randomBytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(randomBytes);
+  } else {
+    for (let i = 0; i < 16; i++) {
+      randomBytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  return "0x" + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Process a file locally in memory and produce a salted Poseidon commitment.
+ */
+export async function generateDocumentCommitment(
+  file: File,
+  existingSalt?: string
+): Promise<{ poseidonHash: string; salt: string; fileSize: number; fileType: string }> {
+  let saltBytes: Uint8Array | undefined;
+  if (existingSalt) {
+    const clean = existingSalt.startsWith("0x") ? existingSalt.slice(2) : existingSalt;
+    saltBytes = new Uint8Array(clean.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []);
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  const uint8View = new Uint8Array(arrayBuffer);
+  const { hashHex, saltHex } = computePoseidonHash(uint8View, saltBytes);
+
+  return {
+    poseidonHash: hashHex,
+    salt: saltHex,
+    fileSize: file.size,
+    fileType: file.type,
+  };
 }

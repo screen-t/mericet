@@ -370,3 +370,4 @@ export interface VerificationResponse {
   };
   item: VaultItem;
 }
+

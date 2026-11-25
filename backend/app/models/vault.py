@@ -70,7 +70,6 @@ class VaultItemCreate(BaseModel):
             }
             return aliases.get(val, val)
         return v
-
     @field_validator("title")
     @classmethod
     def validate_title_non_empty(cls, v):
@@ -119,7 +118,6 @@ class VaultItemUpdate(BaseModel):
             }
             return aliases.get(val, val)
         return v
-
     @field_validator("title")
     @classmethod
     def validate_title_non_empty(cls, v):
