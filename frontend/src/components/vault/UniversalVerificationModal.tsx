@@ -128,15 +128,15 @@ export const UniversalVerificationModal: React.FC<UniversalVerificationModalProp
         },
       });
 
-      const tier = response.verification.tier || "mid";
+      const tier = response.verification.tier || "weak";
       setAssignedTier(tier);
       setProgressPercent(100);
       setProgressMessage(`Verification complete: Awarded ${tier.toUpperCase()} tier!`);
       setCurrentStep("COMPLETE");
 
       toast({
-        title: "Cryptographic Proof Verified",
-        description: `Successfully awarded ${tier.toUpperCase()} tier via local Poseidon commitment.`,
+        title: "Poseidon Commitment Recorded",
+        description: `Assigned ${tier === "mid" ? "Silver" : tier === "strong" ? "Gold" : "Bronze"} tier via local Poseidon commitment.`,
       });
 
       if (response.item && onVerified) {
@@ -348,7 +348,11 @@ export const UniversalVerificationModal: React.FC<UniversalVerificationModalProp
                 <p className="text-xs opacity-90 mt-0.5">
                   Assigned Tier:{" "}
                   <strong className="uppercase underline">
-                    {assignedTier === "mid" ? "Silver (Peer & Semantic Proof)" : assignedTier}
+                    {assignedTier === "mid"
+                      ? "Silver (Peer & Semantic Proof)"
+                      : assignedTier === "weak"
+                        ? "Bronze (Poseidon Commitment)"
+                        : assignedTier}
                   </strong>
                 </p>
               </div>

@@ -267,6 +267,18 @@ def submit_peer_approval(
         if app.get("key_image") == payload.key_image:
             raise HTTPException(status_code=400, detail="Replay detected: key image has already been submitted")
 
+    # Cryptographic signature verification (rejects empty, malformed, or forged signatures)
+    is_valid_sig, sig_reason = VerificationService.verify_p2p_peer_signature(
+        request_id=payload.request_id,
+        key_image=payload.key_image,
+        signature=payload.signature,
+    )
+    if not is_valid_sig:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid cryptographic signature: {sig_reason}",
+        )
+
     # Record blind approval without storing peer_id (anonymity preservation)
     verif_repo.record_blind_approval(payload.request_id, payload.key_image, payload.signature)
 
@@ -324,16 +336,41 @@ def submit_peer_approval(
 @router.get("/{experience_id}/verification-status", response_model=WorkVerificationStatusResponse)
 def get_experience_verification_status(
     experience_id: str,
+    viewer_id: str = Depends(require_auth),
     verif_repo=Depends(get_work_verification_repo),
+    user_repo=Depends(get_user_repo),
 ):
-    """Retrieve the current verification status of a work experience item."""
+    """Retrieve the current verification status of a work experience item.
+
+    Requires authentication and enforces work_history_visible privacy for non-owners.
+    """
     exp = verif_repo.get_by_id(experience_id)
     if not exp:
         raise HTTPException(status_code=404, detail="Work experience not found")
 
+    owner_id = exp.get("user_id")
+    is_owner = (owner_id is not None and viewer_id == owner_id)
+
+    if not is_owner and owner_id and user_repo:
+        owner_profile = user_repo.get_by_id(owner_id, "id, work_history_visible, suspended_at")
+        if isinstance(owner_profile, dict):
+            if owner_profile.get("suspended_at"):
+                raise HTTPException(status_code=403, detail="This account has been suspended.")
+            if not owner_profile.get("work_history_visible", True):
+                raise HTTPException(status_code=403, detail="Work history is private")
+
     req = verif_repo.get_latest_verification_request(experience_id)
     status_val = exp.get("verification_status", "PENDING")
     is_verified = (status_val == "VERIFIED")
+
+    raw_details = exp.get("verification_metadata")
+    if not is_owner and isinstance(raw_details, dict):
+        details = {
+            k: v for k, v in raw_details.items()
+            if k not in ("document_hash", "p2p_request_id")
+        }
+    else:
+        details = raw_details
 
     return WorkVerificationStatusResponse(
         experience_id=experience_id,
@@ -343,7 +380,7 @@ def get_experience_verification_status(
         approvals_received=req.get("approvals_received", 0) if req else 0,
         verified_at=exp.get("verified_at"),
         is_verified=is_verified,
-        details=exp.get("verification_metadata"),
+        details=details,
     )
 
 

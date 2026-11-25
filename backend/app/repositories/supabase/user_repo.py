@@ -184,6 +184,14 @@ class SupabaseWorkExperienceRepository:
     def __init__(self, client):
         self._client = client
 
+    def get_by_id(self, experience_id: str) -> Optional[dict]:
+        try:
+            result = self._client.table("work_experience").select("*") \
+                .eq("id", experience_id).maybe_single().execute()
+            return result.data if result and result.data else None
+        except Exception:
+            return None
+
     def get_by_user(self, user_id: str) -> list[dict]:
         result = self._client.table("work_experience").select("*") \
             .eq("user_id", user_id).order("start_date", desc=True).execute()
