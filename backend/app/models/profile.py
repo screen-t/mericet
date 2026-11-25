@@ -1,9 +1,14 @@
 from pydantic import BaseModel, Field, validator, EmailStr
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 import re
 
 _DANGEROUS_URL_RE = re.compile(r'^(javascript|data|vbscript):', re.IGNORECASE)
+_VALID_EMPLOYMENT_TYPES = {'Full-time', 'Part-time', 'Contract', 'Internship', 'Freelance'}
+_VALID_VERIFICATION_STATUSES = {
+    'PENDING', 'AI_EVIDENCE_CHECKED', 'SOURCE_VERIFIED',
+    'P2P_REQUIRED', 'P2P_PENDING', 'VERIFIED', 'REJECTED', 'EXPIRED'
+}
 
 
 def _validate_url(v: Optional[str], field_name: str = "URL") -> Optional[str]:
@@ -135,11 +140,18 @@ class WorkExperienceCreate(BaseModel):
     title: str
     company: str
     location: Optional[str] = None
+    employment_type: Optional[str] = "Full-time"
     start_date: date
     end_date: Optional[date] = None
     is_current: bool = False
     is_remote: bool = False
     description: Optional[str] = Field(None, max_length=1000)
+
+    @validator('employment_type')
+    def validate_employment_type(cls, v):
+        if v and v not in _VALID_EMPLOYMENT_TYPES:
+            raise ValueError(f"Invalid employment type: must be one of {', '.join(_VALID_EMPLOYMENT_TYPES)}")
+        return v
 
     @validator('end_date')
     def end_date_after_start(cls, v, values):
@@ -151,11 +163,18 @@ class WorkExperienceUpdate(BaseModel):
     title: Optional[str] = None
     company: Optional[str] = None
     location: Optional[str] = None
+    employment_type: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     is_current: Optional[bool] = None
     is_remote: Optional[bool] = None
     description: Optional[str] = Field(None, max_length=1000)
+
+    @validator('employment_type')
+    def validate_employment_type(cls, v):
+        if v and v not in _VALID_EMPLOYMENT_TYPES:
+            raise ValueError(f"Invalid employment type: must be one of {', '.join(_VALID_EMPLOYMENT_TYPES)}")
+        return v
 
 class WorkExperienceResponse(BaseModel):
     id: str
@@ -163,13 +182,61 @@ class WorkExperienceResponse(BaseModel):
     title: Optional[str]
     company: str
     location: Optional[str]
+    employment_type: Optional[str] = "Full-time"
     start_date: date
     end_date: Optional[date]
     is_current: bool
     is_remote: bool
     description: Optional[str]
+    verification_status: Optional[str] = "PENDING"
+    verification_type: Optional[str] = None
+    verified_at: Optional[datetime] = None
+    verification_metadata: Optional[Dict[str, Any]] = None
+    anonymous_proof: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
+
+# Work Verification Request & Response Models (Issue #63)
+class CoworkerProfileResponse(BaseModel):
+    id: str
+    username: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    company: str
+    title: Optional[str] = None
+
+class WorkVerificationAutoRequest(BaseModel):
+    evidence_text: str = Field(..., min_length=5, max_length=10000)
+    document_hash: Optional[str] = None
+
+class WorkVerificationAdminRequest(BaseModel):
+    admin_identifier: str = Field(..., min_length=3, max_length=200)
+
+class WorkVerificationP2PRequest(BaseModel):
+    peer_ids: List[str]
+
+    @validator('peer_ids')
+    def validate_peers(cls, v):
+        if not isinstance(v, list) or len(v) != 3:
+            raise ValueError("Anonymous P2P verification requires exactly 3 distinct coworkers")
+        if len(set(v)) != 3:
+            raise ValueError("All 3 selected coworkers must be distinct users")
+        return v
+
+class P2PApprovalSubmit(BaseModel):
+    request_id: str
+    key_image: str = Field(..., min_length=8)
+    signature: Dict[str, Any]
+
+class WorkVerificationStatusResponse(BaseModel):
+    experience_id: str
+    verification_status: str
+    verification_type: Optional[str] = None
+    approvals_required: int = 3
+    approvals_received: int = 0
+    verified_at: Optional[datetime] = None
+    is_verified: bool = False
+    details: Optional[Dict[str, Any]] = None
 
 # Education Models
 class EducationCreate(BaseModel):

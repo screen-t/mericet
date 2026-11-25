@@ -3,7 +3,57 @@
  * All requests use the stored access token (localStorage) for auth.
  */
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+/**
+ * Configuration Error thrown when environment variables are missing in deployed environments.
+ */
+export class ConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigurationError";
+  }
+}
+
+/**
+ * Detects whether the code is running in a local developer environment.
+ */
+export function isLocalEnvironment(): boolean {
+  if (typeof window === "undefined" || !window.location) {
+    return true; // Node.js / test / SSR defaults to local
+  }
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host.endsWith(".local");
+}
+
+/**
+ * Resolves the backend API base URL with strict environment separation:
+ * - When VITE_BACKEND_URL is explicitly set: use it.
+ * - When running locally: fall back to http://localhost:8000.
+ * - When running in a deployed environment (e.g. Vercel Preview/Prod) without VITE_BACKEND_URL:
+ *   FAIL CLOSED. Never silently route Preview traffic to the production backend.
+ */
+export function resolveBackendBaseUrl(): string {
+  const envUrl = typeof import.meta !== "undefined" ? import.meta.env?.VITE_BACKEND_URL : undefined;
+  if (envUrl && envUrl.trim() !== "") {
+    return envUrl.trim();
+  }
+  if (isLocalEnvironment()) {
+    return "http://localhost:8000";
+  }
+  return "";
+}
+
+export function getActiveBackendUrl(): string {
+  const url = resolveBackendBaseUrl();
+  if (!url) {
+    throw new ConfigurationError(
+      "Backend API URL (VITE_BACKEND_URL) is not configured for this preview or deployed environment. " +
+      "Please configure VITE_BACKEND_URL in your Vercel Project Settings (Preview scope) to point to your dedicated staging backend."
+    );
+  }
+  return url;
+}
+
+const API_BASE_URL = resolveBackendBaseUrl();
 
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
@@ -53,7 +103,28 @@ async function tryRefreshToken(): Promise<string | null> {
  * On a second 401 (refresh failed), clears tokens and redirects to /login.
  */
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-  const res = await fetch(url, options);
+  if (!API_BASE_URL && !isLocalEnvironment()) {
+    throw new ConfigurationError(
+      "Backend API URL (VITE_BACKEND_URL) is not configured for this preview or deployed environment. " +
+      "Please configure VITE_BACKEND_URL in your Vercel Project Settings (Preview scope) to point to your dedicated staging backend."
+    );
+  }
+  let res: Response;
+  try {
+    res = await fetch(url, options);
+  } catch (err: unknown) {
+    const isNetwork =
+      err instanceof TypeError ||
+      (err as Error)?.name === "TypeError" ||
+      (err as Error)?.message?.toLowerCase().includes("fetch");
+    if (isNetwork) {
+      throw new Error(
+        `Backend service unreachable at ${API_BASE_URL}. Ensure the backend API server is running on port 8000.`
+      );
+    }
+    throw err;
+  }
+
   if (res.status !== 401) return res;
 
   // Deduplicate concurrent refresh calls
@@ -67,23 +138,58 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
     localStorage.removeItem(REFRESH_TOKEN_KEY);
     sessionStorage.removeItem(ACCESS_TOKEN_KEY);
     sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-    window.location.href = "/login";
+    // Avoid hijacking window during preview or public viewing
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/login" &&
+      window.location.pathname !== "/vault-preview" &&
+      !window.location.pathname.startsWith("/profile/")
+    ) {
+      window.location.href = "/login";
+    }
     return res;
   }
 
   // Retry with refreshed token
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${newToken}`,
-    },
-  });
+  try {
+    return await fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${newToken}`,
+      },
+    });
+  } catch (err: unknown) {
+    const isNetwork =
+      err instanceof TypeError ||
+      (err as Error)?.name === "TypeError" ||
+      (err as Error)?.message?.toLowerCase().includes("fetch");
+    if (isNetwork) {
+      throw new Error(
+        `Backend service unreachable at ${API_BASE_URL}. Ensure the backend API server is running on port 8000.`
+      );
+    }
+    throw err;
+  }
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("Unauthorized: Invalid or expired session. Please sign in again.");
+    }
+    if (res.status === 403) {
+      throw new Error("Forbidden: You do not have permission to perform this action.");
+    }
+    if (res.status === 404) {
+      throw new Error(`Endpoint not found (404): ${res.url}`);
+    }
+    if (res.status >= 500) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      const msg = typeof err.detail === "string" ? err.detail : "Internal server error.";
+      throw new Error(`Backend Error (${res.status}): ${msg}`);
+    }
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     // Sentinel from require_auth: the CALLER's own account is suspended (not
     // to be confused with viewing someone else's suspended profile, which
@@ -904,13 +1010,14 @@ const media = {
   },
 };
 
+
 const vault = {
-  getMyItems: (category?: string): Promise<VaultItem[]> =>
-    fetchWithAuth(`${API_BASE_URL}/vault${category ? `?category=${encodeURIComponent(category)}` : ""}`, {
+  getMyItems: (category?: string, limit: number = 100, offset: number = 0): Promise<VaultItem[]> =>
+    fetchWithAuth(`${API_BASE_URL}/vault?limit=${limit}&offset=${offset}${category ? `&category=${encodeURIComponent(category)}` : ""}`, {
       headers: getAuthHeaders(),
     }).then(handleResponse<VaultItem[]>),
-  getUserItems: (userId: string, category?: string): Promise<VaultItem[]> =>
-    fetchWithAuth(`${API_BASE_URL}/vault/user/${encodeURIComponent(userId)}${category ? `?category=${encodeURIComponent(category)}` : ""}`, {
+  getUserItems: (userId: string, category?: string, limit: number = 100, offset: number = 0): Promise<VaultItem[]> =>
+    fetchWithAuth(`${API_BASE_URL}/vault/user/${encodeURIComponent(userId)}?limit=${limit}&offset=${offset}${category ? `&category=${encodeURIComponent(category)}` : ""}`, {
       headers: getAuthHeaders(),
     }).then(handleResponse<VaultItem[]>),
   getItem: (itemId: string): Promise<VaultItem> =>
@@ -962,6 +1069,50 @@ const vault = {
     }).then(handleResponse<{ message: string; result: { synced_tools: number; highlights_created: number; errors: string[] } }>),
 };
 
+const workVerification = {
+  searchCoworkers: (company: string): Promise<import('@/types/api').CoworkerProfile[]> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/coworkers/search?company=${encodeURIComponent(company)}`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<import('@/types/api').CoworkerProfile[]>),
+
+  verifyAuto: (experienceId: string, data: { evidence_text: string; document_hash?: string }): Promise<import('@/types/api').WorkExperience> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/${encodeURIComponent(experienceId)}/verify/auto`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse<import('@/types/api').WorkExperience>),
+
+  requestAdmin: (experienceId: string, data: { admin_identifier: string }): Promise<{ message: string; request_id: string; status: string }> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/${encodeURIComponent(experienceId)}/verify/admin`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse<{ message: string; request_id: string; status: string }>),
+
+  requestP2P: (experienceId: string, peer_ids: string[]): Promise<{ message: string; request_id: string; status: string; approvals_required: number; approvals_received: number }> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/${encodeURIComponent(experienceId)}/verify/p2p`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ peer_ids }),
+    }).then(handleResponse<{ message: string; request_id: string; status: string; approvals_required: number; approvals_received: number }>),
+
+  respondP2P: (data: { request_id: string; key_image: string; signature: Record<string, unknown> }): Promise<{ message: string; approvals_received: number; approvals_required: number; status: string; is_verified: boolean }> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/p2p/respond`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then(handleResponse<{ message: string; approvals_received: number; approvals_required: number; status: string; is_verified: boolean }>),
+
+  getVerificationStatus: (experienceId: string): Promise<import('@/types/api').WorkVerificationStatusInfo> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/${encodeURIComponent(experienceId)}/verification-status`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<import('@/types/api').WorkVerificationStatusInfo>),
+
+  getPendingApprovals: (): Promise<Record<string, unknown>[]> =>
+    fetchWithAuth(`${API_BASE_URL}/profile/work-experience/pending-approvals`, {
+      headers: getAuthHeaders(),
+    }).then(handleResponse<Record<string, unknown>[]>),
+};
 
 export const backendApi = {
   auth,
@@ -978,5 +1129,5 @@ export const backendApi = {
   admin,
   media,
   vault,
+  workVerification,
 };
-

@@ -17,3 +17,19 @@ services:
       - key: BACKEND_URL
         sync: false
     healthCheckPath: /health
+
+  - type: worker
+    name: stonet-living-graph-worker
+    runtime: python
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python -m app.worker --daemon --interval 60"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GITHUB_API_TOKEN
+        sync: false

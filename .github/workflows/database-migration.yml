@@ -24,10 +24,15 @@ jobs:
 
       - name: Run migrations
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          supabase login --token "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" || echo "Login skipped - using direct db push"
-          supabase db push --db-url "$SUPABASE_DB_URL"
-        working-directory: ./supabase
-        continue-on-error: true 
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ]; then
+            supabase login --token "$SUPABASE_ACCESS_TOKEN"
+          fi
+          if [ -n "$SUPABASE_DB_URL" ]; then
+            supabase db push --db-url "$SUPABASE_DB_URL"
+          else
+            echo "::warning::SUPABASE_DB_URL secret is not configured. Direct PostgreSQL connection string (postgresql://postgres:[PASSWORD]@db.[REF].supabase.co:5432/postgres) is required for database migrations."
+          fi
+        working-directory: ./supabase 

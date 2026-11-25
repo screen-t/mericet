@@ -47,6 +47,29 @@ class VaultItemCreate(BaseModel):
     is_public: bool = True
     display_order: int = 0
 
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v):
+        if isinstance(v, VaultCategory):
+            return v
+        if isinstance(v, str):
+            val = v.strip().lower()
+            aliases = {
+                "work_experience": "work",
+                "experience": "work",
+                "job": "work",
+                "certification": "achievement",
+                "certifications": "achievement",
+                "award": "achievement",
+                "awards": "achievement",
+                "milestone": "achievement",
+                "achievements": "achievement",
+                "skills": "skill",
+                "projects": "project",
+                "tools": "tool",
+            }
+            return aliases.get(val, val)
+        return v
     @field_validator("title")
     @classmethod
     def validate_title_non_empty(cls, v):
@@ -70,6 +93,31 @@ class VaultItemUpdate(BaseModel):
     is_public: Optional[bool] = None
     display_order: Optional[int] = None
 
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, VaultCategory):
+            return v
+        if isinstance(v, str):
+            val = v.strip().lower()
+            aliases = {
+                "work_experience": "work",
+                "experience": "work",
+                "job": "work",
+                "certification": "achievement",
+                "certifications": "achievement",
+                "award": "achievement",
+                "awards": "achievement",
+                "milestone": "achievement",
+                "achievements": "achievement",
+                "skills": "skill",
+                "projects": "project",
+                "tools": "tool",
+            }
+            return aliases.get(val, val)
+        return v
     @field_validator("title")
     @classmethod
     def validate_title_non_empty(cls, v):

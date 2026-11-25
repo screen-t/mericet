@@ -269,13 +269,42 @@ def get_work_experience(
 @router.get("/work-experience/{username}", response_model=List[WorkExperienceResponse])
 def get_user_work_experience(
     username: str,
+    viewer_id: Optional[str] = Depends(optional_auth),
     user_repo=Depends(get_user_repo),
     work_repo=Depends(get_work_experience_repo),
 ):
+    if username in ("coworkers", "pending-approvals", "search"):
+        raise HTTPException(status_code=404, detail="User not found")
     user = user_repo.get_by_username(username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return work_repo.get_by_user(user["id"])
+
+    target_user_id = user["id"]
+    is_owner = viewer_id is not None and viewer_id == target_user_id
+
+    if user.get("suspended_at") and not is_owner:
+        viewer_profile = user_repo.get_by_id(viewer_id, "role") if viewer_id else None
+        is_moderator = bool(viewer_profile and (viewer_profile.get("role") or "user") in ("moderator", "admin"))
+        if not is_moderator:
+            raise HTTPException(status_code=403, detail="This account has been suspended.")
+
+    if not is_owner and not user.get("work_history_visible", True):
+        return []
+
+    items = work_repo.get_by_user(target_user_id)
+    if not is_owner:
+        sanitized_items = []
+        for item in items:
+            item_copy = dict(item)
+            meta = item_copy.get("verification_metadata")
+            if isinstance(meta, dict):
+                item_copy["verification_metadata"] = {
+                    k: v for k, v in meta.items()
+                    if k not in ("document_hash", "p2p_request_id")
+                }
+            sanitized_items.append(item_copy)
+        return sanitized_items
+    return items
 
 
 @router.post("/work-experience")
@@ -300,18 +329,69 @@ def update_work_experience(
     user_id: str = Depends(require_auth),
     work_repo=Depends(get_work_experience_repo),
 ):
-    from datetime import date as date_type
+    from datetime import date as date_type, datetime, timezone
     owner = work_repo.get_owner(experience_id)
     if owner != user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    current_item = work_repo.get_by_id(experience_id) if hasattr(work_repo, "get_by_id") else None
+
     update_data = {k: v for k, v in payload.dict().items() if v is not None}
     if payload.is_current:
         update_data["end_date"] = None
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
+
+    # Defense in depth: forbid client-supplied verification or identity attributes
+    for forbidden in (
+        "id", "user_id", "created_at",
+        "verification_status", "verification_type", "verified_at",
+        "anonymous_proof", "verification_metadata",
+    ):
+        update_data.pop(forbidden, None)
+
     for field in ("start_date", "end_date"):
         if isinstance(update_data.get(field), date_type):
             update_data[field] = update_data[field].isoformat()
+
+    # Tampering protection: changing core work experience fields invalidates verification
+    tamper_fields = ("company", "title", "start_date", "end_date")
+    if isinstance(current_item, dict):
+        core_changed = False
+        for field in tamper_fields:
+            if field in update_data:
+                new_val = update_data[field]
+                old_val = current_item.get(field)
+                if field in ("start_date", "end_date"):
+                    new_cmp = str(new_val)[:10] if new_val is not None else None
+                    old_cmp = str(old_val)[:10] if old_val is not None else None
+                else:
+                    new_cmp = new_val
+                    old_cmp = old_val
+                if new_cmp != old_cmp:
+                    core_changed = True
+                    break
+        existing_status = current_item.get("verification_status")
+        needs_invalidation = core_changed and (
+            existing_status not in (None, "PENDING")
+            or bool(current_item.get("verification_type"))
+            or bool(current_item.get("verified_at"))
+            or bool(current_item.get("anonymous_proof"))
+        )
+    else:
+        needs_invalidation = any(field in update_data for field in tamper_fields)
+
+    if needs_invalidation:
+        update_data["verification_status"] = "PENDING"
+        update_data["verification_type"] = None
+        update_data["verified_at"] = None
+        update_data["anonymous_proof"] = None
+        update_data["verification_metadata"] = {
+            "reverification_required": True,
+            "reason": "Work experience details (company, title, or dates) were modified after verification.",
+            "invalidated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     return {"message": "Work experience updated", "data": work_repo.update(experience_id, update_data)}
 
 

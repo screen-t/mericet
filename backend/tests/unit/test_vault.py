@@ -436,3 +436,134 @@ def test_mass_assignment_stripping_on_update(client, mock_vault_repo):
     assert data["user_id"] == "user-alice"
     assert data["verification_tier"] == "none"
 
+
+
+# ==================== ADDITIONAL BUG FIX & REGRESSION TESTS (#58 & #60) ====================
+
+def test_create_vault_item_minimal_payload(client, mock_vault_repo):
+    """Bug Fix #58: Creating a vault item with minimal payload (title only) defaults category to 'project' without failing."""
+    resp = client.post("/vault", json={"title": "Minimal Vault Item"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Minimal Vault Item"
+    assert data["category"] == "project"
+    assert data["user_id"] == "user-alice"
+    assert data["verification_tier"] == "none"
+
+
+def test_create_vault_item_category_aliases(client, mock_vault_repo):
+    """Bug Fix #58: Common category aliases are normalized without 422 errors."""
+    aliases = [
+        ("work_experience", "work"),
+        ("experience", "work"),
+        ("certification", "achievement"),
+        ("award", "achievement"),
+        ("skills", "skill"),
+        ("projects", "project"),
+    ]
+    for input_cat, expected_cat in aliases:
+        resp = client.post("/vault", json={"title": f"Item for {input_cat}", "category": input_cat})
+        assert resp.status_code == 200
+        assert resp.json()["category"] == expected_cat
+
+
+def test_get_my_vault_items_flexible_category_filtering(client, mock_vault_repo):
+    """Bug Fix #58: Querying with category='all', empty string, or aliases does not throw 422."""
+    mock_vault_repo.create({"user_id": "user-alice", "title": "Project 1", "category": "project"})
+    mock_vault_repo.create({"user_id": "user-alice", "title": "Skill 1", "category": "skill"})
+
+    resp_all = client.get("/vault?category=all")
+    assert resp_all.status_code == 200
+    assert len(resp_all.json()) == 2
+
+    resp_empty = client.get("/vault?category=")
+    assert resp_empty.status_code == 200
+    assert len(resp_empty.json()) == 2
+
+    resp_alias = client.get("/vault?category=projects")
+    assert resp_alias.status_code == 200
+    assert len(resp_alias.json()) == 1
+    assert resp_alias.json()[0]["category"] == "project"
+
+
+def test_fetch_living_graph_authenticated_user(client, mock_vault_repo):
+    """Bug Fix #60: GET /vault/living-graph fetches only achievement category items for authenticated user."""
+    mock_vault_repo.create({"user_id": "user-alice", "title": "Project Alpha", "category": "project"})
+    mock_vault_repo.create({"user_id": "user-alice", "title": "AWS Architect", "category": "achievement"})
+
+    resp = client.get("/vault/living-graph")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 1
+    assert items[0]["title"] == "AWS Architect"
+    assert items[0]["category"] == "achievement"
+
+
+def test_fetch_empty_living_graph_does_not_crash(client, mock_vault_repo):
+    """Bug Fix #60: Fetching an empty graph returns [] with 200 OK without crashing."""
+    resp = client.get("/vault/living-graph")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_fetch_user_living_graph_privacy_boundary(client, mock_vault_repo):
+    """Bug Fix #60: GET /vault/living-graph/{target_user_id} returns public achievements only; omits private items."""
+    mock_vault_repo.create({"user_id": "user-bob", "title": "Public Medal", "category": "achievement", "is_public": True})
+    mock_vault_repo.create({"user_id": "user-bob", "title": "Secret Patent", "category": "achievement", "is_public": False})
+    mock_vault_repo.create({"user_id": "user-bob", "title": "Public Project", "category": "project", "is_public": True})
+
+    # Alice fetches Bob's living graph
+    resp = client.get("/vault/living-graph/user-bob")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 1
+    assert items[0]["title"] == "Public Medal"
+
+    # Also test /vault/living-graph/user/{target_user_id} path
+    resp_sub = client.get("/vault/living-graph/user/user-bob")
+    assert resp_sub.status_code == 200
+    assert len(resp_sub.json()) == 1
+
+
+def test_sync_living_graph_meaningful_message_no_tools(client, mock_tool_repo):
+    """Bug Fix #60: Triggering sync with 0 connected tools returns a meaningful message instead of silent empty success."""
+    resp = client.post("/vault/living-graph/sync")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "No active connected tools found" in data["message"]
+    assert data["result"]["synced_tools"] == 0
+
+
+def test_sync_living_graph_meaningful_error_when_provider_fails(client, mock_tool_repo, monkeypatch):
+    """Bug Fix #60: Triggering sync when connected provider fails returns a clear failure message."""
+    from app.services.living_graph import GitHubAdapter, ProviderFetchResult
+
+    mock_tool_repo.upsert({
+        "user_id": "user-alice",
+        "provider": "github",
+        "handle": "nonexistent-user-xyz",
+        "auth_status": "connected",
+    })
+
+    monkeypatch.setattr(GitHubAdapter, "fetch", lambda self, handle, cursor=None, credentials=None: ProviderFetchResult(
+        success=False,
+        provider="github",
+        handle=handle,
+        error="GitHub user not found (404)",
+    ))
+
+    resp = client.post("/vault/living-graph/sync")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "failed" in data["message"].lower()
+    assert len(data["result"]["errors"]) > 0
+    assert "GitHub user not found" in data["result"]["errors"][0]
+
+
+def test_reserved_routes_not_captured_by_item_id(client):
+    """Bug Fix #58 & #60: Reserved paths like /living-graph or /tools are not treated as item IDs."""
+    resp_tools = client.get("/vault/tools/list")
+    assert resp_tools.status_code == 200
+
+    resp_runs = client.get("/vault/living-graph/runs")
+    assert resp_runs.status_code == 200

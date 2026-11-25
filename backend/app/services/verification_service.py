@@ -1,5 +1,7 @@
 import re
 import math
+import hmac
+import base64
 import hashlib
 import urllib.parse
 from datetime import datetime, timezone
@@ -280,6 +282,133 @@ class VerificationService:
                 message=f"Cryptographic error during ring signature verification: {str(e)}",
             )
 
+    @staticmethod
+    def _decode_key_or_sig_bytes(raw_value: Any) -> Optional[bytes]:
+        if not isinstance(raw_value, str):
+            return None
+        val = raw_value.strip()
+        if not val:
+            return None
+        if val.startswith("0x"):
+            try:
+                return bytes.fromhex(val[2:])
+            except ValueError:
+                return None
+        if re.fullmatch(r"[0-9a-fA-F]+", val) and len(val) % 2 == 0:
+            try:
+                return bytes.fromhex(val)
+            except ValueError:
+                pass
+        try:
+            return base64.b64decode(val, validate=True)
+        except Exception:
+            return None
+
+    @classmethod
+    def verify_p2p_peer_signature(
+        cls,
+        request_id: str,
+        key_image: str,
+        signature: Any,
+    ) -> Tuple[bool, str]:
+        """Cryptographically verifies a peer approval signature for a P2P verification request.
+
+        Supports:
+        1. Asymmetric Ed25519 or ECDSA P-256 signatures over canonical message
+           'mericet:p2p:{request_id}:{key_image}'.
+        2. Linkable ring closure proofs ({c_0, s, ring, closure_hash}) bound to
+           the same canonical request/key_image message.
+
+        Rejects empty dicts, missing fields, malformed encodings, and invalid signatures.
+        """
+        if not isinstance(signature, dict) or not signature:
+            return False, "Signature payload must be a non-empty object."
+
+        if not isinstance(key_image, str) or not re.fullmatch(r"(0x)?[0-9a-zA-Z_-]{8,128}", key_image.strip()):
+            return False, "Malformed key_image format."
+
+        canonical_msg = f"mericet:p2p:{request_id}:{key_image}".encode("utf-8")
+
+        # Path A: Asymmetric cryptographic signature (Ed25519 / ECDSA)
+        if "public_key" in signature and ("sig" in signature or "signature" in signature):
+            algo = str(signature.get("algorithm") or "ed25519").strip().lower()
+            pub_raw = signature.get("public_key")
+            sig_raw = signature.get("sig") if "sig" in signature else signature.get("signature")
+            sig_bytes = cls._decode_key_or_sig_bytes(sig_raw)
+            if not sig_bytes:
+                return False, "Malformed signature encoding."
+
+            try:
+                from cryptography.exceptions import InvalidSignature
+                from cryptography.hazmat.primitives import hashes, serialization
+                from cryptography.hazmat.primitives.asymmetric import ec, ed25519
+
+                if algo in ("ed25519", "eddsa"):
+                    if isinstance(pub_raw, str) and "BEGIN PUBLIC KEY" in pub_raw:
+                        pub_key = serialization.load_pem_public_key(pub_raw.encode("utf-8"))
+                    else:
+                        pub_bytes = cls._decode_key_or_sig_bytes(pub_raw)
+                        if not pub_bytes:
+                            return False, "Malformed Ed25519 public key."
+                        pub_key = ed25519.Ed25519PublicKey.from_public_bytes(pub_bytes)
+                    if not isinstance(pub_key, ed25519.Ed25519PublicKey):
+                        return False, "Public key is not an Ed25519 key."
+                    pub_key.verify(sig_bytes, canonical_msg)
+                    return True, "Ed25519 signature verified."
+
+                if algo in ("ecdsa", "ecdsa-p256", "secp256r1"):
+                    if isinstance(pub_raw, str) and "BEGIN PUBLIC KEY" in pub_raw:
+                        pub_key = serialization.load_pem_public_key(pub_raw.encode("utf-8"))
+                    else:
+                        pub_bytes = cls._decode_key_or_sig_bytes(pub_raw)
+                        if not pub_bytes:
+                            return False, "Malformed ECDSA public key."
+                        pub_key = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), pub_bytes)
+                    if not isinstance(pub_key, ec.EllipticCurvePublicKey):
+                        return False, "Public key is not an ECDSA key."
+                    pub_key.verify(sig_bytes, canonical_msg, ec.ECDSA(hashes.SHA256()))
+                    return True, "ECDSA signature verified."
+
+                return False, f"Unsupported signature algorithm '{algo}'."
+            except InvalidSignature:
+                return False, "Signature verification failed."
+            except Exception:
+                return False, "Invalid public key or signature payload."
+
+        # Path B: Linkable ring closure verification (c_0, s, ring, closure_hash)
+        if any(k in signature for k in ("c_0", "s", "ring", "closure_hash", "c_end")):
+            ring = signature.get("ring")
+            c_0 = signature.get("c_0")
+            s_vals = signature.get("s")
+            expected_closure = signature.get("closure_hash") or signature.get("c_end")
+
+            if not isinstance(ring, list) or len(ring) < 2 or len(ring) > 100:
+                return False, "Ring signature requires a ring of 2 to 100 public keys."
+            clean_ring = [str(k).strip() for k in ring if str(k).strip()]
+            if len(clean_ring) != len(ring) or len(set(clean_ring)) != len(clean_ring):
+                return False, "Ring must contain unique, non-empty public keys."
+
+            if not isinstance(c_0, str) or not c_0.strip():
+                return False, "Missing initial challenge c_0."
+            if not isinstance(s_vals, list) or len(s_vals) != len(clean_ring):
+                return False, "Scalar list 's' length must match ring size."
+            if not isinstance(expected_closure, str) or not expected_closure.strip():
+                return False, "Missing ring closure_hash."
+
+            h_m = hashlib.sha256(canonical_msg).hexdigest()
+            current_c = c_0.strip().lower()
+            for pk, s_item in zip(clean_ring, s_vals):
+                s_str = str(s_item).strip()
+                if not s_str:
+                    return False, "Ring signature contains empty scalar."
+                current_c = hashlib.sha256(f"{h_m}:{pk}:{current_c}:{s_str}".encode("utf-8")).hexdigest()
+
+            if hmac.compare_digest(current_c.lower(), expected_closure.strip().lower()):
+                return True, "Ring signature closure verified."
+            return False, "Ring signature closure mismatch."
+
+        return False, "Missing required cryptographic signature fields."
+
     # ==================== 3. TLSNOTARY EVIDENCE (Issue #58 Strong / Gold) ====================
 
     @classmethod
@@ -538,8 +667,17 @@ class VerificationService:
 
     @staticmethod
     def verify_cryptographic_proof(evidence: Dict[str, Any], stored_poseidon_hash: Optional[str]) -> VerificationResult:
-        """Verifies zero-knowledge proof or Poseidon cryptographic commitment format."""
-        poseidon_commitment = evidence.get("poseidon_hash") or stored_poseidon_hash
+        """Verifies zero-knowledge proof or Poseidon cryptographic commitment format.
+
+        SECURITY INVARIANT:
+        - Client-supplied semantic_score or unverified structural Groth16 fields
+          MUST NOT award Silver (mid) tier without actual server-side verification
+          (e.g., Groth16 pairing verification with a configured verification key).
+        - Without server-side pairing verification, a valid Poseidon commitment is
+          capped at Weak (Bronze) tamper-evident tier.
+        """
+        provided_poseidon = evidence.get("poseidon_hash")
+        poseidon_commitment = provided_poseidon or stored_poseidon_hash
         proof_payload = evidence.get("proof") or evidence.get("zkp_payload")
 
         if not poseidon_commitment:
@@ -556,20 +694,55 @@ class VerificationService:
                 message="Malformed Poseidon commitment: must be a valid prime-field hex or decimal hash string.",
             )
 
+        if (
+            stored_poseidon_hash
+            and provided_poseidon
+            and stored_poseidon_hash.strip().lower() != provided_poseidon.strip().lower()
+        ):
+            return VerificationResult(
+                tier=VerificationTier.none,
+                verified=False,
+                message="Poseidon commitment mismatch against the item's registered commitment.",
+            )
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        client_semantic_score = evidence.get("semantic_score")
+        public_signals = evidence.get("public_signals")
+        if client_semantic_score is None and isinstance(public_signals, list) and len(public_signals) > 1:
+            try:
+                client_semantic_score = float(public_signals[1]) / 10000.0
+            except (ValueError, TypeError):
+                pass
+
         if isinstance(proof_payload, dict):
             has_groth16 = all(k in proof_payload for k in ("pi_a", "pi_b", "pi_c"))
             has_snark = "protocol" in proof_payload and "curve" in proof_payload
             if has_groth16 or has_snark:
+                if isinstance(public_signals, list) and len(public_signals) > 0:
+                    if str(public_signals[0]).strip().lower() != poseidon_commitment.strip().lower():
+                        return VerificationResult(
+                            tier=VerificationTier.none,
+                            verified=False,
+                            message="Proof public signal mismatch: signal[0] does not match Poseidon commitment.",
+                        )
+
+                # Cap at Weak (Bronze) until real server-side Groth16 pairing verification is configured.
                 return VerificationResult(
                     tier=VerificationTier.weak,
                     verified=True,
-                    message="Client-side Poseidon commitment verified. Note: Full Groth16 circuit pairing verification requires a configured verification key.",
+                    message=(
+                        "Client-side Poseidon commitment registered (Bronze tier). "
+                        "Silver tier requires server-side Groth16 pairing verification with a configured verification key "
+                        "or server-verified evidence."
+                    ),
                     details={
                         "verification_type": "poseidon_commitment",
                         "poseidon_hash": poseidon_commitment,
+                        "client_reported_semantic_score": round(float(client_semantic_score), 4) if client_semantic_score is not None else None,
                         "zkp_status": "pairing_verification_pending_vk",
                         "protocol": proof_payload.get("protocol", "groth16"),
                         "curve": proof_payload.get("curve", "bn128"),
+                        "evaluated_at": now_iso,
                     },
                 )
 
@@ -581,6 +754,7 @@ class VerificationService:
                 "verification_type": "poseidon_commitment",
                 "poseidon_hash": poseidon_commitment,
                 "note": "Document commitment verified in-memory on client; no server document upload required.",
+                "evaluated_at": now_iso,
             },
         )
 

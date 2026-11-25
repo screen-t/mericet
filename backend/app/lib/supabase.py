@@ -5,17 +5,38 @@ import httpx
 from dotenv import load_dotenv
 from supabase import Client, ClientOptions, create_client
 
-load_dotenv()
+from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Search for .env in current working dir, repo root, and backend dir
+env_paths = [
+    Path.cwd() / ".env",
+    Path(__file__).resolve().parents[2] / ".env",
+    Path(__file__).resolve().parents[1] / ".env",
+]
+for ep in env_paths:
+    if ep.is_file():
+        load_dotenv(ep)
+        break
+else:
+    load_dotenv()
+
 # Creating the engine to connect supabase with backend
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 # Backward-compatible lookup: old docs used SUPABASE_SERVICE_KEY.
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
 
+IS_CONFIGURED = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+
 if not SUPABASE_URL:
-    raise RuntimeError("Missing SUPABASE_URL environment variable")
+    logger.warning("Missing SUPABASE_URL environment variable. Initializing fallback client for local development.")
+    SUPABASE_URL = "https://placeholder-project.supabase.co"
 
 if not SUPABASE_SERVICE_ROLE_KEY:
-    raise RuntimeError("Missing service role key. Set SUPABASE_SERVICE_ROLE_KEY (preferred) or SUPABASE_SERVICE_KEY.")
+    logger.warning("Missing service role key. Initializing fallback client for local development.")
+    SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.mock_signature" 
 
 
 def _decode_jwt_payload(token: str) -> dict:

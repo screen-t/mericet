@@ -15,6 +15,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Feed from "./pages/Feed";
 import FeedNew from "./pages/FeedNew";
 import ProfileNew from "./pages/ProfileNew";
+import VaultPreview from "./pages/VaultPreview";
 import Network from "./pages/Network";
 import NetworkNew from "./pages/NetworkNew";
 import Messages from "./pages/Messages";
@@ -67,6 +68,7 @@ const App = () => (
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/auth/callback" element={<OAuthCallback />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
+            <Route path="/vault-preview" element={<VaultPreview />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/suspended" element={<Suspended />} />
             <Route path="/contact" element={<Contact />} />

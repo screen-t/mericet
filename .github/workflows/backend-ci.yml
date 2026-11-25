@@ -37,13 +37,7 @@ jobs:
       
       - name: Run tests
         working-directory: ./backend
-        run: |
-          if [ -d "tests" ] || [ -f "test_*.py" ] || [ -f "conftest.py" ]; then
-            python -m pytest -v || echo "Tests failed or no tests found yet"
-          else
-            echo "No test directory/files found - add tests soon!"
-          fi
-        continue-on-error: true
+        run: python -m pytest -v
       
       - name: Type check with mypy (optional)
         working-directory: ./backend

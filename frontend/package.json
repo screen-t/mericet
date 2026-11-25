@@ -8,8 +8,8 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "test": "node scripts/test-profile-imports.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node scripts/test-profile-imports.js && node src/tests/living-graph.test.ts && node src/tests/google-oauth.test.ts && node src/tests/zkp-and-work-verification.test.ts"
   },
   "dependencies": {
     "@fontsource/plus-jakarta-sans": "^5.2.8",

@@ -1,7 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone
+import re
 from app.middleware.auth import require_auth, optional_auth
-from app.deps import get_vault_repo, get_connected_tool_repo, get_living_graph_repo
+from app.deps import get_vault_repo, get_connected_tool_repo, get_living_graph_repo, get_user_repo
 from app.models.vault import (
     VaultItemCreate, VaultItemUpdate, VaultItemResponse,
     ConnectedToolCreate, ConnectedToolResponse, VerifyVaultItemRequest,
@@ -12,19 +14,64 @@ from app.services.living_graph import LivingGraphEngine
 
 router = APIRouter(prefix="/vault", tags=["Vault"])
 
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
+
+
+def _resolve_user_id(identifier: str, user_repo) -> str:
+    """Resolves target identifier to user UUID if it is a username, or returns identifier directly."""
+    if _UUID_RE.match(identifier):
+        return identifier
+    if user_repo:
+        try:
+            user = user_repo.get_by_username(identifier)
+            if user and "id" in user:
+                return user["id"]
+        except Exception:
+            pass
+    return identifier
+
+
+def _normalize_category_query(category: Optional[str]) -> Optional[str]:
+    """Normalizes category query parameter, handling aliases, case, and empty/all strings."""
+    if not category:
+        return None
+    val = category.strip().lower()
+    if val in ("all", "*", "", "null", "undefined"):
+        return None
+    aliases = {
+        "achievements": "achievement",
+        "projects": "project",
+        "skills": "skill",
+        "works": "work",
+        "work_experience": "work",
+        "experience": "work",
+        "educations": "education",
+        "tools": "tool",
+        "certifications": "achievement",
+        "certification": "achievement",
+        "awards": "achievement",
+        "award": "achievement",
+    }
+    normalized = aliases.get(val, val)
+    allowed = {c.value for c in VaultCategory}
+    return normalized if normalized in allowed else None
+
 
 # ==================== VAULT CRUD ====================
 
 @router.get("", response_model=List[VaultItemResponse])
 def get_my_vault_items(
-    category: Optional[VaultCategory] = None,
+    category: Optional[str] = Query(None, description="Category filter (e.g. 'achievement', 'project', 'skill', 'all')"),
     limit: int = Query(50, ge=1, le=100, description="Page size limit (1-100)"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     user_id: str = Depends(require_auth),
     vault_repo=Depends(get_vault_repo),
 ):
     """Retrieve all vault items for the authenticated user with bounded pagination."""
-    cat_val = category.value if category else None
+    cat_val = _normalize_category_query(category)
     items = vault_repo.get_by_user(
         user_id=user_id,
         category=cat_val,
@@ -36,6 +83,7 @@ def get_my_vault_items(
 
 
 @router.post("", response_model=VaultItemResponse)
+@router.post("/", response_model=VaultItemResponse, include_in_schema=False)
 def create_vault_item(
     payload: VaultItemCreate,
     user_id: str = Depends(require_auth),
@@ -48,11 +96,12 @@ def create_vault_item(
     - Raw verification documents must NOT be uploaded.
     - Client-supplied verification tiers or scores are rejected (prevent mass assignment).
     """
-    data = payload.model_dump(exclude_unset=True)
-    # Server-controlled fields
+    data = payload.model_dump()
     data["user_id"] = user_id
     if isinstance(data.get("category"), VaultCategory):
         data["category"] = data["category"].value
+    elif not data.get("category"):
+        data["category"] = VaultCategory.project.value
 
     # Evaluate initial tier: Local Poseidon commitment is Weak (Bronze); otherwise default is None
     if data.get("poseidon_hash"):
@@ -60,7 +109,7 @@ def create_vault_item(
         data["verification_metadata"] = {
             "commitment_type": "poseidon_hash",
             "poseidon_hash": data["poseidon_hash"],
-            "registered_at": "now()",
+            "registered_at": datetime.now(timezone.utc).isoformat(),
             "verifier": "Client-Poseidon-Commitment",
         }
     else:
@@ -74,17 +123,19 @@ def create_vault_item(
 @router.get("/user/{target_user_id}", response_model=List[VaultItemResponse])
 def get_user_vault_items(
     target_user_id: str,
-    category: Optional[VaultCategory] = None,
+    category: Optional[str] = Query(None, description="Category filter (e.g. 'achievement', 'project', 'all')"),
     limit: int = Query(50, ge=1, le=100, description="Page size limit (1-100)"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     viewer_id: Optional[str] = Depends(optional_auth),
     vault_repo=Depends(get_vault_repo),
+    user_repo=Depends(get_user_repo),
 ):
     """Get vault items for a user. Public items only unless viewed by the owner."""
-    is_owner = (viewer_id is not None and viewer_id == target_user_id)
-    cat_val = category.value if category else None
+    resolved_id = _resolve_user_id(target_user_id, user_repo)
+    is_owner = (viewer_id is not None and viewer_id == resolved_id)
+    cat_val = _normalize_category_query(category)
     items = vault_repo.get_by_user(
-        user_id=target_user_id,
+        user_id=resolved_id,
         category=cat_val,
         is_public_only=not is_owner,
         limit=limit,
@@ -93,6 +144,155 @@ def get_user_vault_items(
     return items
 
 
+# ==================== CONNECTED TOOLS & LIVING GRAPH ENDPOINTS ====================
+# (Defined before generic /{item_id} to prevent path parameter collision)
+
+@router.get("/tools/list", response_model=List[ConnectedToolResponse])
+def get_connected_tools(
+    user_id: str = Depends(require_auth),
+    tool_repo=Depends(get_connected_tool_repo),
+):
+    """Get all connected tools for the authenticated user."""
+    return tool_repo.get_by_user(user_id)
+
+
+@router.post("/tools", response_model=ConnectedToolResponse)
+def connect_tool(
+    payload: ConnectedToolCreate,
+    user_id: str = Depends(require_auth),
+    tool_repo=Depends(get_connected_tool_repo),
+):
+    """Connect or update an external tool (GitHub, LeetCode, Credly) for Living Graph automation.
+    
+    SECURITY: No private credentials or passwords stored.
+    """
+    data = {
+        "user_id": user_id,
+        "provider": payload.provider,
+        "handle": payload.handle,
+        "auth_status": "connected",
+        "metadata": {},
+    }
+    tool = tool_repo.upsert(data)
+    return tool
+
+
+@router.delete("/tools/{tool_id}")
+def disconnect_tool(
+    tool_id: str,
+    user_id: str = Depends(require_auth),
+    tool_repo=Depends(get_connected_tool_repo),
+):
+    """Disconnect a connected tool and stop future collection."""
+    owner_id = tool_repo.get_owner(tool_id)
+    if not owner_id:
+        raise HTTPException(status_code=404, detail="Connected tool not found")
+    if owner_id != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized to remove this connected tool")
+
+    tool_repo.delete(tool_id)
+    return {"message": "Tool disconnected successfully", "id": tool_id}
+
+
+# Specific Living Graph subpaths (runs, sync, fetch) defined before parameterized routes
+
+@router.get("/living-graph/runs", response_model=List[LivingGraphRunResponse])
+def get_living_graph_runs(
+    limit: int = Query(20, ge=1, le=100),
+    user_id: str = Depends(require_auth),
+    living_graph_repo=Depends(get_living_graph_repo),
+):
+    """Observability endpoint: retrieve recent worker execution audit logs."""
+    return living_graph_repo.get_recent_sync_runs(limit=limit)
+
+
+@router.post("/living-graph/sync", response_model=Dict[str, Any])
+def sync_living_graph(
+    user_id: str = Depends(require_auth),
+    tool_repo=Depends(get_connected_tool_repo),
+    vault_repo=Depends(get_vault_repo),
+):
+    """Trigger Living Graph synchronization for the authenticated user.
+    
+    Returns meaningful descriptive error messages instead of silently returning empty success responses.
+    """
+    tools = tool_repo.get_by_user(user_id)
+    active_tools = [t for t in tools if t.get("auth_status") != "disconnected"]
+
+    if not active_tools:
+        return {
+            "message": "No active connected tools found. Please connect GitHub, LeetCode, or Credly in the Vault first.",
+            "result": {
+                "synced_tools": 0,
+                "highlights_created": 0,
+                "highlights_updated": 0,
+                "highlights_filtered": 0,
+                "errors": ["No active connected tools configured for this user"],
+                "diagnostics": {"total_tools": len(tools)},
+            },
+        }
+
+    sync_result = LivingGraphEngine.sync_user_tools(user_id, tool_repo, vault_repo)
+    
+    # If all attempted tools encountered errors
+    if sync_result.get("synced_tools", 0) == 0 and sync_result.get("errors"):
+        return {
+            "message": f"Living graph sync failed: {'; '.join(sync_result['errors'])}",
+            "result": sync_result,
+        }
+
+    return {
+        "message": f"Living graph synchronized successfully ({sync_result.get('synced_tools', 0)} tools synced, {sync_result.get('highlights_created', 0)} new highlights)",
+        "result": sync_result,
+    }
+
+
+@router.get("/living-graph", response_model=List[VaultItemResponse])
+def get_my_living_graph(
+    limit: int = Query(100, ge=1, le=100, description="Page size limit (1-100)"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    user_id: str = Depends(require_auth),
+    vault_repo=Depends(get_vault_repo),
+):
+    """Fetch Living Graph verified achievements for the authenticated user."""
+    items = vault_repo.get_by_user(
+        user_id=user_id,
+        category=VaultCategory.achievement.value,
+        is_public_only=False,
+        limit=limit,
+        offset=offset,
+    )
+    return items
+
+
+@router.get("/living-graph/user/{target_user_id}", response_model=List[VaultItemResponse])
+@router.get("/living-graph/{target_user_id}", response_model=List[VaultItemResponse])
+def get_user_living_graph(
+    target_user_id: str,
+    limit: int = Query(100, ge=1, le=100, description="Page size limit (1-100)"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    viewer_id: Optional[str] = Depends(optional_auth),
+    vault_repo=Depends(get_vault_repo),
+    user_repo=Depends(get_user_repo),
+):
+    """Fetch Living Graph verified achievements for target profile. Public only unless owner."""
+    if target_user_id in ("runs", "sync"):
+        raise HTTPException(status_code=404, detail="Living Graph endpoint not found")
+
+    resolved_id = _resolve_user_id(target_user_id, user_repo)
+    is_owner = (viewer_id is not None and viewer_id == resolved_id)
+    items = vault_repo.get_by_user(
+        user_id=resolved_id,
+        category=VaultCategory.achievement.value,
+        is_public_only=not is_owner,
+        limit=limit,
+        offset=offset,
+    )
+    return items
+
+
+# ==================== ITEM-SPECIFIC VAULT ROUTES (Generic /{item_id}) ====================
+
 @router.get("/{item_id}", response_model=VaultItemResponse)
 def get_vault_item(
     item_id: str,
@@ -100,6 +300,10 @@ def get_vault_item(
     vault_repo=Depends(get_vault_repo),
 ):
     """Get a single vault item with strict privacy check."""
+    # Guard against reserved path segments
+    if item_id in ("living-graph", "tools", "runs", "sync", "user"):
+        raise HTTPException(status_code=404, detail="Vault item not found")
+
     item = vault_repo.get_by_id(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Vault item not found")
@@ -146,7 +350,7 @@ def update_vault_item(
         update_data["verification_metadata"] = {
             "reverification_required": True,
             "reason": "Claim title or category was modified after verification.",
-            "invalidated_at": "now()",
+            "invalidated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     # If poseidon_hash is updated, update commitment metadata
@@ -156,7 +360,7 @@ def update_vault_item(
             update_data["verification_metadata"] = {
                 "commitment_type": "poseidon_hash",
                 "poseidon_hash": update_data["poseidon_hash"],
-                "updated_at": "now()",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         else:
             update_data["verification_tier"] = VerificationTier.none.value
@@ -222,7 +426,7 @@ def verify_vault_item(
             "message": result.message,
             "details": result.details,
             "proof_type": payload.proof_type,
-            "evaluated_at": "now()",
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
         }
     }
     updated_item = vault_repo.update(item_id, update_data)
@@ -232,76 +436,3 @@ def verify_vault_item(
         "verification": result.to_dict(),
         "item": updated_item,
     }
-
-
-# ==================== CONNECTED TOOLS & LIVING GRAPH (Issue #60) ====================
-
-@router.get("/tools/list", response_model=List[ConnectedToolResponse])
-def get_connected_tools(
-    user_id: str = Depends(require_auth),
-    tool_repo=Depends(get_connected_tool_repo),
-):
-    """Get all connected tools for the authenticated user."""
-    return tool_repo.get_by_user(user_id)
-
-
-@router.post("/tools", response_model=ConnectedToolResponse)
-def connect_tool(
-    payload: ConnectedToolCreate,
-    user_id: str = Depends(require_auth),
-    tool_repo=Depends(get_connected_tool_repo),
-):
-    """Connect or update an external tool (GitHub, LeetCode, Credly) for Living Graph automation.
-    
-    SECURITY: No private credentials or passwords stored.
-    """
-    data = {
-        "user_id": user_id,
-        "provider": payload.provider,
-        "handle": payload.handle,
-        "auth_status": "connected",
-        "metadata": {},
-    }
-    tool = tool_repo.upsert(data)
-    return tool
-
-
-@router.delete("/tools/{tool_id}")
-def disconnect_tool(
-    tool_id: str,
-    user_id: str = Depends(require_auth),
-    tool_repo=Depends(get_connected_tool_repo),
-):
-    """Disconnect a connected tool and stop future collection."""
-    owner_id = tool_repo.get_owner(tool_id)
-    if not owner_id:
-        raise HTTPException(status_code=404, detail="Connected tool not found")
-    if owner_id != user_id:
-        raise HTTPException(status_code=403, detail="Unauthorized to remove this connected tool")
-
-    tool_repo.delete(tool_id)
-    return {"message": "Tool disconnected successfully", "id": tool_id}
-
-
-@router.post("/living-graph/sync", response_model=Dict[str, Any])
-def sync_living_graph(
-    user_id: str = Depends(require_auth),
-    tool_repo=Depends(get_connected_tool_repo),
-    vault_repo=Depends(get_vault_repo),
-):
-    """Trigger Living Graph synchronization for the authenticated user."""
-    sync_result = LivingGraphEngine.sync_user_tools(user_id, tool_repo, vault_repo)
-    return {
-        "message": "Living graph synchronized successfully",
-        "result": sync_result,
-    }
-
-
-@router.get("/living-graph/runs", response_model=List[LivingGraphRunResponse])
-def get_living_graph_runs(
-    limit: int = Query(20, ge=1, le=100),
-    user_id: str = Depends(require_auth),
-    living_graph_repo=Depends(get_living_graph_repo),
-):
-    """Observability endpoint: retrieve recent worker execution audit logs."""
-    return living_graph_repo.get_recent_sync_runs(limit=limit)
